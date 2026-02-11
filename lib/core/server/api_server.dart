@@ -5,6 +5,9 @@ import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
 import '../database_helper.dart';
 import '../utils/price_formatter.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import '../../models/customer.dart';
 
 class ApiServer {
   static HttpServer? _server;
@@ -30,6 +33,15 @@ class ApiServer {
   static void stop() {
     _server?.close();
     _server = null;
+  }
+
+  static Future<Directory> _getImagesDir() async {
+    final appDocDir = await getApplicationSupportDirectory();
+    final imagesDir = Directory(p.join(appDocDir.path, 'product_images'));
+    if (!await imagesDir.exists()) {
+      await imagesDir.create(recursive: true);
+    }
+    return imagesDir;
   }
 
   static void _setupRoutes() {
@@ -115,6 +127,50 @@ class ApiServer {
       return Response.ok(jsonEncode(tables));
     });
 
+    _router.post('/tables', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+      if (payload['id'] != null) {
+        await db.update(
+          'tables',
+          payload,
+          where: 'id = ?',
+          whereArgs: [payload['id']],
+        );
+      } else {
+        await db.insert('tables', payload);
+      }
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.delete('/tables/<id>', (Request request, String id) async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('tables', where: 'id = ?', whereArgs: [id]);
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.post('/locations', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+      if (payload['id'] != null) {
+        await db.update(
+          'locations',
+          payload,
+          where: 'id = ?',
+          whereArgs: [payload['id']],
+        );
+      } else {
+        await db.insert('locations', payload);
+      }
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.delete('/locations/<id>', (Request request, String id) async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('locations', where: 'id = ?', whereArgs: [id]);
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
     _router.get('/tables/summary', (Request request) async {
       final db = await DatabaseHelper.instance.database;
       // Get tables with their active orders if any
@@ -138,7 +194,15 @@ class ApiServer {
     // 3. Products
     _router.get('/products', (Request request) async {
       final data = await DatabaseHelper.instance.queryAll('products');
-      return Response.ok(jsonEncode(data));
+      // Strip full paths from image_path for remote clients
+      final processedData = data.map((item) {
+        final newItem = Map<String, dynamic>.from(item);
+        if (newItem['image_path'] != null) {
+          newItem['image_path'] = p.basename(newItem['image_path'] as String);
+        }
+        return newItem;
+      }).toList();
+      return Response.ok(jsonEncode(processedData));
     });
 
     _router.get('/categories', (Request request) async {
@@ -146,7 +210,197 @@ class ApiServer {
       return Response.ok(jsonEncode(data));
     });
 
-    // 4. Orders
+    // 4. Waiters
+    _router.get('/waiters', (Request request) async {
+      final data = await DatabaseHelper.instance.queryAll('waiters');
+      return Response.ok(jsonEncode(data));
+    });
+
+    _router.post('/waiters', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+      if (payload['id'] != null) {
+        await db.update(
+          'waiters',
+          payload,
+          where: 'id = ?',
+          whereArgs: [payload['id']],
+        );
+      } else {
+        await db.insert('waiters', payload);
+      }
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.delete('/waiters/<id>', (Request request, String id) async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('waiters', where: 'id = ?', whereArgs: [id]);
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    // 5. Users
+    _router.get('/users', (Request request) async {
+      final data = await DatabaseHelper.instance.queryAll('users');
+      return Response.ok(jsonEncode(data));
+    });
+
+    _router.post('/users', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+      if (payload['id'] != null) {
+        await db.update(
+          'users',
+          payload,
+          where: 'id = ?',
+          whereArgs: [payload['id']],
+        );
+      } else {
+        await db.insert('users', payload);
+      }
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.delete('/users/<id>', (Request request, String id) async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('users', where: 'id = ?', whereArgs: [id]);
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    // 6. Expenses & Categories
+    _router.get('/expense_categories', (Request request) async {
+      final data = await DatabaseHelper.instance.queryAll('expense_categories');
+      return Response.ok(jsonEncode(data));
+    });
+
+    _router.post('/expense_categories', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+      if (payload['id'] != null) {
+        await db.update(
+          'expense_categories',
+          payload,
+          where: 'id = ?',
+          whereArgs: [payload['id']],
+        );
+      } else {
+        await db.insert('expense_categories', payload);
+      }
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.get('/expenses', (Request request) async {
+      final data = await DatabaseHelper.instance.queryAll('expenses');
+      return Response.ok(jsonEncode(data));
+    });
+
+    _router.post('/expenses', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+      if (payload['id'] != null) {
+        await db.update(
+          'expenses',
+          payload,
+          where: 'id = ?',
+          whereArgs: [payload['id']],
+        );
+      } else {
+        await db.insert('expenses', payload);
+      }
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.delete('/expenses/<id>', (Request request, String id) async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    // 7. Customers
+    _router.get('/customers', (Request request) async {
+      final data = await DatabaseHelper.instance.queryAll('customers');
+      return Response.ok(jsonEncode(data));
+    });
+
+    _router.post('/customers', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+      if (payload['id'] != null) {
+        await db.update(
+          'customers',
+          payload,
+          where: 'id = ?',
+          whereArgs: [payload['id']],
+        );
+      } else {
+        await db.insert('customers', payload);
+      }
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.delete('/customers/<id>', (Request request, String id) async {
+      final db = await DatabaseHelper.instance.database;
+      await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.get('/transactions', (Request request) async {
+      final customerId = request.url.queryParameters['customer_id'];
+      final db = await DatabaseHelper.instance.database;
+      final results = await db.query(
+        'transactions',
+        where: customerId != null ? 'customer_id = ?' : null,
+        whereArgs: customerId != null ? [customerId] : null,
+        orderBy: 'created_at DESC',
+      );
+      return Response.ok(jsonEncode(results));
+    });
+
+    _router.post('/transactions', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+
+      await db.transaction((txn) async {
+        await txn.insert('transactions', payload);
+
+        if (payload['customer_id'] != null) {
+          final customerRes = await txn.query(
+            'customers',
+            where: 'id = ?',
+            whereArgs: [payload['customer_id']],
+            limit: 1,
+          );
+
+          if (customerRes.isNotEmpty) {
+            final customer = Customer.fromMap(customerRes.first);
+            double newDebt = customer.debt;
+            double newCredit = customer.credit;
+            final double amount = (payload['amount'] as num).toDouble();
+
+            if (payload['type'] == 'outlay') {
+              newDebt += amount;
+            } else if (payload['type'] == 'payment') {
+              if (newDebt >= amount) {
+                newDebt -= amount;
+              } else {
+                double remainder = amount - newDebt;
+                newDebt = 0;
+                newCredit += remainder;
+              }
+            }
+
+            await txn.update(
+              'customers',
+              {'debt': newDebt, 'credit': newCredit},
+              where: 'id = ?',
+              whereArgs: [payload['customer_id']],
+            );
+          }
+        }
+      });
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    // 8. Orders
     _router.post('/orders/open', (Request request) async {
       final payload = jsonDecode(await request.readAsString());
       final tableId = payload['table_id'] as int;
@@ -476,6 +730,38 @@ class ApiServer {
       ''';
 
       return Response.ok(html, headers: {'Content-Type': 'text/html'});
+    });
+
+    // 6. Image Sync
+    _router.post('/upload/image', (Request request) async {
+      final List<int> bytes = await request
+          .read()
+          .expand((chunk) => chunk)
+          .toList();
+      final imagesDir = await _getImagesDir();
+
+      // Simple file name with timestamp
+      final fileName =
+          "${DateTime.now().millisecondsSinceEpoch}.jpg"; // Assuming jpg or handle mime
+      final file = File(p.join(imagesDir.path, fileName));
+      await file.writeAsBytes(bytes);
+
+      return Response.ok(jsonEncode({'fileName': fileName}));
+    });
+
+    _router.get('/uploads/<name>', (Request request, String name) async {
+      final imagesDir = await _getImagesDir();
+      final file = File(p.join(imagesDir.path, name));
+
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        String contentType = 'image/jpeg';
+        if (name.endsWith('.png')) contentType = 'image/png';
+        if (name.endsWith('.webp')) contentType = 'image/webp';
+
+        return Response.ok(bytes, headers: {'Content-Type': contentType});
+      }
+      return Response.notFound('Image not found');
     });
   }
 }

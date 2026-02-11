@@ -5,6 +5,7 @@ import '../../core/utils/price_formatter.dart';
 import '../../models/expense.dart';
 import 'expense_categories_screen.dart';
 import '../../models/expense_category.dart';
+import '../../providers/connectivity_provider.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -24,6 +25,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       context.read<ExpenseProvider>().loadExpenses(
         start: _startDate,
         end: _endDate,
+        connectivity: context.read<ConnectivityProvider>(),
       );
     });
   }
@@ -192,6 +194,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       context.read<ExpenseProvider>().loadExpenses(
         start: _startDate,
         end: _endDate,
+        connectivity: context.read<ConnectivityProvider>(),
       );
     }
   }
@@ -265,6 +268,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       note: noteController.text,
                       createdAt: DateTime.now(),
                     ),
+                    connectivity: context.read<ConnectivityProvider>(),
                   );
                   Navigator.pop(context);
                 }
@@ -290,7 +294,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              context.read<ExpenseProvider>().deleteExpense(id);
+              context.read<ExpenseProvider>().deleteExpense(
+                id,
+                connectivity: context.read<ConnectivityProvider>(),
+              );
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),

@@ -5,6 +5,7 @@ import '../../providers/table_provider.dart';
 import '../../models/location.dart';
 import '../../core/app_strings.dart';
 import '../../core/theme.dart';
+import '../../providers/connectivity_provider.dart';
 
 class LocationsMgmtScreen extends StatefulWidget {
   const LocationsMgmtScreen({super.key});
@@ -93,11 +94,10 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                     padding: const EdgeInsets.all(24),
                     gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent:
-                          MediaQuery.of(context).size.width <= 1100 ? 280 : 350,
-                      childAspectRatio:
-                          MediaQuery.of(context).size.width <= 1100 ? 1.3 : 1.5,
-                      crossAxisSpacing: 20,
-                      mainAxisSpacing: 20,
+                          MediaQuery.of(context).size.width <= 1100 ? 200 : 240,
+                      childAspectRatio: 1.6,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
                     ),
                     itemCount: filteredLocations.length,
                     itemBuilder: (context, index) {
@@ -158,7 +158,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
           borderRadius: BorderRadius.circular(20),
           onTap: () => _showLocationDialog(context, location: location),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -170,8 +170,8 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                         location.name,
                         style: TextStyle(
                           fontSize: MediaQuery.of(context).size.width <= 1100
-                              ? 18
-                              : 20,
+                              ? 15
+                              : 16,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF1E293B),
                         ),
@@ -185,16 +185,23 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                           icon: const Icon(
                             Icons.edit_outlined,
                             color: Colors.blue,
+                            size: 20,
                           ),
                           onPressed: () =>
                               _showLocationDialog(context, location: location),
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
                         ),
+                        const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(
                             Icons.delete_outline,
                             color: Colors.red,
+                            size: 20,
                           ),
                           onPressed: () => _confirmDelete(context, location),
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
                         ),
                       ],
                     ),
@@ -203,28 +210,28 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
+                    horizontal: 8,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.table_bar_outlined,
-                        size: 16,
+                        size: 14,
                         color: Colors.blue.shade700,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       Text(
                         "$tableCount ta stol",
                         style: TextStyle(
                           color: Colors.blue.shade700,
                           fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -240,7 +247,10 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
 
   void _confirmDelete(BuildContext context, Location location) async {
     final locationProvider = context.read<LocationProvider>();
-    final success = await locationProvider.deleteLocation(location.id!);
+    final success = await locationProvider.deleteLocation(
+      location.id!,
+      connectivity: context.read<ConnectivityProvider>(),
+    );
 
     if (!context.mounted) return;
 
@@ -305,9 +315,15 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                 name: nameController.text,
               );
               if (location == null) {
-                context.read<LocationProvider>().addLocation(newLocation);
+                context.read<LocationProvider>().addLocation(
+                  newLocation,
+                  connectivity: context.read<ConnectivityProvider>(),
+                );
               } else {
-                context.read<LocationProvider>().updateLocation(newLocation);
+                context.read<LocationProvider>().updateLocation(
+                  newLocation,
+                  connectivity: context.read<ConnectivityProvider>(),
+                );
               }
               Navigator.pop(context);
             },

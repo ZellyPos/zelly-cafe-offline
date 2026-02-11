@@ -26,7 +26,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 13,
+      version: 20,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -114,7 +114,6 @@ class DatabaseHelper {
       );
     }
     if (oldVersion < 4) {
-      // Step 1: Add new tables for Restaurant Mode
       await db.execute('''
         CREATE TABLE IF NOT EXISTS locations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,9 +139,6 @@ class DatabaseHelper {
         )
       ''');
 
-      // Step 2: Upgrade orders table
-      // SQLite doesn't support adding multiple columns in one ALTER TABLE easily or adding constraints.
-      // But we can add them one by one.
       await db.execute(
         'ALTER TABLE orders ADD COLUMN order_type INTEGER NOT NULL DEFAULT 0',
       );
@@ -155,7 +151,6 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 5) {
-      // Add indexes for reporting
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders (created_at)',
       );
@@ -180,7 +175,6 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 6) {
-      // Add room pricing columns to tables
       await db.execute(
         'ALTER TABLE tables ADD COLUMN pricing_type INTEGER NOT NULL DEFAULT 0',
       );
@@ -191,7 +185,6 @@ class DatabaseHelper {
         'ALTER TABLE tables ADD COLUMN fixed_amount REAL DEFAULT 0',
       );
 
-      // Add timing and charge columns to orders
       await db.execute('ALTER TABLE orders ADD COLUMN opened_at TEXT');
       await db.execute('ALTER TABLE orders ADD COLUMN closed_at TEXT');
       await db.execute(
@@ -244,11 +237,9 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 11) {
-      // Check if columns exist before adding them to avoid duplicate column errors
       try {
         await db.execute('ALTER TABLE waiters ADD COLUMN pin_code TEXT');
       } catch (e) {
-        // Column already exists, skip
         print('pin_code column already exists: $e');
       }
 
@@ -257,7 +248,6 @@ class DatabaseHelper {
           'ALTER TABLE waiters ADD COLUMN is_active INTEGER DEFAULT 1',
         );
       } catch (e) {
-        // Column already exists, skip
         print('is_active column already exists: $e');
       }
 
@@ -266,7 +256,6 @@ class DatabaseHelper {
           'CREATE UNIQUE INDEX IF NOT EXISTS idx_waiter_pin ON waiters (pin_code) WHERE pin_code IS NOT NULL',
         );
       } catch (e) {
-        // Index already exists, skip
         print('idx_waiter_pin index already exists: $e');
       }
     }
@@ -291,7 +280,6 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 13) {
-      // Add tables for Expenses and Customers
       await db.execute('''
         CREATE TABLE IF NOT EXISTS expense_categories (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -325,13 +313,91 @@ class DatabaseHelper {
         CREATE TABLE IF NOT EXISTS transactions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           customer_id INTEGER,
-          type TEXT NOT NULL, -- 'outlay', 'payment', 'expense_outlay'
+          type TEXT NOT NULL,
           amount REAL NOT NULL,
           note TEXT,
           created_at TEXT NOT NULL,
           FOREIGN KEY (customer_id) REFERENCES customers (id)
         )
       ''');
+    }
+
+    if (oldVersion < 14) {
+      try {
+        await db.execute(
+          'ALTER TABLE tables ADD COLUMN service_percentage REAL DEFAULT 0',
+        );
+      } catch (e) {
+        print('Error adding service_percentage column: $e');
+      }
+    }
+
+    if (oldVersion < 15) {
+      try {
+        await db.execute(
+          'ALTER TABLE products ADD COLUMN is_set INTEGER NOT NULL DEFAULT 0',
+        );
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS product_bundles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundle_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            quantity REAL NOT NULL DEFAULT 1,
+            UNIQUE(bundle_id, product_id)
+          )
+        ''');
+      } catch (e) {
+        print('Error upgrading to v15: $e');
+      }
+    }
+
+    if (oldVersion < 16) {
+      try {
+        await db.execute(
+          'ALTER TABLE order_items ADD COLUMN bundle_items_json TEXT',
+        );
+      } catch (e) {
+        print('Error upgrading to v16: $e');
+      }
+    }
+
+    if (oldVersion < 17) {
+      try {
+        await db.execute('ALTER TABLE categories ADD COLUMN color TEXT');
+      } catch (e) {
+        print('Error upgrading to v17: $e');
+      }
+    }
+
+    if (oldVersion < 18) {
+      try {
+        await db.execute(
+          'ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0',
+        );
+      } catch (e) {
+        print('Error upgrading to v18: $e');
+      }
+    }
+
+    if (oldVersion < 19) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS ai_cache (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cache_key TEXT UNIQUE,
+          response TEXT,
+          created_at TEXT NOT NULL
+        )
+      ''');
+    }
+
+    if (oldVersion < 20) {
+      try {
+        await db.execute(
+          'ALTER TABLE products ADD COLUMN sort_order INTEGER DEFAULT 0',
+        );
+      } catch (e) {
+        print('Error upgrading products table to v20: $e');
+      }
     }
   }
 
@@ -344,7 +410,9 @@ class DatabaseHelper {
     await db.execute('''
 CREATE TABLE IF NOT EXISTS categories (
   id $idType,
-  name $textType
+  name $textType,
+  color TEXT,
+  sort_order INTEGER DEFAULT 0
 )
 ''');
 
@@ -355,7 +423,19 @@ CREATE TABLE IF NOT EXISTS products (
   price $realType,
   category $textType,
   is_active $integerType DEFAULT 1,
-  image_path TEXT
+  image_path TEXT,
+  is_set $integerType DEFAULT 0,
+  sort_order INTEGER DEFAULT 0
+)
+''');
+
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS product_bundles (
+  id $idType,
+  bundle_id $integerType,
+  product_id $integerType,
+  quantity $realType DEFAULT 1,
+  UNIQUE(bundle_id, product_id)
 )
 ''');
 
@@ -389,6 +469,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   product_id $integerType,
   qty $integerType,
   price $realType,
+  bundle_items_json TEXT,
   FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
 )
 ''');
@@ -415,7 +496,8 @@ CREATE TABLE IF NOT EXISTS tables (
   status INTEGER NOT NULL DEFAULT 0,
   pricing_type INTEGER NOT NULL DEFAULT 0,
   hourly_rate REAL DEFAULT 0,
-  fixed_amount REAL DEFAULT 0
+  fixed_amount REAL DEFAULT 0,
+  service_percentage REAL DEFAULT 0
 )
 ''');
 
@@ -521,11 +603,20 @@ CREATE TABLE IF NOT EXISTS users (
         FOREIGN KEY (customer_id) REFERENCES customers (id)
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ai_cache (
+        id $idType,
+        cache_key TEXT UNIQUE,
+        response TEXT,
+        created_at $textType
+      )
+    ''');
   }
 
   // Generic methods
   Future<int> insert(String table, Map<String, dynamic> data) async {
-    final db = await instance.database;
+    final db = await database;
     return await db.insert(table, data);
   }
 
@@ -534,12 +625,12 @@ CREATE TABLE IF NOT EXISTS users (
     String column,
     dynamic value,
   ) async {
-    final db = await instance.database;
+    final db = await database;
     return await db.query(table, where: '$column = ?', whereArgs: [value]);
   }
 
   Future<List<Map<String, dynamic>>> queryAll(String table) async {
-    final db = await instance.database;
+    final db = await database;
     return await db.query(table);
   }
 
@@ -549,7 +640,7 @@ CREATE TABLE IF NOT EXISTS users (
     String where,
     List<dynamic> whereArgs,
   ) async {
-    final db = await instance.database;
+    final db = await database;
     return await db.update(table, data, where: where, whereArgs: whereArgs);
   }
 
@@ -558,12 +649,12 @@ CREATE TABLE IF NOT EXISTS users (
     String where,
     List<dynamic> whereArgs,
   ) async {
-    final db = await instance.database;
+    final db = await database;
     return await db.delete(table, where: where, whereArgs: whereArgs);
   }
 
   Future close() async {
-    final db = await instance.database;
+    final db = await database;
     db.close();
   }
 }

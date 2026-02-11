@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database_helper.dart';
 import 'package:http/http.dart' as http;
 import '../core/server/api_server.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 enum ConnectivityMode { local, server, client }
 
@@ -19,6 +22,7 @@ class ConnectivityProvider extends ChangeNotifier {
   String _connectionStatus = '';
   bool _isSuccess = false;
   String? _lastError;
+  String? _localImagesDirPath;
 
   ConnectivityMode get mode => _mode;
   String? get serverIp => _serverIp;
@@ -44,6 +48,10 @@ class ConnectivityProvider extends ChangeNotifier {
     if (_mode == ConnectivityMode.server) {
       startServer();
     }
+
+    final appDocDir = await getApplicationSupportDirectory();
+    _localImagesDirPath = p.join(appDocDir.path, 'product_images');
+
     notifyListeners();
   }
 
@@ -144,6 +152,13 @@ class ConnectivityProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool shouldFetchRemote({bool forceRemote = false}) {
+    if (forceRemote) return true;
+    if (_mode == ConnectivityMode.client) return true;
+    if (_currentUser != null && _currentUser!['role'] != 'admin') return true;
+    return false;
+  }
+
   void setCurrentUser(Map<String, dynamic>? user) {
     _currentUser = user;
     notifyListeners();
@@ -237,5 +252,91 @@ class ConnectivityProvider extends ChangeNotifier {
       debugPrint('Remote Data Error: $e');
     }
     return [];
+  }
+
+  Future<bool> postRemoteData(String path, Map<String, dynamic> data) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_clientBaseUrl$path'),
+            body: jsonEncode(data),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_authToken',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Post Remote Data Error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteRemoteData(String path) async {
+    try {
+      final response = await http
+          .delete(
+            Uri.parse('$_clientBaseUrl$path'),
+            headers: {'Authorization': 'Bearer $_authToken'},
+          )
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Delete Remote Data Error: $e');
+      return false;
+    }
+  }
+
+  Future<String?> uploadImage(File file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      final response = await http
+          .post(
+            Uri.parse('$_clientBaseUrl/upload/image'),
+            body: bytes,
+            headers: {'Authorization': 'Bearer $_authToken'},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['fileName'];
+      }
+    } catch (e) {
+      debugPrint('Upload Image Error: $e');
+    }
+    return null;
+  }
+
+  String? getImageUrl(String? path) {
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('http')) return path;
+
+    // If it's a filename (no slash or drive letter), and we're in client mode
+    if (_mode == ConnectivityMode.client &&
+        !path.contains('/') &&
+        !path.contains('\\')) {
+      return '$_clientBaseUrl/uploads/$path';
+    }
+
+    // If it's a server and it's just a filename, it might be in our own uploads
+    if (_mode == ConnectivityMode.server &&
+        !path.contains('/') &&
+        !path.contains('\\')) {
+      return 'http://localhost:$_port/uploads/$path';
+    }
+
+    // Fallback for local/server mode filename resolution to local path
+    if (_localImagesDirPath != null &&
+        !path.contains('/') &&
+        !path.contains('\\')) {
+      final localPath = p.join(_localImagesDirPath!, path);
+      if (File(localPath).existsSync()) {
+        return localPath;
+      }
+    }
+
+    return path;
   }
 }

@@ -11,21 +11,60 @@ class ProductProvider extends ChangeNotifier {
   List<Product> get products => _products;
   bool get isLoading => _isLoading;
 
-  Future<void> loadProducts([ConnectivityProvider? connectivity]) async {
+  Future<void> loadProducts({
+    ConnectivityProvider? connectivity,
+    bool forceRemote = false,
+  }) async {
     _isLoading = true;
     notifyListeners();
 
-    final List<Map<String, dynamic>> data;
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      final remoteData = await connectivity.getRemoteData('/products');
-      data = List<Map<String, dynamic>>.from(remoteData);
-    } else {
-      data = await DatabaseHelper.instance.queryAll('products');
-    }
-    _products = data.map((item) => Product.fromMap(item)).toList();
+    try {
+      final List<Map<String, dynamic>> data;
+      bool fetchRemote =
+          connectivity != null &&
+          connectivity.shouldFetchRemote(forceRemote: forceRemote);
 
-    // Load sales counts
-    await _loadSalesCounts();
+      if (fetchRemote) {
+        final remoteData = await connectivity.getRemoteData('/products');
+        data = List<Map<String, dynamic>>.from(remoteData);
+      } else {
+        data = await DatabaseHelper.instance.database.then(
+          (db) => db.query('products', orderBy: 'sort_order ASC'),
+        );
+      }
+
+      final List<Product> loadedProducts = [];
+      for (var item in data) {
+        List<BundleItem>? bundleItems;
+        if (item['is_set'] == 1) {
+          if (fetchRemote) {
+            if (item['bundle_items'] != null) {
+              bundleItems = (item['bundle_items'] as List)
+                  .map((bi) => BundleItem.fromMap(bi))
+                  .toList();
+            }
+          } else {
+            final bundleData = await DatabaseHelper.instance.queryByColumn(
+              'product_bundles',
+              'bundle_id',
+              item['id'],
+            );
+            bundleItems = bundleData
+                .map((bi) => BundleItem.fromMap(bi))
+                .toList();
+          }
+        }
+        loadedProducts.add(Product.fromMap(item, bundleItems: bundleItems));
+      }
+      _products = loadedProducts;
+
+      // Load sales counts - only if NOT in remote mode
+      if (!fetchRemote) {
+        await _loadSalesCounts();
+      }
+    } catch (e) {
+      debugPrint("Error loading products: $e");
+    }
 
     _isLoading = false;
     notifyListeners();
@@ -51,23 +90,115 @@ class ProductProvider extends ChangeNotifier {
     return _salesCountCache[productId] ?? 0;
   }
 
-  Future<void> addProduct(Product product) async {
-    await DatabaseHelper.instance.insert('products', product.toMap());
-    await loadProducts();
+  Future<void> addProduct(
+    Product product, {
+    ConnectivityProvider? connectivity,
+  }) async {
+    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+      await connectivity.postRemoteData('/products', product.toMap());
+    } else {
+      final id = await DatabaseHelper.instance.insert(
+        'products',
+        product.toMap(),
+      );
+
+      // Save bundle items if it's a SET
+      if (product.isSet && product.bundleItems != null) {
+        for (var item in product.bundleItems!) {
+          await DatabaseHelper.instance.insert(
+            'product_bundles',
+            item.copyWith(bundleId: id).toMap(),
+          );
+        }
+      }
+    }
+
+    await loadProducts(connectivity: connectivity);
   }
 
-  Future<void> updateProduct(Product product) async {
-    await DatabaseHelper.instance.update(
-      'products',
-      product.toMap(),
-      'id = ?',
-      [product.id],
-    );
-    await loadProducts();
+  Future<void> updateProduct(
+    Product product, {
+    ConnectivityProvider? connectivity,
+  }) async {
+    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+      await connectivity.postRemoteData('/products', product.toMap());
+    } else {
+      await DatabaseHelper.instance.update(
+        'products',
+        product.toMap(),
+        'id = ?',
+        [product.id],
+      );
+
+      // Update bundle items if it's a SET
+      if (product.id != null) {
+        // Clear existing and re-insert
+        await DatabaseHelper.instance.delete(
+          'product_bundles',
+          'bundle_id = ?',
+          [product.id],
+        );
+
+        if (product.isSet && product.bundleItems != null) {
+          for (var item in product.bundleItems!) {
+            await DatabaseHelper.instance.insert(
+              'product_bundles',
+              item.copyWith(bundleId: product.id!).toMap(),
+            );
+          }
+        }
+      }
+    }
+
+    await loadProducts(connectivity: connectivity);
   }
 
-  Future<void> deleteProduct(int id) async {
-    await DatabaseHelper.instance.delete('products', 'id = ?', [id]);
-    await loadProducts();
+  Future<void> deleteProduct(
+    int id, {
+    ConnectivityProvider? connectivity,
+  }) async {
+    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+      await connectivity.deleteRemoteData('/products/$id');
+    } else {
+      await DatabaseHelper.instance.delete('products', 'id = ?', [id]);
+    }
+    await loadProducts(connectivity: connectivity);
+  }
+
+  Future<void> reorderProducts(
+    int oldIndex,
+    int newIndex,
+    String category, {
+    ConnectivityProvider? connectivity,
+  }) async {
+    // Filter products by category for reordering context
+    final categoryProducts = _products
+        .where((p) => p.category == category)
+        .toList();
+
+    if (newIndex > oldIndex) newIndex--;
+    final item = categoryProducts.removeAt(oldIndex);
+    categoryProducts.insert(newIndex, item);
+
+    // Update sort_order for all products in this category
+    for (int i = 0; i < categoryProducts.length; i++) {
+      final updatedProduct = categoryProducts[i].copyWith(sortOrder: i);
+
+      if (connectivity != null &&
+          connectivity.mode == ConnectivityMode.client) {
+        // In client mode, we might want a batch update if API supports it,
+        // otherwise single updates. For now, following the pattern of single update.
+        await connectivity.postRemoteData('/products', updatedProduct.toMap());
+      } else {
+        await DatabaseHelper.instance.update(
+          'products',
+          updatedProduct.toMap(),
+          'id = ?',
+          [updatedProduct.id],
+        );
+      }
+    }
+
+    await loadProducts(connectivity: connectivity);
   }
 }

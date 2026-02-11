@@ -489,16 +489,40 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
               );
 
               // Print receipt
-              await PrintingService.printWaiterSalaryPayout(
-                waiterName: widget.waiter.name,
-                amount: amount.toDouble(),
-                dateRange:
-                    "${DateFormat('dd.MM.yyyy').format(_dateRange.start)} - ${DateFormat('dd.MM.yyyy').format(_dateRange.end)}",
-                earned: (_summary['earned'] as num).toDouble(),
-                paidBefore: (_summary['paid'] as num).toDouble(),
-                payableAfter: (_summary['payable'] as num).toDouble() - amount,
-                note: noteController.text,
-              );
+              try {
+                await PrintingService.printWaiterSalaryPayout(
+                  waiterName: widget.waiter.name,
+                  amount: amount.toDouble(),
+                  dateRange:
+                      "${DateFormat('dd.MM.yyyy').format(_dateRange.start)} - ${DateFormat('dd.MM.yyyy').format(_dateRange.end)}",
+                  earned: (_summary['earned'] as num).toDouble(),
+                  paidBefore: (_summary['paid'] as num).toDouble(),
+                  payableAfter:
+                      (_summary['payable'] as num).toDouble() - amount,
+                  note: noteController.text,
+                );
+              } catch (e) {
+                if (context.mounted) {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text(
+                        "Printer xatoligi",
+                        style: TextStyle(color: Colors.red),
+                      ),
+                      content: Text(
+                        "Oylik chekini chiqarishda xatolik yuz berdi:\n\n$e",
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("OK"),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              }
 
               if (context.mounted) {
                 Navigator.pop(context);

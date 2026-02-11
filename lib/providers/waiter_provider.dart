@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/database_helper.dart';
 import '../models/waiter.dart';
+import 'connectivity_provider.dart';
 
 class WaiterProvider with ChangeNotifier {
   List<Waiter> _waiters = [];
@@ -9,47 +10,90 @@ class WaiterProvider with ChangeNotifier {
   List<Waiter> get waiters => _waiters;
   bool get isLoading => _isLoading;
 
-  Future<void> loadWaiters() async {
+  Future<void> loadWaiters({
+    ConnectivityProvider? connectivity,
+    bool forceRemote = false,
+  }) async {
     _isLoading = true;
     notifyListeners();
 
-    final data = await DatabaseHelper.instance.queryAll('waiters');
-    _waiters = data.map((item) => Waiter.fromMap(item)).toList();
-
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> addWaiter(Waiter waiter) async {
-    await DatabaseHelper.instance.insert('waiters', waiter.toMap());
-    await loadWaiters();
-  }
-
-  Future<void> updateWaiter(Waiter waiter) async {
-    await DatabaseHelper.instance.update('waiters', waiter.toMap(), 'id = ?', [
-      waiter.id,
-    ]);
-    await loadWaiters();
-  }
-
-  Future<bool> deleteWaiter(int id, {bool isAdmin = false}) async {
-    if (!isAdmin) {
-      return false; // Only admin can delete
+    try {
+      final List<Map<String, dynamic>> data;
+      if (connectivity != null &&
+          connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
+        final remoteData = await connectivity.getRemoteData('/waiters');
+        data = List<Map<String, dynamic>>.from(remoteData);
+      } else {
+        data = await DatabaseHelper.instance.queryAll('waiters');
+      }
+      _waiters = data.map((item) => Waiter.fromMap(item)).toList();
+    } catch (e) {
+      debugPrint("Error loading waiters: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
+  }
 
-    // Check if waiter has orders
-    final orders = await DatabaseHelper.instance.queryByColumn(
-      'orders',
-      'waiter_id',
-      id,
-    );
-    if (orders.isNotEmpty) {
-      return false; // Cannot delete if orders exist
+  Future<void> addWaiter(
+    Waiter waiter, {
+    ConnectivityProvider? connectivity,
+  }) async {
+    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+      await connectivity.postRemoteData('/waiters', waiter.toMap());
+    } else {
+      await DatabaseHelper.instance.insert('waiters', waiter.toMap());
     }
+    await loadWaiters(connectivity: connectivity);
+  }
 
-    await DatabaseHelper.instance.delete('waiters', 'id = ?', [id]);
-    await loadWaiters();
-    return true;
+  Future<void> updateWaiter(
+    Waiter waiter, {
+    ConnectivityProvider? connectivity,
+  }) async {
+    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+      await connectivity.postRemoteData('/waiters', waiter.toMap());
+    } else {
+      await DatabaseHelper.instance.update(
+        'waiters',
+        waiter.toMap(),
+        'id = ?',
+        [waiter.id!],
+      );
+    }
+    await loadWaiters(connectivity: connectivity);
+  }
+
+  Future<bool> deleteWaiter(
+    int id, {
+    bool isAdmin = false,
+    ConnectivityProvider? connectivity,
+  }) async {
+    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+      final success = await connectivity.deleteRemoteData('/waiters/$id');
+      if (success) {
+        await loadWaiters(connectivity: connectivity);
+      }
+      return success;
+    } else {
+      if (!isAdmin) {
+        return false; // Only admin can delete locally
+      }
+
+      // Check if waiter has orders
+      final orders = await DatabaseHelper.instance.queryByColumn(
+        'orders',
+        'waiter_id',
+        id,
+      );
+      if (orders.isNotEmpty) {
+        return false; // Cannot delete if orders exist
+      }
+
+      await DatabaseHelper.instance.delete('waiters', 'id = ?', [id]);
+      await loadWaiters(connectivity: connectivity);
+      return true;
+    }
   }
 
   Future<Map<String, dynamic>> getWaiterProfileData(

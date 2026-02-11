@@ -364,6 +364,7 @@ class CartProvider extends ChangeNotifier {
     int? locationId,
     double paidAmount = 0,
     double change = 0,
+    bool shouldPrint = true,
   }) async {
     if (_items.isEmpty) return false;
 
@@ -386,12 +387,12 @@ class CartProvider extends ChangeNotifier {
             final duration = now.difference(openedAt);
             final minutes = duration.inMinutes;
 
-            const int step = 30;
-            final roundedMinutes = ((minutes + step - 1) ~/ step) * step;
-            final hours = roundedMinutes / 60.0;
+            final hours = minutes / 60.0;
             roomCharge = hours * table.hourlyRate;
           } else if (table.pricingType == 2) {
             roomCharge = table.fixedAmount;
+          } else if (table.pricingType == 3) {
+            roomCharge = (totalAmount * table.servicePercentage / 100);
           }
         }
 
@@ -451,12 +452,20 @@ class CartProvider extends ChangeNotifier {
         }
 
         for (var item in _items.values) {
+          String? bundleJson;
+          if (item.product.isSet && item.product.bundleItems != null) {
+            bundleJson = jsonEncode(
+              item.product.bundleItems!.map((bi) => bi.toMap()).toList(),
+            );
+          }
+
           final orderItem = OrderItem(
             orderId: orderId,
             productId: item.product.id!,
             qty: item.quantity,
             price: item.product.price,
             productName: item.product.name,
+            bundleItemsJson: bundleJson,
           );
           await txn.insert('order_items', orderItem.toMap());
           orderItems.add(orderItem);
@@ -523,11 +532,13 @@ class CartProvider extends ChangeNotifier {
       );
 
       _lastPrintError = null;
-      try {
-        await PrintingService.printReceipt(order: populatedOrder);
-      } catch (printError) {
-        _lastPrintError = 'Printer xatoligi: $printError';
-        notifyListeners();
+      if (shouldPrint) {
+        try {
+          await PrintingService.printReceipt(order: populatedOrder);
+        } catch (printError) {
+          _lastPrintError = 'Printer xatoligi: $printError';
+          notifyListeners();
+        }
       }
 
       _activeTableId = null;
@@ -554,12 +565,12 @@ class CartProvider extends ChangeNotifier {
         final openedAt = _activeOpenedAt ?? DateTime.now();
         final duration = DateTime.now().difference(openedAt);
         final minutes = duration.inMinutes;
-        const int step = 30;
-        final roundedMinutes = ((minutes + step - 1) ~/ step) * step;
-        final hours = roundedMinutes / 60.0;
+        final hours = minutes / 60.0;
         return hours * table.hourlyRate;
       } else if (table.pricingType == 2) {
         return table.fixedAmount;
+      } else if (table.pricingType == 3) {
+        return (totalAmount * table.servicePercentage / 100);
       }
     } catch (e) {
       debugPrint("Error calculating room charge: $e");

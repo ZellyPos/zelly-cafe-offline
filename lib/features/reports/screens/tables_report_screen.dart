@@ -30,16 +30,47 @@ class TablesReportScreen extends StatelessWidget {
             padding: const EdgeInsets.only(right: 16.0),
             child: ElevatedButton.icon(
               onPressed: () async {
-                final stats = await reportProvider.getTableStats();
-                final filter = reportProvider.filter;
-                final dateRange =
-                    "${DateFormat('dd.MM.yyyy').format(filter.startDate)} - ${DateFormat('dd.MM.yyyy').format(filter.endDate)}";
+                try {
+                  final stats = await reportProvider.getTableStats();
+                  final filter = reportProvider.filter;
+                  final dateRange =
+                      "${DateFormat('dd.MM.yyyy').format(filter.startDate)} - ${DateFormat('dd.MM.yyyy').format(filter.endDate)}";
 
-                await PrintingService.printTablesReport(
-                  settings: printerProvider.settings,
-                  tables: stats,
-                  dateRange: dateRange,
-                );
+                  final success = await PrintingService.printTablesReport(
+                    settings: printerProvider.settings,
+                    tables: stats,
+                    dateRange: dateRange,
+                  );
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success ? 'Chek chiqarildi' : 'Xatolik yuz berdi',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Chop etishda xatolik"),
+                        content: SingleChildScrollView(
+                          child: Text("Xatolik xabari: $e"),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("OK"),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                }
               },
               icon: const Icon(Icons.print),
               label: const Text("Chek chiqarish"),
@@ -90,11 +121,11 @@ class TablesReportScreen extends StatelessWidget {
   }
 
   Widget _buildTableCard(Map<String, dynamic> table) {
-    final String name = table['table_name'] as String;
-    final String location = table['location_name'] as String;
-    final int count = (table['order_count'] as num).toInt();
+    final String name = table['table_name']?.toString() ?? '';
+    final String location = table['location_name']?.toString() ?? '';
+    final int count = (table['order_count'] as num?)?.toInt() ?? 0;
     final String total = PriceFormatter.format(
-      (table['total_revenue'] as num).toDouble(),
+      (table['total_revenue'] as num?)?.toDouble() ?? 0.0,
     );
 
     return Container(
@@ -117,10 +148,14 @@ class TablesReportScreen extends StatelessWidget {
               fontWeight: FontWeight.bold,
               color: Color(0xFF1E293B),
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           Text(
             location,
             style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const Spacer(),
           _buildStatRow("Buyurtmalar", "$count ta"),

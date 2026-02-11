@@ -5,6 +5,7 @@ class OrderItem {
   final String productName; // Joined or cached
   final int qty;
   final double price;
+  final String? bundleItemsJson;
 
   OrderItem({
     this.id,
@@ -13,6 +14,7 @@ class OrderItem {
     this.productName = '',
     required this.qty,
     required this.price,
+    this.bundleItemsJson,
   });
 
   Map<String, dynamic> toMap() {
@@ -22,6 +24,7 @@ class OrderItem {
       'product_id': productId,
       'qty': qty,
       'price': price,
+      'bundle_items_json': bundleItemsJson,
     };
   }
 
@@ -36,6 +39,7 @@ class OrderItem {
       productName: productName,
       qty: map['qty'],
       price: map['price'],
+      bundleItemsJson: map['bundle_items_json'],
     );
   }
 }

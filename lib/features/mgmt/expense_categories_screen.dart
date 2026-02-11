@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/expense_provider.dart';
 import '../../core/theme.dart';
+import '../../providers/connectivity_provider.dart';
 
 class ExpenseCategoriesScreen extends StatelessWidget {
   const ExpenseCategoriesScreen({super.key});
@@ -87,7 +88,10 @@ class ExpenseCategoriesScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               if (controller.text.isNotEmpty) {
-                context.read<ExpenseProvider>().addCategory(controller.text);
+                context.read<ExpenseProvider>().addCategory(
+                  controller.text,
+                  connectivity: context.read<ConnectivityProvider>(),
+                );
                 Navigator.pop(context);
               }
             },
@@ -120,6 +124,7 @@ class ExpenseCategoriesScreen extends StatelessWidget {
                 context.read<ExpenseProvider>().updateCategory(
                   category.id,
                   controller.text,
+                  connectivity: context.read<ConnectivityProvider>(),
                 );
                 Navigator.pop(context);
               }
@@ -144,7 +149,10 @@ class ExpenseCategoriesScreen extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              context.read<ExpenseProvider>().deleteCategory(category.id);
+              context.read<ExpenseProvider>().deleteCategory(
+                category.id,
+                connectivity: context.read<ConnectivityProvider>(),
+              );
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),

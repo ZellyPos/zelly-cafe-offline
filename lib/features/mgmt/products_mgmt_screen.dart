@@ -10,6 +10,9 @@ import '../../models/product.dart';
 import '../../core/theme.dart';
 import '../../core/app_strings.dart';
 import '../../core/utils/price_formatter.dart';
+import '../../providers/connectivity_provider.dart';
+import '../../widgets/ai_action_button.dart';
+import '../../providers/ai_provider.dart';
 
 class ProductsMgmtScreen extends StatefulWidget {
   const ProductsMgmtScreen({super.key});
@@ -56,23 +59,58 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: ElevatedButton.icon(
-                onPressed: () => _showProductDialog(context),
-                icon: const Icon(Icons.add),
-                label: const Text(AppStrings.addProduct),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            child: Row(
+              children: [
+                AiActionButton(
+                  onAnalyze: () {
+                    final now = DateTime.now();
+                    // Last 30 days for menu optimization
+                    final from = now.subtract(const Duration(days: 30));
+                    context.read<AiProvider>().getMenuOptimization(from, now);
+                  },
+                  label: "AI Menyu",
+                  dialogTitle: "Menyu Optimizatsiyasi",
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: selectedCategoryFilter == null
+                      ? null
+                      : () => _showReorderDialog(
+                          context,
+                          selectedCategoryFilter!,
+                        ),
+                  icon: const Icon(Icons.reorder),
+                  label: const Text("Tartiblash"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: () => _showProductDialog(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text(AppStrings.addProduct),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -245,8 +283,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                         product.name,
                         style: TextStyle(
                           fontSize: MediaQuery.of(context).size.width <= 1100
-                              ? 16
-                              : 20,
+                              ? 14
+                              : 16,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF1E293B),
                         ),
@@ -289,8 +327,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                           "${PriceFormatter.format(product.price)} so'm",
                           style: TextStyle(
                             fontSize: MediaQuery.of(context).size.width <= 1100
-                                ? 18
-                                : 22,
+                                ? 16
+                                : 18,
                             fontWeight: FontWeight.bold,
                             color: const Color(0xFF0F172A),
                           ),
@@ -306,16 +344,23 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                               ),
                             ),
                             const SizedBox(width: 4),
-                            SizedBox(
-                              height: 24,
-                              child: Switch(
-                                value: product.isActive,
-                                onChanged: (val) {
-                                  context.read<ProductProvider>().updateProduct(
-                                    product.copyWith(isActive: val),
-                                  );
-                                },
-                                activeColor: Colors.green,
+                            Transform.scale(
+                              scale: 0.8,
+                              child: SizedBox(
+                                height: 24,
+                                child: Switch(
+                                  value: product.isActive,
+                                  onChanged: (val) {
+                                    context
+                                        .read<ProductProvider>()
+                                        .updateProduct(
+                                          product.copyWith(isActive: val),
+                                          connectivity: context
+                                              .read<ConnectivityProvider>(),
+                                        );
+                                  },
+                                  activeColor: Colors.green,
+                                ),
                               ),
                             ),
                           ],
@@ -398,7 +443,10 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
     );
 
     if (confirmed == true && context.mounted) {
-      context.read<ProductProvider>().deleteProduct(product.id!);
+      context.read<ProductProvider>().deleteProduct(
+        product.id!,
+        connectivity: context.read<ConnectivityProvider>(),
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Mahsulot o'chirildi"),
@@ -417,6 +465,10 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
     String? selectedCategory = product?.category;
     String? selectedImagePath = product?.imagePath;
     final categories = context.read<CategoryProvider>().categories;
+    bool isSet = product?.isSet ?? false;
+    List<BundleItem>? bundleItems = product?.bundleItems != null
+        ? List.from(product!.bundleItems!)
+        : null;
 
     showDialog(
       context: context,
@@ -430,107 +482,306 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
               product == null ? AppStrings.addProduct : AppStrings.editProduct,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: AppStrings.productName,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: priceController,
-                    decoration: InputDecoration(
-                      labelText: AppStrings.productPrice,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: selectedCategory,
-                    decoration: InputDecoration(
-                      labelText: AppStrings.productCategory,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    items: categories.map((cat) {
-                      return DropdownMenuItem(
-                        value: cat.name,
-                        child: Text(cat.name),
-                      );
-                    }).toList(),
-                    onChanged: (val) =>
-                        setDialogState(() => selectedCategory = val),
-                    validator: (val) =>
-                        val == null ? AppStrings.selectCategory : null,
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    "Mahsulot rasmi",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  if (selectedImagePath != null &&
-                      File(selectedImagePath!).existsSync())
-                    Column(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
-                            File(selectedImagePath!),
-                            height: 120,
-                            width: 120,
-                            fit: BoxFit.cover,
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.7,
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left Column: Image Selection
+                    Expanded(
+                      flex: 1,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            "Mahsulot rasmi",
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () {
-                            setDialogState(() {
-                              selectedImagePath = null;
-                            });
-                          },
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          label: const Text(
-                            "Rasmni olib tashlash",
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        FilePickerResult? result = await FilePicker.platform
-                            .pickFiles(type: FileType.image);
-                        if (result != null) {
-                          setDialogState(() {
-                            selectedImagePath = result.files.single.path;
-                          });
-                        }
-                      },
-                      icon: const Icon(Icons.image),
-                      label: const Text("Rasm tanlash (ixtiyoriy)"),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
+                          const SizedBox(height: 16),
+                          if (selectedImagePath != null)
+                            Column(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Builder(
+                                    builder: (context) {
+                                      final connectivity = context
+                                          .read<ConnectivityProvider>();
+                                      final imageUrl = connectivity.getImageUrl(
+                                        selectedImagePath,
+                                      );
+                                      if (imageUrl != null &&
+                                          imageUrl.startsWith('http')) {
+                                        return Image.network(
+                                          imageUrl,
+                                          height: 180,
+                                          width: 180,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              const Icon(Icons.error),
+                                        );
+                                      }
+                                      if (selectedImagePath != null &&
+                                          File(
+                                            selectedImagePath!,
+                                          ).existsSync()) {
+                                        return Image.file(
+                                          File(selectedImagePath!),
+                                          height: 180,
+                                          width: 180,
+                                          fit: BoxFit.cover,
+                                        );
+                                      }
+                                      return const Icon(
+                                        Icons.image_not_supported,
+                                      );
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton.icon(
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      selectedImagePath = null;
+                                    });
+                                  },
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
+                                  label: const Text(
+                                    "Rasmni o'chirish",
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            InkWell(
+                              onTap: () async {
+                                FilePickerResult? result = await FilePicker
+                                    .platform
+                                    .pickFiles(type: FileType.image);
+                                if (result != null) {
+                                  setDialogState(() {
+                                    selectedImagePath =
+                                        result.files.single.path;
+                                  });
+                                }
+                              },
+                              child: Container(
+                                height: 180,
+                                width: 180,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_a_photo_outlined,
+                                      size: 48,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      "Rasm tanlash",
+                                      style: TextStyle(
+                                        color: Colors.grey.shade500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                ],
+                    const VerticalDivider(width: 32, indent: 10, endIndent: 10),
+                    // Right Column: Input Fields
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            controller: nameController,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.productName,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: priceController,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.productPrice,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              suffixText: "so'm",
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            value: selectedCategory,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.productCategory,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                            ),
+                            items: categories.map((cat) {
+                              return DropdownMenuItem(
+                                value: cat.name,
+                                child: Text(cat.name),
+                              );
+                            }).toList(),
+                            onChanged: (val) =>
+                                setDialogState(() => selectedCategory = val),
+                          ),
+                          const SizedBox(height: 16),
+                          // SET Taom Toggle
+                          SwitchListTile(
+                            title: const Text(
+                              "SET Taom (Kompleks)",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: const Text(
+                              "Ushbu mahsulot bir nechta boshqa mahsulotlardan iborat",
+                            ),
+                            value: isSet,
+                            onChanged: (val) {
+                              setDialogState(() {
+                                isSet = val;
+                                if (isSet) bundleItems ??= [];
+                              });
+                            },
+                          ),
+                          if (isSet) ...[
+                            const Divider(height: 32),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  "Tarkibidagi mahsulotlar",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                IconButton(
+                                  onPressed: () => _showBundleItemSelector(
+                                    context,
+                                    setDialogState,
+                                    bundleItems!,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.add_circle_outline,
+                                    color: Colors.blue,
+                                  ),
+                                  tooltip: "Mahsulot qo'shish",
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            if (bundleItems!.isEmpty)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Text(
+                                    "Hali mahsulot qo'shilmagan",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              ...bundleItems!.map((item) {
+                                final pName = context
+                                    .read<ProductProvider>()
+                                    .products
+                                    .firstWhere(
+                                      (p) => p.id == item.productId,
+                                      orElse: () => Product(
+                                        name: 'Noma\'lum',
+                                        price: 0,
+                                        category: '',
+                                      ),
+                                    )
+                                    .name;
+                                return ListTile(
+                                  title: Text(pName),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 60,
+                                        child: TextField(
+                                          decoration: const InputDecoration(
+                                            isDense: true,
+                                            suffixText: "x",
+                                          ),
+                                          keyboardType: TextInputType.number,
+                                          controller:
+                                              TextEditingController(
+                                                  text: item.quantity
+                                                      .toString(),
+                                                )
+                                                ..selection =
+                                                    TextSelection.collapsed(
+                                                      offset: item.quantity
+                                                          .toString()
+                                                          .length,
+                                                    ),
+                                          onChanged: (val) {
+                                            final qty =
+                                                double.tryParse(val) ?? 1.0;
+                                            setDialogState(() {
+                                              final idx = bundleItems!.indexOf(
+                                                item,
+                                              );
+                                              bundleItems![idx] = item.copyWith(
+                                                quantity: qty,
+                                              );
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          color: Colors.red,
+                                        ),
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            bundleItems!.remove(item);
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -551,10 +802,26 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                   }
 
                   String? finalImagePath;
+                  final connectivity = context.read<ConnectivityProvider>();
+
                   if (selectedImagePath != null) {
                     if (product?.imagePath == selectedImagePath) {
                       finalImagePath = selectedImagePath;
+                      // Ensure it's just a filename if it's already in our images dir
+                      if (finalImagePath != null &&
+                          (finalImagePath.contains('product_images') ||
+                              (!finalImagePath.contains('/') &&
+                                  !finalImagePath.contains('\\')))) {
+                        finalImagePath = p.basename(finalImagePath);
+                      }
+                    } else if (connectivity.mode == ConnectivityMode.client) {
+                      // Upload to server
+                      final fileName = await connectivity.uploadImage(
+                        File(selectedImagePath!),
+                      );
+                      finalImagePath = fileName;
                     } else {
+                      // Local save
                       final appDocDir = await getApplicationSupportDirectory();
                       final imagesDir = Directory(
                         p.join(appDocDir.path, 'product_images'),
@@ -566,7 +833,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                           "${DateTime.now().millisecondsSinceEpoch}${p.extension(selectedImagePath!)}";
                       final newPath = p.join(imagesDir.path, fileName);
                       await File(selectedImagePath!).copy(newPath);
-                      finalImagePath = newPath;
+                      finalImagePath = fileName; // Save ONLY the filename
                     }
                   }
 
@@ -577,15 +844,24 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     category: selectedCategory!,
                     isActive: product?.isActive ?? true,
                     imagePath: finalImagePath,
+                    isSet: isSet,
+                    bundleItems: isSet ? bundleItems : null,
+                    sortOrder: product?.sortOrder ?? 0,
                   );
 
                   if (product == null) {
                     if (context.mounted) {
-                      context.read<ProductProvider>().addProduct(newProduct);
+                      context.read<ProductProvider>().addProduct(
+                        newProduct,
+                        connectivity: context.read<ConnectivityProvider>(),
+                      );
                     }
                   } else {
                     if (context.mounted) {
-                      context.read<ProductProvider>().updateProduct(newProduct);
+                      context.read<ProductProvider>().updateProduct(
+                        newProduct,
+                        connectivity: context.read<ConnectivityProvider>(),
+                      );
                     }
                   }
                   if (context.mounted) {
@@ -604,6 +880,140 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
           );
         },
       ),
+    );
+  }
+
+  void _showBundleItemSelector(
+    BuildContext context,
+    StateSetter setDialogState,
+    List<BundleItem> currentItems,
+  ) {
+    final products = context
+        .read<ProductProvider>()
+        .products
+        .where((p) => !p.isSet && p.isActive)
+        .toList(); // No nested sets
+    String searchQuery = '';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setInternalState) {
+          final filtered = products
+              .where(
+                (p) => p.name.toLowerCase().contains(searchQuery.toLowerCase()),
+              )
+              .toList();
+
+          return AlertDialog(
+            title: const Text("Mahsulot tanlang"),
+            content: SizedBox(
+              width: 400,
+              height: 500,
+              child: Column(
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      hintText: "Qidirish...",
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (val) =>
+                        setInternalState(() => searchQuery = val),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final p = filtered[index];
+                        final isAlreadyAdded = currentItems.any(
+                          (it) => it.productId == p.id,
+                        );
+
+                        return ListTile(
+                          title: Text(p.name),
+                          subtitle: Text(PriceFormatter.format(p.price)),
+                          trailing: isAlreadyAdded
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                )
+                              : const Icon(Icons.add_circle_outline),
+                          onTap: isAlreadyAdded
+                              ? null
+                              : () {
+                                  setDialogState(() {
+                                    currentItems.add(
+                                      BundleItem(
+                                        bundleId: 0, // Will be set on save
+                                        productId: p.id!,
+                                        quantity: 1.0,
+                                        productName: p.name,
+                                      ),
+                                    );
+                                  });
+                                  Navigator.pop(context);
+                                },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showReorderDialog(BuildContext context, String category) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final productProvider = context.watch<ProductProvider>();
+            final categoryProducts = productProvider.products
+                .where((p) => p.category == category)
+                .toList();
+
+            return AlertDialog(
+              title: Text("$category - Tartiblash"),
+              content: SizedBox(
+                width: 400,
+                height: 500,
+                child: ReorderableListView.builder(
+                  itemCount: categoryProducts.length,
+                  itemBuilder: (context, index) {
+                    final product = categoryProducts[index];
+                    return ListTile(
+                      key: ValueKey(product.id),
+                      leading: const Icon(Icons.drag_handle),
+                      title: Text(product.name),
+                      subtitle: Text(PriceFormatter.format(product.price)),
+                    );
+                  },
+                  onReorder: (oldIndex, newIndex) {
+                    context.read<ProductProvider>().reorderProducts(
+                      oldIndex,
+                      newIndex,
+                      category,
+                      connectivity: context.read<ConnectivityProvider>(),
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Yopish"),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:print_usb/print_usb.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
@@ -110,7 +111,9 @@ class PrintingService {
     return bytes;
   }
 
-  static String _cleanText(String text) {
+  static String _cleanText(Object? input) {
+    if (input == null) return '';
+    String text = input.toString();
     return text
         .replaceAll('№', '#')
         .replaceAll('„', '"')
@@ -425,6 +428,28 @@ class PrintingService {
               bytes += generator.text(line);
             }
           }
+
+          // Print bundle components if any
+          if (item.bundleItemsJson != null) {
+            try {
+              final List components = jsonDecode(item.bundleItemsJson!);
+              for (var comp in components) {
+                final Map<String, dynamic> compMap =
+                    comp as Map<String, dynamic>;
+                final String name =
+                    compMap['productName']?.toString() ?? 'Mahsulot';
+                final double q =
+                    double.tryParse(compMap['quantity']?.toString() ?? '0') ??
+                    0;
+                final String compLine = "  - $name (${q.toStringAsFixed(0)}x)";
+                bytes += generator.text(
+                  _padLine(_cleanText(compLine), rSettings.horizontalMargin),
+                );
+              }
+            } catch (e) {
+              debugPrint('Error decoding bundle components for receipt: $e');
+            }
+          }
         }
         bytes += generator.hr();
       }
@@ -575,7 +600,7 @@ class PrintingService {
     } catch (e, stack) {
       debugPrint('Print receipt error: $e');
       debugPrint(stack.toString());
-      return false;
+      rethrow;
     }
   }
 
@@ -590,8 +615,12 @@ class PrintingService {
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
 
-      final summary = data['summary'];
-      final waiters = data['waiters'] as List<Map<String, dynamic>>;
+      final summary = data['summary'] ?? {};
+      final waiters =
+          (data['waiters'] as List?)
+              ?.map((e) => e as Map<String, dynamic>)
+              .toList() ??
+          [];
 
       bytes += await _getLogoBytes(rSettings, generator);
 
@@ -617,7 +646,7 @@ class PrintingService {
       }
       bytes += generator.text(
         _centerLine(
-          'Sana: ${data['date']}',
+          'Sana: ${_cleanText(data['date'])}',
           margin: rSettings.horizontalMargin,
         ),
         styles: const PosStyles(align: PosAlign.left),
@@ -626,51 +655,63 @@ class PrintingService {
       bytes += generator.hr();
 
       // Stats
+      final totalSales =
+          double.tryParse(summary['total']?.toString() ?? '0.0') ?? 0.0;
+      final cashTotal =
+          double.tryParse(summary['cash_total']?.toString() ?? '0.0') ?? 0.0;
+      final cardTotal =
+          double.tryParse(summary['card_total']?.toString() ?? '0.0') ?? 0.0;
+      final terminalTotal =
+          double.tryParse(summary['terminal_total']?.toString() ?? '0.0') ??
+          0.0;
+      final orderCount = int.tryParse(summary['count']?.toString() ?? '0') ?? 0;
+
       bytes += generator.text(
         _format2Col(
           'Jami savdo:',
-          '${PriceFormatter.format((summary['total'] ?? 0).toDouble())}',
+          PriceFormatter.format(totalSales),
           margin: rSettings.horizontalMargin,
         ),
       );
       bytes += generator.text(
         _format2Col(
           'Naqd:',
-          '${PriceFormatter.format((summary['cash_total'] ?? 0).toDouble())}',
+          PriceFormatter.format(cashTotal),
           margin: rSettings.horizontalMargin,
         ),
       );
       bytes += generator.text(
         _format2Col(
           'Karta:',
-          '${PriceFormatter.format((summary['card_total'] ?? 0).toDouble())}',
+          PriceFormatter.format(cardTotal),
           margin: rSettings.horizontalMargin,
         ),
       );
       bytes += generator.text(
         _format2Col(
           'Terminal:',
-          '${PriceFormatter.format((summary['terminal_total'] ?? 0).toDouble())}',
+          PriceFormatter.format(terminalTotal),
           margin: rSettings.horizontalMargin,
         ),
       );
       bytes += generator.hr();
 
       bytes += generator.text(
+        _padLine('Buyurtmalar: $orderCount', rSettings.horizontalMargin),
+      );
+
+      final firstOrderRaw = summary['first_order']?.toString() ?? '';
+      bytes += generator.text(
         _padLine(
-          'Buyurtmalar: ${summary['count'] ?? 0}',
+          'Boshlanish: ${firstOrderRaw.length >= 16 ? firstOrderRaw.substring(11, 16) : "-"}',
           rSettings.horizontalMargin,
         ),
       );
+
+      final lastOrderRaw = summary['last_order']?.toString() ?? '';
       bytes += generator.text(
         _padLine(
-          'Boshlanish: ${summary['first_order']?.toString().substring(11, 16) ?? "-"}',
-          rSettings.horizontalMargin,
-        ),
-      );
-      bytes += generator.text(
-        _padLine(
-          'Yakunlanish: ${summary['last_order']?.toString().substring(11, 16) ?? "-"}',
+          'Yakunlanish: ${lastOrderRaw.length >= 16 ? lastOrderRaw.substring(11, 16) : "-"}',
           rSettings.horizontalMargin,
         ),
       );
@@ -681,27 +722,31 @@ class PrintingService {
         styles: const PosStyles(bold: true),
       );
       for (var w in waiters) {
+        final wSales = double.tryParse(w['sales']?.toString() ?? '0.0') ?? 0.0;
         bytes += generator.text(
           _format2Col(
             _cleanText(w['name']),
-            '${PriceFormatter.format((w['sales'] ?? 0).toDouble())}',
+            PriceFormatter.format(wSales),
             margin: rSettings.horizontalMargin,
           ),
         );
       }
       bytes += generator.hr();
 
-      final categories = data['categories'] as List<Map<String, dynamic>>?;
+      final categories = data['categories'] as List?;
       if (categories != null && categories.isNotEmpty) {
         bytes += generator.text(
           _padLine('KATEGORIYALAR BO\'YICHA:', rSettings.horizontalMargin),
           styles: const PosStyles(bold: true),
         );
         for (var c in categories) {
+          final catMap = c as Map<String, dynamic>;
+          final catTotal =
+              double.tryParse(catMap['total']?.toString() ?? '0.0') ?? 0.0;
           bytes += generator.text(
             _format2Col(
-              _cleanText(c['category']),
-              '${PriceFormatter.format((c['total'] ?? 0).toDouble())}',
+              _cleanText(catMap['category']),
+              PriceFormatter.format(catTotal),
               margin: rSettings.horizontalMargin,
             ),
           );
@@ -716,7 +761,7 @@ class PrintingService {
     } catch (e, stack) {
       debugPrint('Z-Report print error: $e');
       debugPrint(stack.toString());
-      return false;
+      rethrow;
     }
   }
 
@@ -782,16 +827,23 @@ class PrintingService {
       int totalQty = 0;
       double totalRevenue = 0;
       for (var product in products) {
-        totalQty += (product['total_qty'] as num).toInt();
-        totalRevenue += (product['total_revenue'] as num).toDouble();
+        final qty = int.tryParse(product['total_qty']?.toString() ?? '0') ?? 0;
+        final revenue =
+            double.tryParse(product['total_revenue']?.toString() ?? '0.0') ??
+            0.0;
+        totalQty += qty;
+        totalRevenue += revenue;
       }
 
       // Print items
       for (var product in itemsToShow) {
-        final qtyStr = '${product['total_qty']}';
-        final revenueStr = PriceFormatter.format(
-          (product['total_revenue'] as num).toDouble(),
-        );
+        final qty = int.tryParse(product['total_qty']?.toString() ?? '0') ?? 0;
+        final revenue =
+            double.tryParse(product['total_revenue']?.toString() ?? '0.0') ??
+            0.0;
+        final qtyStr = qty.toString();
+        final revenueStr = PriceFormatter.format(revenue);
+
         for (var line in _format3ColRows(
           _cleanText(product['name']),
           qtyStr,
@@ -840,7 +892,7 @@ class PrintingService {
     } catch (e, stack) {
       debugPrint('Product performance report print error: $e');
       debugPrint(stack.toString());
-      return false;
+      rethrow;
     }
   }
 
@@ -890,9 +942,13 @@ class PrintingService {
       double totalCommission = 0;
 
       for (var waiter in waiters) {
-        final double sales = (waiter['total_sales'] as num).toDouble();
-        final int type = waiter['waiter_type'] as int;
-        final double value = (waiter['waiter_value'] as num).toDouble();
+        final double sales =
+            double.tryParse(waiter['total_sales']?.toString() ?? '0.0') ?? 0.0;
+        final int type =
+            int.tryParse(waiter['waiter_type']?.toString() ?? '0') ?? 0;
+        final double value =
+            double.tryParse(waiter['waiter_value']?.toString() ?? '0.0') ?? 0.0;
+
         double commission = 0;
         if (type == 0) {
           commission = value;
@@ -911,9 +967,15 @@ class PrintingService {
 
       // Print each waiter
       for (var waiter in itemsToShow) {
-        final double sales = (waiter['total_sales'] as num).toDouble();
-        final int type = waiter['waiter_type'] as int;
-        final double value = (waiter['waiter_value'] as num).toDouble();
+        final double sales =
+            double.tryParse(waiter['total_sales']?.toString() ?? '0.0') ?? 0.0;
+        final int type =
+            int.tryParse(waiter['waiter_type']?.toString() ?? '0') ?? 0;
+        final double value =
+            double.tryParse(waiter['waiter_value']?.toString() ?? '0.0') ?? 0.0;
+        final int orderCount =
+            int.tryParse(waiter['order_count']?.toString() ?? '0') ?? 0;
+
         double commission = 0;
         if (type == 0) {
           commission = value;
@@ -928,7 +990,7 @@ class PrintingService {
         bytes += generator.text(
           _format2Col(
             '  Buyurtmalar:',
-            '${waiter['order_count']} ta',
+            '$orderCount ta',
             margin: rSettings.horizontalMargin,
           ),
         );
@@ -996,7 +1058,7 @@ class PrintingService {
     } catch (e, stack) {
       debugPrint('Waiters report print error: $e');
       debugPrint(stack.toString());
-      return false;
+      rethrow;
     }
   }
 
@@ -1045,8 +1107,13 @@ class PrintingService {
       int totalOrders = 0;
       double totalRevenue = 0;
       for (var location in locations) {
-        totalOrders += (location['order_count'] as num).toInt();
-        totalRevenue += (location['total_revenue'] as num).toDouble();
+        final count =
+            int.tryParse(location['order_count']?.toString() ?? '0') ?? 0;
+        final revenue =
+            double.tryParse(location['total_revenue']?.toString() ?? '0.0') ??
+            0.0;
+        totalOrders += count;
+        totalRevenue += revenue;
       }
 
       // Limit to first 25 locations if too many
@@ -1057,6 +1124,12 @@ class PrintingService {
 
       // Print each location
       for (var location in itemsToShow) {
+        final count =
+            int.tryParse(location['order_count']?.toString() ?? '0') ?? 0;
+        final revenue =
+            double.tryParse(location['total_revenue']?.toString() ?? '0.0') ??
+            0.0;
+
         bytes += generator.text(
           _padLine(_cleanText(location['name']), rSettings.horizontalMargin),
           styles: const PosStyles(bold: true),
@@ -1064,16 +1137,14 @@ class PrintingService {
         bytes += generator.text(
           _format2Col(
             '  Buyurtmalar:',
-            '${location['order_count']} ta',
+            '$count ta',
             margin: rSettings.horizontalMargin,
           ),
         );
         bytes += generator.text(
           _format2Col(
             '  Tushum:',
-            PriceFormatter.format(
-              (location['total_revenue'] as num).toDouble(),
-            ),
+            PriceFormatter.format(revenue),
             margin: rSettings.horizontalMargin,
           ),
         );
@@ -1111,7 +1182,7 @@ class PrintingService {
     } catch (e, stack) {
       debugPrint('Locations report print error: $e');
       debugPrint(stack.toString());
-      return false;
+      rethrow;
     }
   }
 
@@ -1160,8 +1231,12 @@ class PrintingService {
       int totalOrders = 0;
       double totalRevenue = 0;
       for (var table in tables) {
-        totalOrders += (table['order_count'] as num).toInt();
-        totalRevenue += (table['total_revenue'] as num).toDouble();
+        final count =
+            int.tryParse(table['order_count']?.toString() ?? '0') ?? 0;
+        final revenue =
+            double.tryParse(table['total_revenue']?.toString() ?? '0.0') ?? 0.0;
+        totalOrders += count;
+        totalRevenue += revenue;
       }
 
       // Limit to first 25 tables if too many
@@ -1172,6 +1247,11 @@ class PrintingService {
 
       // Print each table
       for (var table in itemsToShow) {
+        final count =
+            int.tryParse(table['order_count']?.toString() ?? '0') ?? 0;
+        final revenue =
+            double.tryParse(table['total_revenue']?.toString() ?? '0.0') ?? 0.0;
+
         bytes += generator.text(
           _padLine(
             '${_cleanText(table['table_name'])} (${_cleanText(table['location_name'])})',
@@ -1182,14 +1262,14 @@ class PrintingService {
         bytes += generator.text(
           _format2Col(
             '  Buyurtmalar:',
-            '${table['order_count']} ta',
+            '$count ta',
             margin: rSettings.horizontalMargin,
           ),
         );
         bytes += generator.text(
           _format2Col(
             '  Tushum:',
-            PriceFormatter.format((table['total_revenue'] as num).toDouble()),
+            PriceFormatter.format(revenue),
             margin: rSettings.horizontalMargin,
           ),
         );
@@ -1227,7 +1307,7 @@ class PrintingService {
     } catch (e, stack) {
       debugPrint('Tables report print error: $e');
       debugPrint(stack.toString());
-      return false;
+      rethrow;
     }
   }
 
@@ -1279,9 +1359,10 @@ class PrintingService {
       double cardTotal = 0;
 
       for (var order in orders) {
-        final total = (order['total'] as num).toDouble();
+        final total =
+            double.tryParse(order['total']?.toString() ?? '0.0') ?? 0.0;
         totalRevenue += total;
-        final paymentType = order['payment_type'] as String?;
+        final paymentType = order['payment_type']?.toString();
         if (paymentType == 'Cash' || paymentType == 'Naqd') {
           cashTotal += total;
         } else if (paymentType == 'Card' || paymentType == 'Karta') {
@@ -1297,12 +1378,16 @@ class PrintingService {
 
       // Print each order
       for (var order in itemsToShow) {
-        final isDineIn = order['order_type'] == 0;
-        final orderNum = order['id'].toString().substring(0, 8).toUpperCase();
-        final dateTime = order['created_at']
-            .toString()
-            .substring(0, 16)
-            .replaceFirst('T', ' ');
+        final isDineIn = order['order_type']?.toString() == '0';
+        final orderIdRaw = order['id']?.toString() ?? '';
+        final orderNum = orderIdRaw.length > 8
+            ? orderIdRaw.substring(0, 8).toUpperCase()
+            : orderIdRaw.toUpperCase();
+
+        final createdAtRaw = order['created_at']?.toString() ?? '';
+        final dateTime = createdAtRaw.length >= 16
+            ? createdAtRaw.substring(0, 16).replaceFirst('T', ' ')
+            : createdAtRaw;
 
         bytes += generator.text(
           _padLine('#$orderNum', rSettings.horizontalMargin),
@@ -1326,7 +1411,7 @@ class PrintingService {
           bytes += generator.text(
             _format2Col(
               '  Joy/Stol:',
-              '${order['location_name'] ?? '-'}/${order['table_name'] ?? '-'}',
+              '${_cleanText(order['location_name'])}/${_cleanText(order['table_name'])}',
               margin: rSettings.horizontalMargin,
             ),
           );
@@ -1334,14 +1419,16 @@ class PrintingService {
         bytes += generator.text(
           _format2Col(
             '  To\'lov:',
-            order['payment_type'] ?? '-',
+            _cleanText(order['payment_type']),
             margin: rSettings.horizontalMargin,
           ),
         );
         bytes += generator.text(
           _format2Col(
             '  Summa:',
-            PriceFormatter.format((order['total'] as num).toDouble()),
+            PriceFormatter.format(
+              double.tryParse(order['total']?.toString() ?? '0.0') ?? 0.0,
+            ),
             margin: rSettings.horizontalMargin,
           ),
           styles: const PosStyles(bold: true),
@@ -1402,7 +1489,7 @@ class PrintingService {
     } catch (e, stack) {
       debugPrint('Orders report print error: $e');
       debugPrint(stack.toString());
-      return false;
+      rethrow;
     }
   }
 
@@ -1477,7 +1564,8 @@ class PrintingService {
       return await printEscPosBytes(bytes: bytes, settings: settings);
     } catch (e, stack) {
       debugPrint('Test print error: $e');
-      return false;
+      debugPrint(stack.toString());
+      rethrow;
     }
   }
 
@@ -1571,9 +1659,10 @@ class PrintingService {
       if (rSettings.cutPaper) bytes += generator.cut();
 
       return await printEscPosBytes(bytes: bytes, settings: settings);
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Salary payout print error: $e');
-      return false;
+      debugPrint(stack.toString());
+      rethrow;
     }
   }
 

@@ -4,6 +4,7 @@ import '../../providers/customer_provider.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../models/customer.dart';
 import 'outlays_screen.dart';
+import '../../providers/connectivity_provider.dart';
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({super.key});
@@ -17,7 +18,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CustomerProvider>().loadCustomers();
+      context.read<CustomerProvider>().loadCustomers(
+        connectivity: context.read<ConnectivityProvider>(),
+      );
     });
   }
 
@@ -182,6 +185,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     phone: phoneController.text,
                     createdAt: DateTime.now(),
                   ),
+                  connectivity: context.read<ConnectivityProvider>(),
                 );
                 Navigator.pop(context);
               }

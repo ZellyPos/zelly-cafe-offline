@@ -689,17 +689,44 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
     _saveSettings(provider);
 
     final printerProv = context.read<PrinterProvider>();
-    final success = await printerProv.testPrint();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success ? 'Test chek yuborildi ✅' : 'Xatolik yuz berdi ❌',
+    try {
+      final success = await printerProv.testPrint();
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Test chek yuborildi ✅'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Printer bilan aloqa o\'rnatilmadi ❌'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text(
+              'Printer xatoligi',
+              style: TextStyle(color: Colors.red),
+            ),
+            content: Text('Test chekini chiqarishda xatolik yuz berdi:\n\n$e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
           ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        );
+      }
     }
   }
 }

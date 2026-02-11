@@ -6,6 +6,7 @@ import '../../models/table.dart';
 import '../../models/location.dart';
 import '../../core/app_strings.dart';
 import '../../core/theme.dart';
+import '../../providers/connectivity_provider.dart';
 
 class TablesMgmtScreen extends StatefulWidget {
   const TablesMgmtScreen({super.key});
@@ -136,11 +137,10 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                     padding: const EdgeInsets.all(24),
                     gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent:
-                          MediaQuery.of(context).size.width <= 1100 ? 280 : 350,
-                      childAspectRatio:
-                          MediaQuery.of(context).size.width <= 1100 ? 1.0 : 1.1,
-                      crossAxisSpacing: 20,
-                      mainAxisSpacing: 20,
+                          MediaQuery.of(context).size.width <= 1100 ? 200 : 240,
+                      childAspectRatio: 1.2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
                     ),
                     itemCount: filteredTables.length,
                     itemBuilder: (context, index) {
@@ -187,6 +187,9 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
     } else if (table.pricingType == 2) {
       pricingLabel = "Fiksal";
       pricingColor = Colors.purple;
+    } else if (table.pricingType == 3) {
+      pricingLabel = "Foizli";
+      pricingColor = Colors.teal;
     }
 
     return Container(
@@ -208,7 +211,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
           borderRadius: BorderRadius.circular(20),
           onTap: () => _showTableDialog(context, table: table),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -220,8 +223,8 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                         table.name,
                         style: TextStyle(
                           fontSize: MediaQuery.of(context).size.width <= 1100
-                              ? 18
-                              : 20,
+                              ? 15
+                              : 16,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF1E293B),
                         ),
@@ -235,16 +238,23 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                           icon: const Icon(
                             Icons.edit_outlined,
                             color: Colors.blue,
+                            size: 20,
                           ),
                           onPressed: () =>
                               _showTableDialog(context, table: table),
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
                         ),
+                        const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(
                             Icons.delete_outline,
                             color: Colors.red,
+                            size: 20,
                           ),
                           onPressed: () => _confirmDelete(context, table),
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
                         ),
                       ],
                     ),
@@ -252,13 +262,14 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                 ),
                 Text(
                   location.name,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
+                const SizedBox(height: 8),
                 const Spacer(),
                 Row(
                   children: [
                     _buildBadge(pricingLabel, pricingColor),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     _buildBadge(
                       table.status == 0 ? "Bo'sh" : "Band",
                       table.status == 0 ? Colors.green : Colors.red,
@@ -275,10 +286,10 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
 
   Widget _buildBadge(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Text(
@@ -286,7 +297,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.bold,
-          fontSize: 12,
+          fontSize: 10,
         ),
       ),
     );
@@ -294,7 +305,10 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
 
   void _confirmDelete(BuildContext context, TableModel table) async {
     final tableProvider = context.read<TableProvider>();
-    final success = await tableProvider.deleteTable(table.id!);
+    final success = await tableProvider.deleteTable(
+      table.id!,
+      connectivity: context.read<ConnectivityProvider>(),
+    );
 
     if (!context.mounted) return;
 
@@ -324,6 +338,9 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
     );
     final fixedAmountController = TextEditingController(
       text: table?.fixedAmount.toString() ?? '0',
+    );
+    final servicePercentageController = TextEditingController(
+      text: table?.servicePercentage.toString() ?? '0',
     );
     final locationProvider = context.read<LocationProvider>();
 
@@ -386,13 +403,20 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  items: const [
-                    DropdownMenuItem(
+                  items: [
+                    const DropdownMenuItem(
                       value: 0,
                       child: Text("Normal (Xona narxisiz)"),
                     ),
-                    DropdownMenuItem(value: 1, child: Text("Soatli")),
-                    DropdownMenuItem(value: 2, child: Text("Fiksal (Fixed)")),
+                    const DropdownMenuItem(value: 1, child: Text("Soatli")),
+                    const DropdownMenuItem(
+                      value: 2,
+                      child: Text("Fiksal (Fixed)"),
+                    ),
+                    const DropdownMenuItem(
+                      value: 3,
+                      child: Text("Xizmat foizi"),
+                    ),
                   ],
                   onChanged: (val) => setDialogState(() => pricingType = val!),
                 ),
@@ -415,6 +439,19 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                     controller: fixedAmountController,
                     decoration: InputDecoration(
                       labelText: "Fiksal narx",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
+                if (pricingType == 3) ...[
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: servicePercentageController,
+                    decoration: InputDecoration(
+                      labelText: "Xizmat foizi (%)",
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -445,11 +482,19 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                   pricingType: pricingType,
                   hourlyRate: double.tryParse(hourlyRateController.text) ?? 0,
                   fixedAmount: double.tryParse(fixedAmountController.text) ?? 0,
+                  servicePercentage:
+                      double.tryParse(servicePercentageController.text) ?? 0,
                 );
                 if (table == null) {
-                  context.read<TableProvider>().addTable(newTable);
+                  context.read<TableProvider>().addTable(
+                    newTable,
+                    connectivity: context.read<ConnectivityProvider>(),
+                  );
                 } else {
-                  context.read<TableProvider>().updateTable(newTable);
+                  context.read<TableProvider>().updateTable(
+                    newTable,
+                    connectivity: context.read<ConnectivityProvider>(),
+                  );
                 }
                 Navigator.pop(context);
               },

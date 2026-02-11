@@ -24,6 +24,8 @@ class ReportProvider extends ChangeNotifier {
   );
 
   ReportFilter get filter => _filter;
+  DateTime get dateFrom => _filter.startDate;
+  DateTime get dateTo => _filter.endDate;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -183,14 +185,14 @@ class ReportProvider extends ChangeNotifier {
 
     return await db.rawQuery('''
       SELECT 
-        p.name, 
+        p.name as name, 
         SUM(oi.qty) as total_qty, 
         SUM(oi.qty * oi.price) as total_revenue
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
       WHERE $whereClause
-      GROUP BY p.id
+      GROUP BY p.id, p.name
       ORDER BY total_revenue DESC
     ''', whereArgs);
   }
@@ -216,14 +218,14 @@ class ReportProvider extends ChangeNotifier {
 
     return await db.rawQuery('''
       SELECT 
-        w.name, 
+        w.name as name, 
         w.type as waiter_type, 
         w.value as waiter_value,
         COUNT(o.id) as order_count,
-        SUM(o.total) as total_sales
+        SUM(COALESCE(o.total, 0)) as total_sales
       FROM waiters w
       LEFT JOIN orders o ON w.id = o.waiter_id AND $whereClause
-      GROUP BY w.id
+      GROUP BY w.id, w.name, w.type, w.value
       HAVING order_count > 0
     ''', whereArgs);
   }

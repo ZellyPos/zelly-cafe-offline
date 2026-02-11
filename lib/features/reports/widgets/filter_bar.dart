@@ -49,36 +49,42 @@ class ReportFilterBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.filter_alt_outlined,
-                color: Color(0xFF64748B),
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                "Filtr: $startDateStr - $endDateStr • $typeText • $locationText • $waiterText",
-                style: const TextStyle(
+          if (MediaQuery.of(context).size.width > 600) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.filter_alt_outlined,
                   color: Color(0xFF64748B),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  size: 16,
                 ),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () => reportProvider.updateFilter(
-                  clearOrderType: true,
-                  clearLocation: true,
-                  clearWaiter: true,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Filtr: $startDateStr - $endDateStr • $typeText • $locationText • $waiterText",
+                    style: const TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text("Filtrni tozalash"),
-                style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () => reportProvider.updateFilter(
+                    clearOrderType: true,
+                    clearLocation: true,
+                    clearWaiter: true,
+                  ),
+                  icon: const Icon(Icons.refresh, size: 14),
+                  label: const Text("Tozalash", style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
           Wrap(
             spacing: 16,
             runSpacing: 12,
@@ -177,7 +183,7 @@ class ReportFilterBar extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(8),
@@ -188,13 +194,13 @@ class ReportFilterBar extends StatelessWidget {
           children: [
             Text(
               "$label: ",
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
             ),
             Text(
               value,
               style: const TextStyle(
                 color: Color(0xFF1E293B),
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -217,7 +223,7 @@ class ReportFilterBar extends StatelessWidget {
     required ValueChanged<T> onChanged,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(8),
@@ -228,7 +234,7 @@ class ReportFilterBar extends StatelessWidget {
         children: [
           Text(
             "$label: ",
-            style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+            style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
           ),
           DropdownButtonHideUnderline(
             child: DropdownButton<T>(
@@ -237,7 +243,7 @@ class ReportFilterBar extends StatelessWidget {
               onChanged: (val) => val != null ? onChanged(val) : null,
               style: const TextStyle(
                 color: Color(0xFF1E293B),
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
               icon: const Icon(

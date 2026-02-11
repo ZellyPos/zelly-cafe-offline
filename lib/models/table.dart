@@ -6,6 +6,7 @@ class TableModel {
   final int pricingType; // 0 = normal, 1 = hourly, 2 = fixed
   final double hourlyRate;
   final double fixedAmount;
+  final double servicePercentage;
   final ActiveOrderInfo? activeOrder;
 
   TableModel({
@@ -16,6 +17,7 @@ class TableModel {
     this.pricingType = 0,
     this.hourlyRate = 0,
     this.fixedAmount = 0,
+    this.servicePercentage = 0,
     this.activeOrder,
   });
 
@@ -28,6 +30,7 @@ class TableModel {
       'pricing_type': pricingType,
       'hourly_rate': hourlyRate,
       'fixed_amount': fixedAmount,
+      'service_percentage': servicePercentage,
     };
   }
 
@@ -43,6 +46,7 @@ class TableModel {
       pricingType: map['pricing_type'] ?? 0,
       hourlyRate: (map['hourly_rate'] as num?)?.toDouble() ?? 0.0,
       fixedAmount: (map['fixed_amount'] as num?)?.toDouble() ?? 0.0,
+      servicePercentage: (map['service_percentage'] as num?)?.toDouble() ?? 0.0,
       activeOrder: activeOrder,
     );
   }
@@ -55,6 +59,7 @@ class TableModel {
     int? pricingType,
     double? hourlyRate,
     double? fixedAmount,
+    double? servicePercentage,
     ActiveOrderInfo? activeOrder,
   }) {
     return TableModel(
@@ -65,6 +70,7 @@ class TableModel {
       pricingType: pricingType ?? this.pricingType,
       hourlyRate: hourlyRate ?? this.hourlyRate,
       fixedAmount: fixedAmount ?? this.fixedAmount,
+      servicePercentage: servicePercentage ?? this.servicePercentage,
       activeOrder: activeOrder ?? this.activeOrder,
     );
   }

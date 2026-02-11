@@ -48,7 +48,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
       );
     } else {
       setState(() {
-        _errorMessage = 'Aktivatsiya xato! Kodni tekshiring';
+        _errorMessage = 'Aktivatsiya kodi noto\'g\'ri!';
         _isLoading = false;
       });
     }

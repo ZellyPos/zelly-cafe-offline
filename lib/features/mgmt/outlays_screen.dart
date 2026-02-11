@@ -4,6 +4,7 @@ import '../../providers/customer_provider.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../models/customer.dart';
 import '../../models/transaction.dart';
+import '../../providers/connectivity_provider.dart';
 
 class OutlaysScreen extends StatefulWidget {
   final Customer customer;
@@ -18,7 +19,10 @@ class _OutlaysScreenState extends State<OutlaysScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CustomerProvider>().loadTransactions(widget.customer.id);
+      context.read<CustomerProvider>().loadTransactions(
+        widget.customer.id,
+        connectivity: context.read<ConnectivityProvider>(),
+      );
     });
   }
 
@@ -230,6 +234,7 @@ class _OutlaysScreenState extends State<OutlaysScreen> {
                     note: noteController.text,
                     createdAt: DateTime.now(),
                   ),
+                  connectivity: context.read<ConnectivityProvider>(),
                 );
                 Navigator.pop(context);
               }

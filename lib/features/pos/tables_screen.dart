@@ -31,14 +31,20 @@ class _TablesScreenState extends State<TablesScreen> {
 
     // Initial load with loading indicator (after build completes)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<TableProvider>().loadTables(connectivity, false);
+      context.read<TableProvider>().loadTables(
+        connectivity: connectivity,
+        silent: false,
+      );
     });
 
     // Polling interval: 1 second for real-time updates (silent)
     _refreshTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         // Silent update - no loading indicator, no setState
-        context.read<TableProvider>().loadTables(connectivity, true);
+        context.read<TableProvider>().loadTables(
+          connectivity: connectivity,
+          silent: true,
+        );
       }
     });
   }
@@ -90,20 +96,11 @@ class _TablesScreenState extends State<TablesScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Stollar',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                    inherit: true,
-                  ),
-                ),
+                Expanded(child: _buildLocationTabs(locationProvider)),
+                const SizedBox(width: 24),
                 _buildSaboyButton(context),
               ],
             ),
-            const SizedBox(height: 24),
-            _buildLocationTabs(locationProvider),
             const SizedBox(height: 32),
             Expanded(
               child: tableProvider.isLoading && tableProvider.tables.isEmpty
@@ -112,10 +109,12 @@ class _TablesScreenState extends State<TablesScreen> {
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount:
                             MediaQuery.of(context).size.width >= 1600
-                            ? 6
+                            ? 8
                             : (MediaQuery.of(context).size.width >= 1200
-                                  ? 5
-                                  : 4),
+                                  ? 6
+                                  : (MediaQuery.of(context).size.width >= 1000
+                                        ? 5
+                                        : 4)),
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
                         childAspectRatio: 0.95,
@@ -135,7 +134,7 @@ class _TablesScreenState extends State<TablesScreen> {
 
   Widget _buildLocationTabs(LocationProvider locationProvider) {
     return SizedBox(
-      height: 48,
+      height: 60,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: locationProvider.locations.length,
@@ -153,8 +152,10 @@ class _TablesScreenState extends State<TablesScreen> {
               labelStyle: TextStyle(
                 color: isSelected ? Colors.white : const Color(0xFF64748B),
                 fontWeight: FontWeight.bold,
+                fontSize: 16,
                 inherit: true,
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

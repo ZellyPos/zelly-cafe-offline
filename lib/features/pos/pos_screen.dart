@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/product_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../core/theme.dart';
+import '../../models/category.dart';
 import '../../models/product.dart';
 import '../../core/app_strings.dart';
 import '../../core/utils/price_formatter.dart';
@@ -14,6 +16,14 @@ import '../../providers/waiter_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../models/table.dart';
 import 'widgets/payment_dialog.dart';
+
+enum ProductSortMode {
+  custom,
+  popularity,
+  priceLowToHigh,
+  priceHighToLow,
+  alphabetical,
+}
 
 class PosScreen extends StatefulWidget {
   final int orderType; // 0 = Dine-in, 1 = Saboy
@@ -27,19 +37,29 @@ class PosScreen extends StatefulWidget {
 
 class _PosScreenState extends State<PosScreen> {
   String selectedCategory = AppStrings.all;
+  ProductSortMode _currentSort = ProductSortMode.custom;
   Timer? _refreshTimer;
   late PageController _pageController;
+  late ScrollController _categoryScrollController;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    _categoryScrollController = ScrollController();
+    _loadSortPreference();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final connectivity = context.read<ConnectivityProvider>();
       final cartProvider = context.read<CartProvider>();
+
+      // Refresh products and categories for the current session policy
+      context.read<ProductProvider>().loadProducts(connectivity: connectivity);
+      context.read<CategoryProvider>().loadCategories(
+        connectivity: connectivity,
+      );
 
       // Validate table access for waiters
       _validateTableAccess(connectivity);
@@ -88,7 +108,36 @@ class _PosScreenState extends State<PosScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _pageController.dispose();
+    _categoryScrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToCategory(int index) {
+    if (_categoryScrollController.hasClients) {
+      _categoryScrollController.animateTo(
+        index * 100.0, // Approximate width per chip + separator
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  Future<void> _loadSortPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedSort = prefs.getString('pos_product_sort');
+    if (savedSort != null) {
+      setState(() {
+        _currentSort = ProductSortMode.values.firstWhere(
+          (e) => e.toString() == savedSort,
+          orElse: () => ProductSortMode.custom,
+        );
+      });
+    }
+  }
+
+  Future<void> _saveSortPreference(ProductSortMode sort) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pos_product_sort', sort.toString());
   }
 
   @override
@@ -105,12 +154,26 @@ class _PosScreenState extends State<PosScreen> {
         .where((p) => p.isActive)
         .toList();
 
+    // Group by category sort order then product sort order when in custom mode
+    if (_currentSort == ProductSortMode.custom) {
+      final categoryOrders = {
+        for (var cat in categoryProvider.categories) cat.name: cat.sortOrder,
+      };
+      allProducts.sort((a, b) {
+        final aCatOrder = categoryOrders[a.category] ?? 999;
+        final bCatOrder = categoryOrders[b.category] ?? 999;
+        if (aCatOrder != bCatOrder) return aCatOrder.compareTo(bCatOrder);
+        return a.sortOrder.compareTo(b.sortOrder);
+      });
+    }
+
     var filteredProducts = selectedCategory == AppStrings.all
         ? allProducts
         : allProducts.where((p) => p.category == selectedCategory).toList();
 
-    // Sort by sales count in "Barchasi" (All) category
-    if (selectedCategory == AppStrings.all) {
+    // Sort by sales count in "Barchasi" (All) category ONLY if mode is popularity
+    if (selectedCategory == AppStrings.all &&
+        _currentSort == ProductSortMode.popularity) {
       filteredProducts.sort((a, b) {
         final aSales = productProvider.getProductSalesCount(a.id ?? 0);
         final bSales = productProvider.getProductSalesCount(b.id ?? 0);
@@ -188,7 +251,30 @@ class _PosScreenState extends State<PosScreen> {
                               fontSize: isCompact ? 12 : 14,
                             ),
                           ),
+                          if (widget.table?.pricingType == 1) ...[
+                            const SizedBox(width: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade100,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                "Daq: ${DateTime.now().difference(cartProvider.activeOpenedAt!).inMinutes}",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade900,
+                                  fontSize: isCompact ? 11 : 12,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
+                        const SizedBox(width: 12),
+                        _buildSortButton(),
                       ],
                     ),
                   )
@@ -224,52 +310,110 @@ class _PosScreenState extends State<PosScreen> {
                             fontSize: 18,
                           ),
                         ),
+                        const Spacer(),
+                        _buildSortButton(),
                       ],
                     ),
                   ),
                 // Category Bar
                 Container(
-                  height: 60,
+                  height: 75,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 8,
+                    vertical: 10,
                   ),
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: categories.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
-                    itemBuilder: (context, index) {
-                      final cat = categories[index];
-                      final isSelected = selectedCategory == cat;
-                      return ChoiceChip(
-                        label: Text(
-                          cat,
-                          style: TextStyle(
-                            fontSize: isCompact ? 12 : 13,
-                            color: isSelected ? Colors.white : Colors.black,
-                            fontWeight: FontWeight.bold,
+                  child: Row(
+                    children: [
+                      // Fixed Burger Button
+                      Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        child: InkWell(
+                          onTap: () => _showCategoryModal(
+                            context,
+                            categories,
+                            categoryProvider,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.grid_view_rounded,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
-                        selected: isSelected,
-                        onSelected: (val) {
-                          if (val) {
-                            setState(() => selectedCategory = cat);
-                            _pageController.animateToPage(
-                              index,
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
+                      ),
+                      // Scrollable Categories
+                      Expanded(
+                        child: ListView.separated(
+                          controller: _categoryScrollController,
+                          scrollDirection: Axis.horizontal,
+                          itemCount: categories.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 10),
+                          itemBuilder: (context, index) {
+                            final cat = categories[index];
+                            final isSelected = selectedCategory == cat;
+
+                            // Get category color
+                            Color? catColor;
+                            if (cat != AppStrings.all) {
+                              try {
+                                final category = categoryProvider.categories
+                                    .firstWhere((c) => c.name == cat);
+                                if (category.color != null) {
+                                  catColor = Color(
+                                    int.parse(
+                                      category.color!.replaceFirst('#', '0xFF'),
+                                    ),
+                                  );
+                                }
+                              } catch (_) {}
+                            }
+
+                            return ChoiceChip(
+                              label: Text(
+                                cat,
+                                style: TextStyle(
+                                  fontSize: isCompact ? 16 : 18,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              selected: isSelected,
+                              onSelected: (val) {
+                                if (val) {
+                                  setState(() => selectedCategory = cat);
+                                  _pageController.animateToPage(
+                                    index,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeInOut,
+                                  );
+                                  _scrollToCategory(index);
+                                }
+                              },
+                              selectedColor: catColor ?? AppTheme.primaryColor,
+                              backgroundColor:
+                                  catColor?.withOpacity(1) ??
+                                  Colors.grey.shade100,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
                             );
-                          }
-                        },
-                        selectedColor: AppTheme.primaryColor,
-                        padding: isCompact
-                            ? const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              )
-                            : null,
-                      );
-                    },
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 // Products Grid with PageView for Swiping
@@ -285,6 +429,7 @@ class _PosScreenState extends State<PosScreen> {
                               setState(() {
                                 selectedCategory = categories[index];
                               });
+                              _scrollToCategory(index);
                             },
                             itemBuilder: (context, catIndex) {
                               final currentCat = categories[catIndex];
@@ -295,15 +440,37 @@ class _PosScreenState extends State<PosScreen> {
                                         .where((p) => p.category == currentCat)
                                         .toList();
 
-                              // Sort by sales count in "Barchasi" (All) category
-                              if (currentCat == AppStrings.all) {
-                                pageProducts.sort((a, b) {
-                                  final aSales = productProvider
-                                      .getProductSalesCount(a.id ?? 0);
-                                  final bSales = productProvider
-                                      .getProductSalesCount(b.id ?? 0);
-                                  return bSales.compareTo(aSales);
-                                });
+                              // Apply sorting
+                              switch (_currentSort) {
+                                case ProductSortMode.popularity:
+                                  pageProducts.sort((a, b) {
+                                    final aSales = productProvider
+                                        .getProductSalesCount(a.id ?? 0);
+                                    final bSales = productProvider
+                                        .getProductSalesCount(b.id ?? 0);
+                                    return bSales.compareTo(aSales);
+                                  });
+                                  break;
+                                case ProductSortMode.priceLowToHigh:
+                                  pageProducts.sort(
+                                    (a, b) => a.price.compareTo(b.price),
+                                  );
+                                  break;
+                                case ProductSortMode.priceHighToLow:
+                                  pageProducts.sort(
+                                    (a, b) => b.price.compareTo(a.price),
+                                  );
+                                  break;
+                                case ProductSortMode.alphabetical:
+                                  pageProducts.sort(
+                                    (a, b) => a.name.toLowerCase().compareTo(
+                                      b.name.toLowerCase(),
+                                    ),
+                                  );
+                                  break;
+                                case ProductSortMode.custom:
+                                  // Already sorted by sort_order from provider
+                                  break;
                               }
 
                               return GridView.builder(
@@ -319,7 +486,7 @@ class _PosScreenState extends State<PosScreen> {
                                                     1200
                                                 ? 5
                                                 : 4),
-                                      childAspectRatio: isCompact ? 0.72 : 0.8,
+                                      childAspectRatio: isCompact ? 0.9 : 1.1,
                                       crossAxisSpacing: isCompact ? 8 : 12,
                                       mainAxisSpacing: isCompact ? 8 : 12,
                                     ),
@@ -383,127 +550,144 @@ class _PosScreenState extends State<PosScreen> {
                     itemCount: cartProvider.items.length,
                     itemBuilder: (context, index) {
                       final item = cartProvider.items.values.toList()[index];
-                      return Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isCompact ? 6 : 16,
-                          vertical: isCompact ? 8 : 12,
+                      return Dismissible(
+                        key: Key('cart_${item.product.id}'),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          color: Colors.red,
+                          child: const Icon(Icons.delete, color: Colors.white),
                         ),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(color: Colors.grey.shade100),
+                        onDismissed: (direction) {
+                          cartProvider.removeItem(
+                            item.product.id!,
+                            context.read<ConnectivityProvider>(),
+                            context,
+                          );
+                        },
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isCompact ? 6 : 16,
+                            vertical: isCompact ? 8 : 12,
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            // Product Name Block
-                            Expanded(
-                              flex: 3,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.product.name,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: isCompact ? 13 : 14,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    PriceFormatter.format(item.product.price),
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: isCompact ? 11 : 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(color: Colors.grey.shade100),
                             ),
-                            const SizedBox(width: 4),
-                            // Controls & Total
-                            Flexible(
-                              flex: 4,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  // Qty Stepper
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              // Product Name Block
+                              Expanded(
+                                flex: 3,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.product.name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: isCompact ? 13 : 14,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 2,
-                                      vertical: 2,
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      PriceFormatter.format(item.product.price),
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: isCompact ? 11 : 12,
+                                      ),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _buildQtyIconBtn(
-                                          Icons.remove,
-                                          isCompact,
-                                          () => cartProvider.updateQuantity(
-                                            item.product.id!,
-                                            item.quantity - 1,
-                                            context
-                                                .read<ConnectivityProvider>(),
-                                            context,
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              // Controls & Total
+                              Flexible(
+                                flex: 4,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    // Qty Stepper
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                        vertical: 2,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          _buildQtyIconBtn(
+                                            Icons.remove,
+                                            isCompact,
+                                            () => cartProvider.updateQuantity(
+                                              item.product.id!,
+                                              item.quantity - 1,
+                                              context
+                                                  .read<ConnectivityProvider>(),
+                                              context,
+                                            ),
                                           ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 2,
+                                            ),
+                                            child: Text(
+                                              '${item.quantity}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: isCompact ? 12 : 14,
+                                              ),
+                                            ),
+                                          ),
+                                          _buildQtyIconBtn(
+                                            Icons.add,
+                                            isCompact,
+                                            () => cartProvider.updateQuantity(
+                                              item.product.id!,
+                                              item.quantity + 1,
+                                              context
+                                                  .read<ConnectivityProvider>(),
+                                              context,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(width: isCompact ? 4 : 8),
+                                    // Line Total
+                                    Flexible(
+                                      child: ConstrainedBox(
+                                        constraints: BoxConstraints(
+                                          minWidth: isCompact ? 60 : 80,
+                                          maxWidth: isCompact ? 90 : 110,
                                         ),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 2,
-                                          ),
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerRight,
                                           child: Text(
-                                            '${item.quantity}',
+                                            PriceFormatter.format(item.total),
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
-                                              fontSize: isCompact ? 12 : 14,
+                                              fontSize: isCompact ? 13 : 14,
+                                              color: AppTheme.primaryColor,
                                             ),
                                           ),
                                         ),
-                                        _buildQtyIconBtn(
-                                          Icons.add,
-                                          isCompact,
-                                          () => cartProvider.updateQuantity(
-                                            item.product.id!,
-                                            item.quantity + 1,
-                                            context
-                                                .read<ConnectivityProvider>(),
-                                            context,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  SizedBox(width: isCompact ? 4 : 8),
-                                  // Line Total
-                                  Flexible(
-                                    child: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        minWidth: isCompact ? 60 : 80,
-                                        maxWidth: isCompact ? 90 : 110,
-                                      ),
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        alignment: Alignment.centerRight,
-                                        child: Text(
-                                          PriceFormatter.format(item.total),
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: isCompact ? 13 : 14,
-                                            color: AppTheme.primaryColor,
-                                          ),
-                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -695,6 +879,27 @@ class _PosScreenState extends State<PosScreen> {
     Product product,
     bool isCompact,
   ) {
+    // Look up category color
+    final categoryProvider = context.read<CategoryProvider>();
+    final category = categoryProvider.categories.firstWhere(
+      (c) => c.name == product.category,
+      orElse: () => Category(name: product.category),
+    );
+
+    Color? categoryColor;
+    if (category.color != null) {
+      try {
+        categoryColor = Color(
+          int.parse(category.color!.replaceFirst('#', '0xFF')),
+        );
+      } catch (e) {
+        // Fallback to default
+      }
+    }
+
+    final bool isDarkColor =
+        categoryColor != null && categoryColor.computeLuminance() < 0.5;
+
     return InkWell(
       onTap: () => context.read<CartProvider>().addItem(
         product,
@@ -703,27 +908,59 @@ class _PosScreenState extends State<PosScreen> {
       ),
       child: Card(
         clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 2,
+        color: categoryColor ?? Colors.white,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
+            SizedBox(
+              height: isCompact ? 100 : 120,
               child: Container(
-                color: Colors.grey.shade100,
-                child:
-                    product.imagePath != null &&
-                        File(product.imagePath!).existsSync()
-                    ? Image.file(
-                        File(product.imagePath!),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      )
-                    : Center(
-                        child: Icon(
-                          Icons.fastfood,
-                          size: 48,
-                          color: Colors.grey.shade400,
-                        ),
+                color: Colors.white.withOpacity(0.5),
+                child: Builder(
+                  builder: (context) {
+                    final connectivity = context.read<ConnectivityProvider>();
+                    final imageUrl = connectivity.getImageUrl(
+                      product.imagePath,
+                    );
+
+                    if (imageUrl != null) {
+                      if (imageUrl.startsWith('http')) {
+                        return Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              size: isCompact ? 32 : 40,
+                              color: isDarkColor
+                                  ? Colors.white70
+                                  : Colors.grey.shade400,
+                            ),
+                          ),
+                        );
+                      } else if (File(imageUrl).existsSync()) {
+                        return Image.file(
+                          File(imageUrl),
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                        );
+                      }
+                    }
+
+                    return Center(
+                      child: Icon(
+                        Icons.fastfood,
+                        size: isCompact ? 32 : 40,
+                        color: isDarkColor
+                            ? Colors.white70
+                            : Colors.grey.shade400,
                       ),
+                    );
+                  },
+                ),
               ),
             ),
             Padding(
@@ -735,11 +972,13 @@ class _PosScreenState extends State<PosScreen> {
                     product.name,
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
-                      fontSize: isCompact ? 16 : 18,
+                      fontSize: isCompact ? 14 : 16,
                       height: 1.1,
-                      color: const Color(0xFF1E293B),
+                      color: isDarkColor
+                          ? Colors.white
+                          : const Color(0xFF1E293B),
                     ),
-                    maxLines: 2,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
                   SizedBox(height: isCompact ? 2 : 4),
@@ -748,11 +987,19 @@ class _PosScreenState extends State<PosScreen> {
                     children: [
                       Text(
                         PriceFormatter.format(product.price),
-                        style: const TextStyle(
-                          color: AppTheme.secondaryColor,
+                        style: TextStyle(
+                          color: isDarkColor
+                              ? Colors.white
+                              : AppTheme.secondaryColor,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (product.isSet)
+                        const Icon(
+                          Icons.auto_awesome,
+                          size: 14,
+                          color: Colors.amber,
+                        ),
                     ],
                   ),
                 ],
@@ -911,6 +1158,189 @@ class _PosScreenState extends State<PosScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSortButton() {
+    return PopupMenuButton<ProductSortMode>(
+      initialValue: _currentSort,
+      onSelected: (ProductSortMode result) {
+        setState(() {
+          _currentSort = result;
+        });
+        _saveSortPreference(result);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.sort, size: 18, color: Colors.blue),
+            const SizedBox(width: 8),
+            Text(
+              _currentSort == ProductSortMode.custom
+                  ? "Mening tartibim"
+                  : _currentSort == ProductSortMode.popularity
+                  ? "Ommabop"
+                  : _currentSort == ProductSortMode.priceHighToLow
+                  ? "Qimmat"
+                  : _currentSort == ProductSortMode.priceLowToHigh
+                  ? "Arzon"
+                  : "Alfabit",
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const Icon(Icons.arrow_drop_down, size: 18),
+          ],
+        ),
+      ),
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<ProductSortMode>>[
+        const PopupMenuItem<ProductSortMode>(
+          value: ProductSortMode.custom,
+          child: Text("Sizning tartibingiz"),
+        ),
+        const PopupMenuItem<ProductSortMode>(
+          value: ProductSortMode.popularity,
+          child: Text("Ommabop (Sotuv bo'yicha)"),
+        ),
+        const PopupMenuItem<ProductSortMode>(
+          value: ProductSortMode.priceHighToLow,
+          child: Text('Qimmat'),
+        ),
+        const PopupMenuItem<ProductSortMode>(
+          value: ProductSortMode.priceLowToHigh,
+          child: Text('Arzon'),
+        ),
+        const PopupMenuItem<ProductSortMode>(
+          value: ProductSortMode.alphabetical,
+          child: Text('Alfabit bo\'yicha'),
+        ),
+      ],
+    );
+  }
+
+  void _showCategoryModal(
+    BuildContext context,
+    List<String> categories,
+    CategoryProvider categoryProvider,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final size = MediaQuery.of(context).size;
+
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: size.width * 0.8,
+            height: size.height * 0.8,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Kategoriyalar',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: GridView.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 200,
+                          childAspectRatio: 1.5,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                    itemCount: categories.length,
+                    itemBuilder: (context, index) {
+                      final cat = categories[index];
+                      final isSelected = selectedCategory == cat;
+
+                      Color? catColor;
+                      if (cat != AppStrings.all) {
+                        try {
+                          final category = categoryProvider.categories
+                              .firstWhere((c) => c.name == cat);
+                          if (category.color != null) {
+                            catColor = Color(
+                              int.parse(
+                                category.color!.replaceFirst('#', '0xFF'),
+                              ),
+                            );
+                          }
+                        } catch (_) {}
+                      }
+
+                      final bool isDark =
+                          catColor != null && catColor.computeLuminance() < 0.5;
+
+                      return InkWell(
+                        onTap: () {
+                          setState(() => selectedCategory = cat);
+                          _pageController.jumpToPage(index);
+                          _scrollToCategory(index);
+                          Navigator.pop(context);
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: catColor ?? Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected
+                                ? Border.all(
+                                    color: AppTheme.primaryColor,
+                                    width: 2,
+                                  )
+                                : null,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.all(8),
+                          child: Text(
+                            cat,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: catColor != null
+                                  ? (isDark ? Colors.white : Colors.black)
+                                  : Colors.black,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

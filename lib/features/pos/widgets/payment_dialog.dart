@@ -24,6 +24,7 @@ class StandardPaymentDialog extends StatefulWidget {
 class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
   String _paidAmountStr = '';
   String _paymentType = 'Cash'; // Cash or Card
+  bool _shouldPrintReceipt = true;
 
   @override
   void initState() {
@@ -195,6 +196,21 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 24),
+                      SwitchListTile(
+                        title: const Text(
+                          "Chek chiqarish",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: const Text(
+                          "To'lovdan so'ng printerdan chek chiqadi",
+                        ),
+                        value: _shouldPrintReceipt,
+                        onChanged: (val) =>
+                            setState(() => _shouldPrintReceipt = val),
+                        contentPadding: EdgeInsets.zero,
+                        activeColor: Colors.green,
+                      ),
                     ],
                   ),
                 ),
@@ -255,23 +271,56 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
             ),
             const SizedBox(height: 32),
             // Bottom Action
-            SizedBox(
-              width: double.infinity,
-              height: 64,
-              child: ElevatedButton(
-                onPressed: _handlePaymentValidation,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.secondaryColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+            Row(
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: SizedBox(
+                    height: 64,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.red, width: 2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        "Ortga",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                        ),
+                      ),
+                    ),
                   ),
-                  elevation: 0,
                 ),
-                child: const Text(
-                  "To'lovni yakunlash",
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 1,
+                  child: SizedBox(
+                    height: 64,
+                    child: ElevatedButton(
+                      onPressed: _handlePaymentValidation,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.secondaryColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        "To'lovni yakunlash",
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -438,6 +487,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
       locationId: widget.table?.locationId,
       paidAmount: _paymentType == 'Cash' ? _paidAmount : widget.total,
       change: _paymentType == 'Cash' ? _change : 0.0,
+      shouldPrint: _shouldPrintReceipt,
     );
 
     if (mounted) {

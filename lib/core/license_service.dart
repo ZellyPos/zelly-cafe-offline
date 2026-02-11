@@ -37,7 +37,9 @@ class LicenseService {
 
   /// Activate the license with a token
   Future<bool> activate(String token) async {
-    if (token.trim().isEmpty) {
+    final trimmedToken = token.trim().toUpperCase();
+    if (trimmedToken != 'ZELLY2026') {
+      debugPrint('Invalid activation token attempted: $trimmedToken');
       return false;
     }
 
@@ -46,7 +48,7 @@ class LicenseService {
       final hwid = await getHardwareId();
 
       // Save token and HWID
-      await prefs.setString(_keyToken, token.trim());
+      await prefs.setString(_keyToken, trimmedToken);
       await prefs.setString(_keyHwid, hwid);
 
       debugPrint('License activated successfully');

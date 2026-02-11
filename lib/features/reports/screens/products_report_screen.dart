@@ -30,16 +30,48 @@ class ProductsReportScreen extends StatelessWidget {
             padding: const EdgeInsets.only(right: 16.0),
             child: ElevatedButton.icon(
               onPressed: () async {
-                final stats = await reportProvider.getProductStats();
-                final filter = reportProvider.filter;
-                final dateRange =
-                    "${DateFormat('dd.MM.yyyy').format(filter.startDate)} - ${DateFormat('dd.MM.yyyy').format(filter.endDate)}";
+                try {
+                  final stats = await reportProvider.getProductStats();
+                  final filter = reportProvider.filter;
+                  final dateRange =
+                      "${DateFormat('dd.MM.yyyy').format(filter.startDate)} - ${DateFormat('dd.MM.yyyy').format(filter.endDate)}";
 
-                await PrintingService.printProductPerformanceReport(
-                  settings: printerProvider.settings,
-                  products: stats,
-                  dateRange: dateRange,
-                );
+                  final success =
+                      await PrintingService.printProductPerformanceReport(
+                        settings: printerProvider.settings,
+                        products: stats,
+                        dateRange: dateRange,
+                      );
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success ? 'Chek chiqarildi' : 'Xatolik yuz berdi',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Chop etishda xatolik"),
+                        content: SingleChildScrollView(
+                          child: Text("Xatolik xabari: $e"),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("OK"),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                }
               },
               icon: const Icon(Icons.print),
               label: const Text("Chek chiqarish"),

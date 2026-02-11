@@ -13,6 +13,9 @@ import '../../providers/app_settings_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../core/telegram_service.dart';
 import 'package:intl/intl.dart';
+import '../../widgets/ai_action_button.dart';
+import '../../widgets/ai_summary_banner.dart';
+import '../../providers/ai_provider.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
@@ -27,6 +30,7 @@ class ReportsScreen extends StatelessWidget {
         children: [
           _buildHeader(context),
           const ReportFilterBar(),
+          const AiSummaryBanner(),
           Expanded(
             child: FutureBuilder<Map<String, dynamic>>(
               future: reportProvider.getDashboardStats(),
@@ -44,80 +48,82 @@ class ReportsScreen extends StatelessWidget {
                 // For other specific card metrics, we can derive them from provider if needed,
                 // but for now, let's use what we have or placeholder totals.
 
-                return GridView.count(
+                return GridView.builder(
                   padding: EdgeInsets.all(
-                    MediaQuery.of(context).size.width <= 1100 ? 16 : 32,
+                    MediaQuery.of(context).size.width <= 1100 ? 12 : 24,
                   ),
-                  crossAxisCount: MediaQuery.of(context).size.width <= 1100
-                      ? 2
-                      : 3,
-                  crossAxisSpacing: 24,
-                  mainAxisSpacing: 24,
-                  childAspectRatio: MediaQuery.of(context).size.width <= 1100
-                      ? 1.6
-                      : 1.4,
-                  children: [
-                    _buildReportCard(
-                      context: context,
-                      title: "Buyurtmalar",
-                      subtitle: "Barcha savdo operatsiyalari",
-                      icon: Icons.receipt_long,
-                      color: Colors.blue,
-                      metric: "${PriceFormatter.format(totalRevenue)} so'm",
-                      onTap: () =>
-                          _navigateTo(context, const OrdersReportScreen()),
-                    ),
-                    _buildReportCard(
-                      context: context,
-                      title: "Taomlar",
-                      subtitle: "Eng ko'p sotilgan mahsulotlar",
-                      icon: Icons.restaurant_menu,
-                      color: Colors.orange,
-                      metric: "$orderCount taom",
-                      onTap: () =>
-                          _navigateTo(context, const ProductsReportScreen()),
-                    ),
-                    _buildReportCard(
-                      context: context,
-                      title: "Ofitsiantlar",
-                      subtitle: "Xodimlar ish faoliyati",
-                      icon: Icons.people_alt,
-                      color: Colors.purple,
-                      metric: "Komissiya va savdo",
-                      onTap: () =>
-                          _navigateTo(context, const WaitersReportScreen()),
-                    ),
-                    _buildReportCard(
-                      context: context,
-                      title: "Stollar",
-                      subtitle: "Stollar bo'yicha tushum",
-                      icon: Icons.table_restaurant,
-                      color: Colors.indigo,
-                      metric: "Faol stollar tahlili",
-                      onTap: () =>
-                          _navigateTo(context, const TablesReportScreen()),
-                    ),
-                    _buildReportCard(
-                      context: context,
-                      title: "Joylar",
-                      subtitle: "Zallar va qavatlar bo'yicha",
-                      icon: Icons.location_on,
-                      color: Colors.teal,
-                      metric: "Zallar kesimida",
-                      onTap: () =>
-                          _navigateTo(context, const LocationsReportScreen()),
-                    ),
-                    _buildReportCard(
-                      context: context,
-                      title: "Umumiy hisobot",
-                      subtitle: "Kunlik Z-Report va KPI",
-                      icon: Icons.analytics,
-                      color: Colors.redAccent,
-                      metric: "Moliyaviy xulosa",
-                      onTap: () =>
-                          _navigateTo(context, const GeneralReportScreen()),
-                    ),
-                  ],
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _getCrossAxisCount(context),
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: _getChildAspectRatio(context),
+                  ),
+                  itemCount: 6,
+                  itemBuilder: (context, index) {
+                    final items = [
+                      _buildReportCard(
+                        context: context,
+                        title: "Buyurtmalar",
+                        subtitle: "Barcha savdo operatsiyalari",
+                        icon: Icons.receipt_long,
+                        color: Colors.blue,
+                        metric: "${PriceFormatter.format(totalRevenue)} so'm",
+                        onTap: () =>
+                            _navigateTo(context, const OrdersReportScreen()),
+                      ),
+                      _buildReportCard(
+                        context: context,
+                        title: "Taomlar",
+                        subtitle: "Eng ko'p sotilgan mahsulotlar",
+                        icon: Icons.restaurant_menu,
+                        color: Colors.orange,
+                        metric: "$orderCount taom",
+                        onTap: () =>
+                            _navigateTo(context, const ProductsReportScreen()),
+                      ),
+                      _buildReportCard(
+                        context: context,
+                        title: "Ofitsiantlar",
+                        subtitle: "Xodimlar ish faoliyati",
+                        icon: Icons.people_alt,
+                        color: Colors.purple,
+                        metric: "Komissiya va savdo",
+                        onTap: () =>
+                            _navigateTo(context, const WaitersReportScreen()),
+                      ),
+                      _buildReportCard(
+                        context: context,
+                        title: "Stollar",
+                        subtitle: "Stollar bo'yicha tushum",
+                        icon: Icons.table_restaurant,
+                        color: Colors.indigo,
+                        metric: "Faol stollar tahlili",
+                        onTap: () =>
+                            _navigateTo(context, const TablesReportScreen()),
+                      ),
+                      _buildReportCard(
+                        context: context,
+                        title: "Joylar",
+                        subtitle: "Zallar va qavatlar bo'yicha",
+                        icon: Icons.location_on,
+                        color: Colors.teal,
+                        metric: "Zallar kesimida",
+                        onTap: () =>
+                            _navigateTo(context, const LocationsReportScreen()),
+                      ),
+                      _buildReportCard(
+                        context: context,
+                        title: "Umumiy hisobot",
+                        subtitle: "Kunlik Z-Report va KPI",
+                        icon: Icons.analytics,
+                        color: Colors.redAccent,
+                        metric: "Moliyaviy xulosa",
+                        onTap: () =>
+                            _navigateTo(context, const GeneralReportScreen()),
+                      ),
+                    ];
+                    return items[index];
+                  },
                 );
               },
             ),
@@ -128,30 +134,52 @@ class ReportsScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final isSmall = MediaQuery.of(context).size.width <= 800;
     return Container(
-      padding: const EdgeInsets.fromLTRB(32, 48, 32, 24),
+      padding: EdgeInsets.fromLTRB(
+        isSmall ? 16 : 32,
+        isSmall ? 24 : 48,
+        isSmall ? 16 : 32,
+        isSmall ? 12 : 24,
+      ),
       color: Colors.white,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text(
                 "Hisobotlar",
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: isSmall ? 20 : 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+                  color: const Color(0xFF0F172A),
                 ),
               ),
-              Text(
+              const Text(
                 "Tizim faoliyati va savdo tahlili",
                 style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
               ),
             ],
           ),
-          _buildTelegramSyncButton(context),
+          Row(
+            children: [
+              AiActionButton(
+                onAnalyze: () {
+                  final reportProvider = context.read<ReportProvider>();
+                  context.read<AiProvider>().getGeneralReport(
+                    reportProvider.dateFrom,
+                    reportProvider.dateTo,
+                  );
+                },
+                label: "AI Tahlil",
+                dialogTitle: "Umumiy hisobot tahlili",
+              ),
+              const SizedBox(width: 12),
+              _buildTelegramSyncButton(context),
+            ],
+          ),
         ],
       ),
     );
@@ -165,7 +193,10 @@ class ReportsScreen extends StatelessWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF229ED9), // Telegram Blue
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: EdgeInsets.symmetric(
+          horizontal: MediaQuery.of(context).size.width <= 800 ? 12 : 24,
+          vertical: MediaQuery.of(context).size.width <= 800 ? 12 : 16,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
@@ -306,14 +337,15 @@ class ReportsScreen extends StatelessWidget {
     required String metric,
     required VoidCallback onTap,
   }) {
+    final isSmall = MediaQuery.of(context).size.width <= 800;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isSmall ? 14 : 18),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -326,32 +358,35 @@ class ReportsScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 28),
+              child: Icon(icon, color: color, size: isSmall ? 20 : 24),
             ),
             const Spacer(),
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 18,
+              style: TextStyle(
+                fontSize: isSmall ? 15 : 17,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1E293B),
+                color: const Color(0xFF1E293B),
               ),
             ),
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              style: TextStyle(
+                color: const Color(0xFF64748B),
+                fontSize: isSmall ? 11 : 12,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
               metric,
               style: TextStyle(
-                fontSize: 15,
+                fontSize: isSmall ? 13 : 14,
                 fontWeight: FontWeight.w600,
                 color: color,
               ),
@@ -364,5 +399,21 @@ class ReportsScreen extends StatelessWidget {
 
   void _navigateTo(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (context) => screen));
+  }
+
+  int _getCrossAxisCount(BuildContext context) {
+    double width = MediaQuery.of(context).size.width;
+    if (width > 1400) return 4;
+    if (width > 900) return 3;
+    if (width > 600) return 2;
+    return 1;
+  }
+
+  double _getChildAspectRatio(BuildContext context) {
+    double width = MediaQuery.of(context).size.width;
+    if (width > 1200) return 1.5;
+    if (width > 900) return 1.4;
+    if (width > 600) return 1.6;
+    return 2.5;
   }
 }

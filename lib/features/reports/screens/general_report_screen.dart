@@ -29,11 +29,42 @@ class GeneralReportScreen extends StatelessWidget {
             padding: const EdgeInsets.only(right: 16.0),
             child: ElevatedButton.icon(
               onPressed: () async {
-                final data = await reportProvider.getZReportData();
-                await PrintingService.printZReport(
-                  settings: printerProvider.settings,
-                  data: data,
-                );
+                try {
+                  final data = await reportProvider.getZReportData();
+                  final success = await PrintingService.printZReport(
+                    settings: printerProvider.settings,
+                    data: data,
+                  );
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          success ? 'Chek chiqarildi' : 'Xatolik yuz berdi',
+                        ),
+                        backgroundColor: success ? Colors.green : Colors.red,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Chop etishda xatolik"),
+                        content: SingleChildScrollView(
+                          child: Text("Xatolik xabari: $e"),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("OK"),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                }
               },
               icon: const Icon(Icons.print),
               label: const Text("Z-Hisobot Chiqarish"),
@@ -282,15 +313,19 @@ class GeneralReportScreen extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    item[keyLabel],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF1E293B),
+                  Expanded(
+                    child: Text(
+                      item[keyLabel]?.toString() ?? '',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF1E293B),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Text(
-                    "${PriceFormatter.format((item[keyValue] as num).toDouble())} so'm",
+                    "${PriceFormatter.format((item[keyValue] as num?)?.toDouble() ?? 0)} so'm",
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.blue,

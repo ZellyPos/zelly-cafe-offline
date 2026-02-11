@@ -6,6 +6,8 @@ import '../../core/app_strings.dart';
 import '../../core/theme.dart';
 import './waiter_profile_screen.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../widgets/ai_action_button.dart';
+import '../../providers/ai_provider.dart';
 
 class WaitersMgmtScreen extends StatefulWidget {
   const WaitersMgmtScreen({super.key});
@@ -60,23 +62,35 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: ElevatedButton.icon(
-                onPressed: () => _showWaiterDialog(context),
-                icon: const Icon(Icons.add),
-                label: const Text(AppStrings.addWaiter),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            child: Row(
+              children: [
+                AiActionButton(
+                  onAnalyze: () {
+                    final now = DateTime.now();
+                    final from = now.subtract(const Duration(days: 30));
+                    context.read<AiProvider>().getWaiterAnalysis(from, now);
+                  },
+                  label: "AI Tahlil",
+                  dialogTitle: "Xodimlar Tahlili",
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: () => _showWaiterDialog(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text(AppStrings.addWaiter),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -147,11 +161,10 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                     padding: const EdgeInsets.all(24),
                     gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent:
-                          MediaQuery.of(context).size.width <= 1100 ? 280 : 350,
-                      childAspectRatio:
-                          MediaQuery.of(context).size.width <= 1100 ? 1.0 : 1.1,
-                      crossAxisSpacing: 20,
-                      mainAxisSpacing: 20,
+                          MediaQuery.of(context).size.width <= 1100 ? 200 : 240,
+                      childAspectRatio: 1.2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
                     ),
                     itemCount: filteredWaiters.length,
                     itemBuilder: (context, index) {
@@ -225,7 +238,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
             ).then((_) => setState(() {}));
           },
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -237,8 +250,8 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                         waiter.name,
                         style: TextStyle(
                           fontSize: MediaQuery.of(context).size.width <= 1100
-                              ? 18
-                              : 20,
+                              ? 15
+                              : 16,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF1E293B),
                         ),
@@ -252,34 +265,43 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                           icon: const Icon(
                             Icons.edit_outlined,
                             color: Colors.blue,
+                            size: 20,
                           ),
                           onPressed: () =>
                               _showWaiterDialog(context, waiter: waiter),
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
                         ),
-                        if (!isKassa && isAdmin)
+                        if (!isKassa && isAdmin) ...[
+                          const SizedBox(width: 8),
                           IconButton(
                             icon: const Icon(
                               Icons.delete_outline,
                               color: Colors.red,
+                              size: 20,
                             ),
                             onPressed: () =>
                                 _confirmDelete(context, waiter, isAdmin),
+                            constraints: const BoxConstraints(),
+                            padding: EdgeInsets.zero,
                           ),
+                        ],
                       ],
                     ),
                   ],
                 ),
                 Text(
                   valueText,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
+                const SizedBox(height: 4),
                 if (!isKassa && waiter.pinCode != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4.0),
                     child: Text(
                       'PIN: ${waiter.pinCode}',
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         color: Colors.blueGrey,
                         fontWeight: FontWeight.bold,
                       ),
@@ -296,7 +318,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                             ? Icons.check_circle
                             : Icons.cancel,
                         color: waiter.isActive == 1 ? Colors.green : Colors.red,
-                        size: 20,
+                        size: 18,
                       ),
                   ],
                 ),
@@ -310,10 +332,10 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
 
   Widget _buildBadge(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Text(
@@ -321,7 +343,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.bold,
-          fontSize: 12,
+          fontSize: 10,
         ),
       ),
     );
@@ -332,6 +354,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     final success = await waiterProvider.deleteWaiter(
       waiter.id!,
       isAdmin: isAdmin,
+      connectivity: context.read<ConnectivityProvider>(),
     );
 
     if (!context.mounted) return;
@@ -478,9 +501,15 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                   isActive: isActive,
                 );
                 if (waiter == null) {
-                  context.read<WaiterProvider>().addWaiter(newWaiter);
+                  context.read<WaiterProvider>().addWaiter(
+                    newWaiter,
+                    connectivity: context.read<ConnectivityProvider>(),
+                  );
                 } else {
-                  context.read<WaiterProvider>().updateWaiter(newWaiter);
+                  context.read<WaiterProvider>().updateWaiter(
+                    newWaiter,
+                    connectivity: context.read<ConnectivityProvider>(),
+                  );
                 }
                 Navigator.pop(context);
               },

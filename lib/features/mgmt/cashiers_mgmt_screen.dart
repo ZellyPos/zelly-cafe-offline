@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../models/user.dart';
+import '../../providers/connectivity_provider.dart';
 
 class CashiersMgmtScreen extends StatelessWidget {
   const CashiersMgmtScreen({super.key});
@@ -148,6 +149,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                 onChanged: (val) {
                   context.read<UserProvider>().updateUser(
                     cashier.copyWith(isActive: val ? 1 : 0),
+                    connectivity: context.read<ConnectivityProvider>(),
                   );
                 },
                 activeColor: Colors.black,
@@ -232,6 +234,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                     pin: pinController.text,
                     role: 'cashier',
                   ),
+                  connectivity: context.read<ConnectivityProvider>(),
                 );
               } else {
                 await provider.updateUser(
@@ -239,6 +242,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                     name: nameController.text,
                     pin: pinController.text,
                   ),
+                  connectivity: context.read<ConnectivityProvider>(),
                 );
               }
 
@@ -270,6 +274,7 @@ class CashiersMgmtScreen extends StatelessWidget {
             onPressed: () async {
               final success = await context.read<UserProvider>().deleteUser(
                 cashier.id!,
+                connectivity: context.read<ConnectivityProvider>(),
               );
               if (context.mounted) {
                 Navigator.pop(context);

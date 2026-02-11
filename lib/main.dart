@@ -37,6 +37,7 @@ import 'providers/user_provider.dart';
 import 'features/mgmt/cashiers_mgmt_screen.dart';
 import 'providers/expense_provider.dart';
 import 'providers/customer_provider.dart';
+import 'providers/ai_provider.dart';
 import 'features/mgmt/expenses_screen.dart';
 import 'features/mgmt/customers_screen.dart';
 
@@ -56,6 +57,7 @@ void main() async {
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await windowManager.focus();
+    await windowManager.setFullScreen(true);
   });
 
   // Initialize Database
@@ -97,6 +99,7 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => CustomerProvider()..loadCustomers(),
         ),
+        ChangeNotifierProvider(create: (_) => AiProvider()),
       ],
       child: const TezzroApp(),
     ),
@@ -176,6 +179,48 @@ class _LoginScreenState extends State<LoginScreen> {
       final success = await connectivity.login(_enteredPin);
       if (success) {
         if (mounted) {
+          // Force remote reload for all data
+          context.read<ProductProvider>().loadProducts(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<CategoryProvider>().loadCategories(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<TableProvider>().loadTables(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<LocationProvider>().loadLocations(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<WaiterProvider>().loadWaiters(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<UserProvider>().loadUsers(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<ExpenseProvider>().loadCategories(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<ExpenseProvider>().loadExpenses(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<CustomerProvider>().loadCustomers(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+          context.read<LocationProvider>().loadLocations(
+            connectivity: connectivity,
+            forceRemote: true,
+          );
+
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const MainLayout()),
@@ -202,6 +247,49 @@ class _LoginScreenState extends State<LoginScreen> {
         if (user['is_active'] == 1) {
           connectivity.setCurrentUser(user);
           if (mounted) {
+            // Force reload for non-admin local users if server IP exists
+            final forceRemote = user['role'] != 'admin';
+            context.read<ProductProvider>().loadProducts(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<CategoryProvider>().loadCategories(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<TableProvider>().loadTables(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<LocationProvider>().loadLocations(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<WaiterProvider>().loadWaiters(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<UserProvider>().loadUsers(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<ExpenseProvider>().loadCategories(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<ExpenseProvider>().loadExpenses(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<CustomerProvider>().loadCustomers(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+            context.read<LocationProvider>().loadLocations(
+              connectivity: connectivity,
+              forceRemote: forceRemote,
+            );
+
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (context) => const MainLayout()),
             );
@@ -829,6 +917,8 @@ class _MainLayoutState extends State<MainLayout> {
                 : MainAxisAlignment.center,
             children: [
               IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
                 icon: Icon(
                   _isExpanded
                       ? Icons.keyboard_double_arrow_left

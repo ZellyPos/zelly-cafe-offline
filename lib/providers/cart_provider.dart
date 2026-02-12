@@ -304,17 +304,21 @@ class CartProvider extends ChangeNotifier {
     Product product, [
     ConnectivityProvider? connectivity,
     BuildContext? context,
+    int quantity = 1,
   ]) {
     if (_items.containsKey(product.id)) {
       _items.update(
         product.id!,
         (existing) => CartItem(
           product: existing.product,
-          quantity: existing.quantity + 1,
+          quantity: existing.quantity + quantity,
         ),
       );
     } else {
-      _items.putIfAbsent(product.id!, () => CartItem(product: product));
+      _items.putIfAbsent(
+        product.id!,
+        () => CartItem(product: product, quantity: quantity),
+      );
     }
     _syncItems(connectivity, context);
     notifyListeners();
@@ -663,6 +667,79 @@ class CartProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint("Cancel order error: $e");
+      return false;
+    }
+  }
+
+  Future<bool> moveToTable(
+    int newTableId,
+    int newLocationId, [
+    ConnectivityProvider? connectivity,
+  ]) async {
+    if (_activeOrderId == null) return false;
+
+    try {
+      if (connectivity != null &&
+          connectivity.mode == ConnectivityMode.client) {
+        // Client mode: send move request to server
+        final response = await http.put(
+          Uri.parse(
+            '${connectivity.clientBaseUrl}/orders/$_activeOrderId/move',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${connectivity.authToken}',
+          },
+          body: jsonEncode({
+            'table_id': newTableId,
+            'location_id': newLocationId,
+          }),
+        );
+
+        if (response.statusCode != 200) {
+          debugPrint("Failed to move order on server");
+          return false;
+        }
+      } else {
+        // Local mode: update in local database
+        final db = await DatabaseHelper.instance.database;
+        await db.transaction((txn) async {
+          // Update order with new table
+          await txn.update(
+            'orders',
+            {'table_id': newTableId, 'location_id': newLocationId},
+            where: 'id = ?',
+            whereArgs: [_activeOrderId],
+          );
+
+          // Update old table status to available
+          if (_activeTableId != null) {
+            await txn.update(
+              'tables',
+              {'status': 0},
+              where: 'id = ?',
+              whereArgs: [_activeTableId],
+            );
+          }
+
+          // Update new table status to occupied
+          await txn.update(
+            'tables',
+            {'status': 1},
+            where: 'id = ?',
+            whereArgs: [newTableId],
+          );
+        });
+      }
+
+      // Update cart state
+      _activeTableId = newTableId;
+      _activeLocationId = newLocationId;
+      notifyListeners();
+
+      return true;
+    } catch (e) {
+      debugPrint("Move order error: $e");
       return false;
     }
   }

@@ -11,6 +11,7 @@ import 'screens/locations_report_screen.dart';
 import 'screens/general_report_screen.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../core/app_strings.dart';
 import '../../core/telegram_service.dart';
 import 'package:intl/intl.dart';
 import '../../widgets/ai_action_button.dart';
@@ -63,8 +64,8 @@ class ReportsScreen extends StatelessWidget {
                     final items = [
                       _buildReportCard(
                         context: context,
-                        title: "Buyurtmalar",
-                        subtitle: "Barcha savdo operatsiyalari",
+                        title: AppStrings.ordersTitle,
+                        subtitle: AppStrings.operationsSubtitle,
                         icon: Icons.receipt_long,
                         color: Colors.blue,
                         metric: "${PriceFormatter.format(totalRevenue)} so'm",
@@ -73,8 +74,8 @@ class ReportsScreen extends StatelessWidget {
                       ),
                       _buildReportCard(
                         context: context,
-                        title: "Taomlar",
-                        subtitle: "Eng ko'p sotilgan mahsulotlar",
+                        title: AppStrings.productsTitle,
+                        subtitle: AppStrings.topProductsSubtitle,
                         icon: Icons.restaurant_menu,
                         color: Colors.orange,
                         metric: "$orderCount taom",
@@ -83,41 +84,41 @@ class ReportsScreen extends StatelessWidget {
                       ),
                       _buildReportCard(
                         context: context,
-                        title: "Ofitsiantlar",
-                        subtitle: "Xodimlar ish faoliyati",
+                        title: AppStrings.waitersTitle,
+                        subtitle: AppStrings.staffPerformanceSubtitle,
                         icon: Icons.people_alt,
                         color: Colors.purple,
-                        metric: "Komissiya va savdo",
+                        metric: AppStrings.commissionAndSales,
                         onTap: () =>
                             _navigateTo(context, const WaitersReportScreen()),
                       ),
                       _buildReportCard(
                         context: context,
-                        title: "Stollar",
-                        subtitle: "Stollar bo'yicha tushum",
+                        title: AppStrings.tablesTitle,
+                        subtitle: AppStrings.tablesRevenueSubtitle,
                         icon: Icons.table_restaurant,
                         color: Colors.indigo,
-                        metric: "Faol stollar tahlili",
+                        metric: AppStrings.activeTablesAnalysis,
                         onTap: () =>
                             _navigateTo(context, const TablesReportScreen()),
                       ),
                       _buildReportCard(
                         context: context,
-                        title: "Joylar",
-                        subtitle: "Zallar va qavatlar bo'yicha",
+                        title: AppStrings.locationsTitle,
+                        subtitle: AppStrings.locationsSubtitle,
                         icon: Icons.location_on,
                         color: Colors.teal,
-                        metric: "Zallar kesimida",
+                        metric: AppStrings.byLocations,
                         onTap: () =>
                             _navigateTo(context, const LocationsReportScreen()),
                       ),
                       _buildReportCard(
                         context: context,
-                        title: "Umumiy hisobot",
-                        subtitle: "Kunlik Z-Report va KPI",
+                        title: AppStrings.generalReportTitle,
+                        subtitle: AppStrings.zreportSubtitle,
                         icon: Icons.analytics,
                         color: Colors.redAccent,
-                        metric: "Moliyaviy xulosa",
+                        metric: AppStrings.financialSummary,
                         onTap: () =>
                             _navigateTo(context, const GeneralReportScreen()),
                       ),
@@ -150,15 +151,15 @@ class ReportsScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "Hisobotlar",
+                AppStrings.reportsTitle,
                 style: TextStyle(
                   fontSize: isSmall ? 20 : 28,
                   fontWeight: FontWeight.bold,
                   color: const Color(0xFF0F172A),
                 ),
               ),
-              const Text(
-                "Tizim faoliyati va savdo tahlili",
+              Text(
+                AppStrings.reportsDescription,
                 style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
               ),
             ],
@@ -173,8 +174,8 @@ class ReportsScreen extends StatelessWidget {
                     reportProvider.dateTo,
                   );
                 },
-                label: "AI Tahlil",
-                dialogTitle: "Umumiy hisobot tahlili",
+                label: AppStrings.aiAnalysis,
+                dialogTitle: AppStrings.generalReportAnalysis,
               ),
               const SizedBox(width: 12),
               _buildTelegramSyncButton(context),
@@ -189,7 +190,7 @@ class ReportsScreen extends StatelessWidget {
     return ElevatedButton.icon(
       onPressed: () => _handleTelegramSync(context),
       icon: const Icon(Icons.send_rounded, size: 20),
-      label: const Text("Telegram Botga Sinxronizatsiya"),
+      label: Text(AppStrings.syncTelegram),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF229ED9), // Telegram Blue
         foregroundColor: Colors.white,
@@ -222,22 +223,22 @@ class ReportsScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Telegram Bot Sozlamalari"),
+        title: Text(AppStrings.telegramSettingsTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: tokenController,
-              decoration: const InputDecoration(
-                labelText: "Bot Token",
+              decoration: InputDecoration(
+                labelText: AppStrings.botToken,
                 hintText: "12345678:ABCDE...",
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: chatController,
-              decoration: const InputDecoration(
-                labelText: "Chat ID",
+              decoration: InputDecoration(
+                labelText: AppStrings.chatId,
                 hintText: "-10012345678",
               ),
             ),
@@ -246,7 +247,7 @@ class ReportsScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Bekor qilish"),
+            child: Text(AppStrings.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -259,7 +260,7 @@ class ReportsScreen extends StatelessWidget {
                 _performSync(context);
               }
             },
-            child: const Text("Saqlash va Yuborish"),
+            child: Text(AppStrings.saveAndSend),
           ),
         ],
       ),
@@ -273,7 +274,7 @@ class ReportsScreen extends StatelessWidget {
 
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text("Hisobot yuborilmoqda...")));
+    ).showSnackBar(SnackBar(content: Text(AppStrings.sendingReport)));
 
     try {
       final data = await reportProvider.getDashboardStats();
@@ -312,8 +313,8 @@ class ReportsScreen extends StatelessWidget {
           SnackBar(
             content: Text(
               success
-                  ? "Hisobot Telegramga yuborildi!"
-                  : "Xatolik: Bot token yoki Chat ID xato.",
+                  ? AppStrings.reportSentTelegram
+                  : AppStrings.telegramError,
             ),
             backgroundColor: success ? Colors.green : Colors.red,
           ),

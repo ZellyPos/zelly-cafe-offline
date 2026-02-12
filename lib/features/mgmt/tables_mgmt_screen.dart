@@ -36,9 +36,9 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           AppStrings.tableMgmt,
-          style: TextStyle(
+          style: const TextStyle(
             color: Color(0xFF1E293B),
             fontWeight: FontWeight.bold,
           ),
@@ -53,7 +53,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _showTableDialog(context),
                 icon: const Icon(Icons.add),
-                label: const Text(AppStrings.addTable),
+                label: Text(AppStrings.addTable),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   foregroundColor: Colors.white,
@@ -314,7 +314,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
 
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(AppStrings.warningDeleteTable),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
@@ -465,9 +465,9 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 AppStrings.cancel,
-                style: TextStyle(color: Colors.grey),
+                style: const TextStyle(color: Colors.grey),
               ),
             ),
             ElevatedButton(
@@ -504,7 +504,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text(AppStrings.save),
+              child: Text(AppStrings.save),
             ),
           ],
         ),

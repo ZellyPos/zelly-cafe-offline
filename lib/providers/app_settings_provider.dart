@@ -10,15 +10,25 @@ class AppSettingsProvider extends ChangeNotifier {
   String _restaurantName = 'ZELLY';
   String? _telegramBotToken;
   String? _telegramChatId;
+  String _appLanguage = 'uz';
 
   String get loginPin => _loginPin;
   String? get brandImagePath => _brandImagePath;
   String get restaurantName => _restaurantName;
   String? get telegramBotToken => _telegramBotToken;
   String? get telegramChatId => _telegramChatId;
+  String get appLanguage => _appLanguage;
 
   Future<void> loadSettings() async {
     final db = DatabaseHelper.instance;
+
+    final langRes = await db.queryByColumn('settings', 'key', 'app_language');
+    if (langRes.isNotEmpty) {
+      _appLanguage = langRes.first['value'];
+    } else {
+      await db.insert('settings', {'key': 'app_language', 'value': 'uz'});
+      _appLanguage = 'uz';
+    }
 
     final pinRes = await db.queryByColumn('settings', 'key', 'login_pin');
     if (pinRes.isNotEmpty) {
@@ -194,5 +204,17 @@ class AppSettingsProvider extends ChangeNotifier {
       _brandImagePath = null;
       notifyListeners();
     }
+  }
+
+  Future<void> setAppLanguage(String lang) async {
+    final db = DatabaseHelper.instance;
+    final existing = await db.queryByColumn('settings', 'key', 'app_language');
+    if (existing.isNotEmpty) {
+      await db.update('settings', {'value': lang}, 'key = ?', ['app_language']);
+    } else {
+      await db.insert('settings', {'key': 'app_language', 'value': lang});
+    }
+    _appLanguage = lang;
+    notifyListeners();
   }
 }

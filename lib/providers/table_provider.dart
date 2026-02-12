@@ -141,4 +141,48 @@ class TableProvider extends ChangeNotifier {
     }
     await loadTables(connectivity: connectivity);
   }
+
+  Future<List<TableModel>> getTablesForLocation(int? locationId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      String query = '''
+        SELECT t.*, 
+               o.id as order_id, 
+               o.waiter_id, 
+               o.opened_at, 
+               o.total as order_total, 
+               w.name as waiter_name
+        FROM tables t
+        LEFT JOIN orders o ON t.id = o.table_id AND o.status = 0
+        LEFT JOIN waiters w ON o.waiter_id = w.id
+      ''';
+      
+      List<dynamic> whereArgs = [];
+      if (locationId != null) {
+        query += ' WHERE t.location_id = ?';
+        whereArgs.add(locationId);
+      }
+      
+      final data = await db.rawQuery(query, whereArgs);
+      
+      return data.map((item) {
+        ActiveOrderInfo? activeOrder;
+        if (item['order_id'] != null) {
+          activeOrder = ActiveOrderInfo(
+            orderId: item['order_id'] as String,
+            waiterId: item['waiter_id'] as int?,
+            waiterName: item['waiter_name'] as String?,
+            totalAmount: (item['order_total'] as num).toDouble(),
+            openedAt: item['opened_at'] != null
+                ? DateTime.parse(item['opened_at'] as String)
+                : null,
+          );
+        }
+        return TableModel.fromMap(item, activeOrder: activeOrder);
+      }).toList();
+    } catch (e) {
+      debugPrint("Error getting tables for location: $e");
+      return [];
+    }
+  }
 }

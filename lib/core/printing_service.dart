@@ -8,7 +8,6 @@ import '../models/order.dart';
 import '../models/printer_settings.dart';
 import '../models/receipt_settings.dart';
 import '../core/utils/price_formatter.dart';
-import 'app_strings.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import '../core/database_helper.dart';
@@ -114,7 +113,26 @@ class PrintingService {
   static String _cleanText(Object? input) {
     if (input == null) return '';
     String text = input.toString();
-    return text
+    // Translate Cyrillic to CP1251 char codes within a String
+    // thermal printers in CP1251 mode expect codes 192-255 for Cyrillic
+    String result = '';
+    for (int i = 0; i < text.length; i++) {
+      int code = text.codeUnitAt(i);
+      if (code >= 0x0410 && code <= 0x044F) {
+        // А-я
+        result += String.fromCharCode(code - 0x0410 + 0xC0);
+      } else if (code == 0x0401) {
+        // Ё
+        result += String.fromCharCode(0xA8);
+      } else if (code == 0x0451) {
+        // ё
+        result += String.fromCharCode(0xB8);
+      } else {
+        result += text[i];
+      }
+    }
+
+    return result
         .replaceAll('№', '#')
         .replaceAll('„', '"')
         .replaceAll('“', '"')
@@ -279,6 +297,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       // 1. HEADER
       // Logo
@@ -614,6 +633,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       final summary = data['summary'] ?? {};
       final waiters =
@@ -776,6 +796,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       bytes += await _getLogoBytes(rSettings, generator);
 
@@ -907,6 +928,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       bytes += await _getLogoBytes(rSettings, generator);
 
@@ -1073,6 +1095,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       bytes += await _getLogoBytes(rSettings, generator);
 
@@ -1197,6 +1220,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       bytes += await _getLogoBytes(rSettings, generator);
 
@@ -1322,6 +1346,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       bytes += await _getLogoBytes(rSettings, generator);
 
@@ -1502,6 +1527,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       bytes += await _getLogoBytes(rSettings, generator);
 
@@ -1585,6 +1611,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
 
       bytes += await _getLogoBytes(rSettings, generator);
 

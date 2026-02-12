@@ -6,6 +6,7 @@ import '../../models/expense.dart';
 import 'expense_categories_screen.dart';
 import '../../models/expense_category.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../core/app_strings.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -37,7 +38,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
-        title: const Text('Xarajatlar'),
+        title: Text(AppStrings.expensesTitle),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1E293B),
         elevation: 0,
@@ -52,14 +53,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 ),
               );
             },
-            tooltip: 'Xarajat turlari',
+            tooltip: AppStrings.expenseTypes,
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: ElevatedButton.icon(
               onPressed: () => _showAddExpenseDialog(context),
               icon: const Icon(Icons.add),
-              label: const Text('Xarajat Qilish'),
+              label: Text(AppStrings.addExpense),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
@@ -97,7 +98,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           const Spacer(),
           TextButton(
             onPressed: _selectDateRange,
-            child: const Text('Sana tanlash'),
+            child: Text(AppStrings.selectDate),
           ),
         ],
       ),
@@ -106,7 +107,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
   Widget _buildExpenseList(ExpenseProvider provider) {
     if (provider.expenses.isEmpty) {
-      return const Center(child: Text('Hozircha xarajatlar yo\'q'));
+      return Center(child: Text(AppStrings.noExpenses));
     }
 
     final total = provider.expenses.fold<double>(0, (sum, e) => sum + e.amount);
@@ -122,7 +123,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               final expense = provider.expenses[index];
               final category = provider.categories.firstWhere(
                 (c) => c.id == expense.categoryId,
-                orElse: () => ExpenseCategory(name: "Xarajat turi yo'q"),
+                orElse: () => ExpenseCategory(name: AppStrings.noExpenseType),
               );
 
               return Card(
@@ -160,8 +161,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'JAMI XARAJAT:',
+              Text(
+                AppStrings.totalExpenses,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
               Text(
@@ -209,8 +210,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
 
     if (selectedCatId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Avval xarajat turini qo\'shing!'),
+        SnackBar(
+          content: Text(AppStrings.addExpenseTypeFirst),
           backgroundColor: Colors.orange,
         ),
       );
@@ -221,13 +222,13 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Yangi Xarajat'),
+          title: Text(AppStrings.newExpense),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<int>(
                 value: selectedCatId,
-                decoration: const InputDecoration(labelText: 'Xarajat turi'),
+                decoration: InputDecoration(labelText: AppStrings.expenseType),
                 items: provider.categories
                     .map(
                       (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
@@ -239,15 +240,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Summa',
-                  suffixText: 'so\'m',
+                decoration: InputDecoration(
+                  labelText: AppStrings.amount,
+                  suffixText: "so'm",
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: noteController,
-                decoration: const InputDecoration(labelText: 'Izoh'),
+                decoration: InputDecoration(labelText: AppStrings.note),
                 maxLines: 2,
               ),
             ],
@@ -255,7 +256,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Bekor qilish'),
+              child: Text(AppStrings.cancel),
             ),
             ElevatedButton(
               onPressed: () {
@@ -273,7 +274,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   Navigator.pop(context);
                 }
               },
-              child: const Text('Saqlash'),
+              child: Text(AppStrings.save),
             ),
           ],
         ),
@@ -285,8 +286,8 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('O\'chirishni tasdiqlang'),
-        content: const Text('Ushbu xarajatni o\'chirmoqchimisiz?'),
+        title: Text(AppStrings.confirmDeleteTitle),
+        content: Text(AppStrings.confirmDeleteExpense),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -301,7 +302,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('O\'chirish'),
+            child: Text(AppStrings.delete),
           ),
         ],
       ),

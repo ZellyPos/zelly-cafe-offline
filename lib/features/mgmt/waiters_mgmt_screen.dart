@@ -49,9 +49,9 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           AppStrings.waiterMgmt,
-          style: TextStyle(
+          style: const TextStyle(
             color: Color(0xFF1E293B),
             fontWeight: FontWeight.bold,
           ),
@@ -70,14 +70,14 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                     final from = now.subtract(const Duration(days: 30));
                     context.read<AiProvider>().getWaiterAnalysis(from, now);
                   },
-                  label: "AI Tahlil",
-                  dialogTitle: "Xodimlar Tahlili",
+                  label: AppStrings.aiAnalysis,
+                  dialogTitle: AppStrings.staffAnalysis,
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: () => _showWaiterDialog(context),
                   icon: const Icon(Icons.add),
-                  label: const Text(AppStrings.addWaiter),
+                  label: Text(AppStrings.addWaiter),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryColor,
                     foregroundColor: Colors.white,
@@ -108,7 +108,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                   child: TextField(
                     onChanged: (val) => setState(() => searchQuery = val),
                     decoration: InputDecoration(
-                      hintText: "Xodim ismi bo'yicha qidirish...",
+                      hintText: AppStrings.searchWaiterHint,
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),
@@ -135,15 +135,21 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                         horizontal: 16,
                       ),
                     ),
-                    hint: const Text("Barcha turlar"),
-                    items: const [
+                    hint: Text(AppStrings.allTypes),
+                    items: [
                       DropdownMenuItem(
                         value: null,
-                        child: Text("Barcha turlar"),
+                        child: Text(AppStrings.allTypes),
                       ),
-                      DropdownMenuItem(value: 0, child: Text("Fiksal (So'm)")),
-                      DropdownMenuItem(value: 1, child: Text("Foizli (%)")),
-                      DropdownMenuItem(value: 2, child: Text("Kassa")),
+                      DropdownMenuItem(
+                        value: 0,
+                        child: Text(AppStrings.fixedLabel),
+                      ),
+                      DropdownMenuItem(
+                        value: 1,
+                        child: Text(AppStrings.percentageLabel),
+                      ),
+                      DropdownMenuItem(value: 2, child: Text(AppStrings.kassa)),
                     ],
                     onChanged: (val) => setState(() => filterType = val),
                   ),
@@ -186,7 +192,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
           Icon(Icons.people_outline, size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           Text(
-            "Xodimlar topilmadi",
+            AppStrings.noWaitersFound,
             style: TextStyle(color: Colors.grey.shade500, fontSize: 18),
           ),
         ],
@@ -197,8 +203,8 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
   Widget _buildWaiterCard(BuildContext context, Waiter waiter, bool isAdmin) {
     final bool isKassa = waiter.name == "Kassa";
     String typeLabel = isKassa
-        ? "Kassa"
-        : (waiter.type == 0 ? "Fiksal" : "Foizli");
+        ? AppStrings.kassa
+        : (waiter.type == 0 ? AppStrings.fixed : AppStrings.percentage);
     Color typeColor = isKassa
         ? Colors.teal
         : (waiter.type == 0 ? Colors.indigo : Colors.orange);
@@ -209,7 +215,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
           ? "${waiter.value.toStringAsFixed(0)} so'm"
           : "${waiter.value}%";
     } else {
-      valueText = "Asosiy xodim";
+      valueText = AppStrings.primaryStaff;
     }
 
     return Container(
@@ -360,9 +366,9 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     if (!context.mounted) return;
 
     if (!success) {
-      String errorMsg = "Ushbu xodimda buyurtmalar mavjud. O'chirish imkonsiz!";
+      String errorMsg = AppStrings.waiterHasOrdersError;
       if (!isAdmin) {
-        errorMsg = "Xodimlarni o'chirish huquqi faqat adminga berilgan!";
+        errorMsg = AppStrings.adminOnlyError;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -374,8 +380,8 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Xodim muvaffaqiyatli o'chirildi"),
+        SnackBar(
+          content: Text(AppStrings.waiterDeletedSuccess),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),
@@ -427,7 +433,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  items: const [
+                  items: [
                     DropdownMenuItem(value: 0, child: Text(AppStrings.fixed)),
                     DropdownMenuItem(
                       value: 1,
@@ -444,11 +450,11 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: selectedType == 0
-                        ? "Xizmat haqi (Summa)"
-                        : "Xizmat haqi (Foizli %)",
+                        ? AppStrings.serviceFeeFixed
+                        : AppStrings.serviceFeePercentage,
                     hintText: selectedType == 0
-                        ? "Masalan: 5000"
-                        : "Masalan: 10",
+                        ? AppStrings.exampleFixed
+                        : AppStrings.examplePercentage,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -458,8 +464,8 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                 TextField(
                   controller: pinController,
                   decoration: InputDecoration(
-                    labelText: 'PIN kod (LAN Kirish uchun)',
-                    hintText: 'Faqat raqamlar',
+                    labelText: AppStrings.pinCodeLabel,
+                    hintText: AppStrings.digitsOnlyHint,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -467,7 +473,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                 ),
                 const SizedBox(height: 16),
                 SwitchListTile(
-                  title: const Text('Faol xodim'),
+                  title: Text(AppStrings.activeStaff),
                   value: isActive == 1,
                   onChanged: (val) =>
                       setDialogState(() => isActive = val ? 1 : 0),
@@ -478,9 +484,9 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 AppStrings.cancel,
-                style: TextStyle(color: Colors.grey),
+                style: const TextStyle(color: Colors.grey),
               ),
             ),
             ElevatedButton(
@@ -519,7 +525,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text(AppStrings.save),
+              child: Text(AppStrings.save),
             ),
           ],
         ),

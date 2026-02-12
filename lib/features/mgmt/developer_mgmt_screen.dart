@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../providers/developer_provider.dart';
+import '../../core/database_helper.dart';
 
 class DeveloperMgmtScreen extends StatefulWidget {
   const DeveloperMgmtScreen({super.key});
@@ -26,6 +29,16 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
       appBar: AppBar(
         title: const Text('Developer - Database Manager'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.backup, color: Colors.blue),
+            onPressed: () => _backupDatabase(context),
+            tooltip: 'Zaxira nusxasini olish',
+          ),
+          IconButton(
+            icon: const Icon(Icons.restore, color: Colors.orange),
+            onPressed: () => _restoreDatabase(context),
+            tooltip: 'Zaxiradan tiklash',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => devProvider.loadTables(),
@@ -54,6 +67,103 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
               },
             ),
     );
+  }
+
+  Future<void> _backupDatabase(BuildContext context) async {
+    try {
+      final dbPath = await DatabaseHelper.instance.getDatabasePath();
+      final dbFile = File(dbPath);
+
+      if (!dbFile.existsSync()) {
+        throw Exception('Baza fayli topilmadi!');
+      }
+
+      String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: 'Zaxira nusxasini saqlang',
+        fileName: 'tezzro_backup_${DateTime.now().millisecondsSinceEpoch}.db',
+      );
+
+      if (outputFile != null) {
+        await dbFile.copy(outputFile);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Zaxira nusxasi muvaffaqiyatli saqlandi!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreDatabase(BuildContext context) async {
+    try {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Tiklash'),
+          content: const Text(
+            'Barcha mavjud ma\'lumotlar o\'chib ketadi va tanlangan zaxira fayli bilan almashtiriladi. Davom etasizmi?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Bekor qilish'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Tiklash', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true) return;
+
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final pickedFile = File(result.files.single.path!);
+        final dbPath = await DatabaseHelper.instance.getDatabasePath();
+
+        await DatabaseHelper.instance.close();
+        await pickedFile.copy(dbPath);
+
+        if (mounted) {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Text('Muvaffaqiyatli'),
+              content: const Text(
+                'Ma\'lumotlar tiklandi. O\'zgarishlar kuchga kirishi uchun ilovani qayta ishga tushiring.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => exit(0),
+                  child: const Text('Ilovadan chiqish'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }
 

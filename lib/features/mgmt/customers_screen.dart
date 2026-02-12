@@ -4,6 +4,7 @@ import '../../providers/customer_provider.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../models/customer.dart';
 import 'outlays_screen.dart';
+import '../../core/app_strings.dart';
 import '../../providers/connectivity_provider.dart';
 
 class CustomersScreen extends StatefulWidget {
@@ -31,14 +32,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
-        title: const Text('Mijozlar'),
+        title: Text(AppStrings.customersTitle),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: ElevatedButton.icon(
               onPressed: () => _showAddCustomerDialog(context),
               icon: const Icon(Icons.person_add),
-              label: const Text('Yangi Mijoz'),
+              label: Text(AppStrings.newCustomer),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4C1D95),
                 foregroundColor: Colors.white,
@@ -55,7 +56,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Widget _buildCustomerList(CustomerProvider provider) {
     if (provider.customers.isEmpty) {
-      return const Center(child: Text('Hozircha mijozlar ro\'yxati bo\'sh'));
+      return Center(child: Text(AppStrings.emptyCustomers));
     }
 
     return ListView.separated(
@@ -115,7 +116,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     children: [
                       if (customer.debt > 0)
                         Text(
-                          "Qarz: ${PriceFormatter.format(customer.debt)}",
+                          "${AppStrings.debtLabel}: ${PriceFormatter.format(customer.debt)}",
                           style: const TextStyle(
                             color: Colors.red,
                             fontWeight: FontWeight.bold,
@@ -123,16 +124,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         ),
                       if (customer.credit > 0)
                         Text(
-                          "Haqqi: ${PriceFormatter.format(customer.credit)}",
+                          "${AppStrings.creditLabel}: ${PriceFormatter.format(customer.credit)}",
                           style: const TextStyle(
                             color: Colors.green,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       if (customer.debt == 0 && customer.credit == 0)
-                        const Text(
-                          "Balans: 0",
-                          style: TextStyle(color: Colors.grey),
+                        Text(
+                          "${AppStrings.balanceLabel}: 0",
+                          style: const TextStyle(color: Colors.grey),
                         ),
                     ],
                   ),
@@ -154,27 +155,27 @@ class _CustomersScreenState extends State<CustomersScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Yangi Mijoz Qo\'shish'),
+        title: Text(AppStrings.addCustomerTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(labelText: 'Ism sharifi'),
+              decoration: InputDecoration(labelText: AppStrings.fullName),
               autofocus: true,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: phoneController,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'Telefon raqami'),
+              decoration: InputDecoration(labelText: AppStrings.phoneNumber),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Bekor qilish'),
+            child: Text(AppStrings.cancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -190,7 +191,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 Navigator.pop(context);
               }
             },
-            child: const Text('Saqlash'),
+            child: Text(AppStrings.save),
           ),
         ],
       ),

@@ -29,9 +29,9 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           AppStrings.categoryMgmt,
-          style: TextStyle(
+          style: const TextStyle(
             color: Color(0xFF1E293B),
             fontWeight: FontWeight.bold,
           ),
@@ -46,7 +46,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               child: IconButton(
                 onPressed: () => _showReorderDialog(context),
                 icon: const Icon(Icons.reorder, color: AppTheme.primaryColor),
-                tooltip: "Tartibni o'zgartirish",
+                tooltip: AppStrings.changeOrder,
               ),
             ),
           ),
@@ -56,7 +56,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _showCategoryDialog(context),
                 icon: const Icon(Icons.add),
-                label: const Text(AppStrings.addCategory),
+                label: Text(AppStrings.addCategory),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   foregroundColor: Colors.white,
@@ -82,7 +82,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
             child: TextField(
               onChanged: (val) => setState(() => searchQuery = val),
               decoration: InputDecoration(
-                hintText: "Kategoriya nomi bo'yicha qidirish...",
+                hintText: AppStrings.searchCategoryHint,
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
                 fillColor: const Color(0xFFF1F5F9),
@@ -286,10 +286,8 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
   ) async {
     if (productCount > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Ushbu kategoriyada mahsulotlar bor. O'chirish imkonsiz!",
-          ),
+        SnackBar(
+          content: Text(AppStrings.categoryHasProducts),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -297,21 +295,44 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
       return;
     }
 
-    final categoryProvider = context.read<CategoryProvider>();
-    await categoryProvider.deleteCategory(
-      category.id!,
-      connectivity: context.read<ConnectivityProvider>(),
-    );
-
-    if (!context.mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Kategoriya muvaffaqiyatli o'chirildi"),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppStrings.confirmDeleteTitle),
+        content: Text(AppStrings.confirmDeleteCategory),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(AppStrings.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              AppStrings.delete,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
       ),
     );
+
+    if (confirm == true) {
+      final categoryProvider = context.read<CategoryProvider>();
+      await categoryProvider.deleteCategory(
+        category.id!,
+        connectivity: context.read<ConnectivityProvider>(),
+      );
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.categoryDeletedSuccess),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _showCategoryDialog(BuildContext context, {Category? category}) {
@@ -372,9 +393,9 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    "Kategoriya rangi",
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  Text(
+                    AppStrings.categoryColor,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -456,9 +477,9 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text(
+                child: Text(
                   AppStrings.cancel,
-                  style: TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Colors.grey),
                 ),
               ),
               ElevatedButton(
@@ -488,7 +509,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(AppStrings.save),
+                child: Text(AppStrings.save),
               ),
             ],
           );
@@ -505,7 +526,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
           builder: (context, provider, _) {
             final categories = provider.categories;
             return AlertDialog(
-              title: const Text("Kategoriyalarni tartiblash"),
+              title: Text(AppStrings.reorderCategories),
               content: SizedBox(
                 width: 400,
                 height: 500,
@@ -536,7 +557,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text("YOPISH"),
+                  child: Text(AppStrings.close),
                 ),
               ],
             );

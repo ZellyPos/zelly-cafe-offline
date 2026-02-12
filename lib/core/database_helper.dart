@@ -653,8 +653,15 @@ CREATE TABLE IF NOT EXISTS users (
     return await db.delete(table, where: where, whereArgs: whereArgs);
   }
 
-  Future close() async {
-    final db = await database;
-    db.close();
+  Future<String> getDatabasePath() async {
+    final dbPath = await getApplicationSupportDirectory();
+    return join(dbPath.path, 'tezzro_pos.db');
+  }
+
+  Future<void> close() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
   }
 }

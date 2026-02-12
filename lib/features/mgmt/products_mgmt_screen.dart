@@ -46,9 +46,9 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           AppStrings.productMgmt,
-          style: TextStyle(
+          style: const TextStyle(
             color: Color(0xFF1E293B),
             fontWeight: FontWeight.bold,
           ),
@@ -68,8 +68,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     final from = now.subtract(const Duration(days: 30));
                     context.read<AiProvider>().getMenuOptimization(from, now);
                   },
-                  label: "AI Menyu",
-                  dialogTitle: "Menyu Optimizatsiyasi",
+                  label: AppStrings.aiMenu,
+                  dialogTitle: AppStrings.menuOptimization,
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
@@ -80,7 +80,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                           selectedCategoryFilter!,
                         ),
                   icon: const Icon(Icons.reorder),
-                  label: const Text("Tartiblash"),
+                  label: Text(AppStrings.reorder),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
                     foregroundColor: Colors.white,
@@ -97,7 +97,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                 ElevatedButton.icon(
                   onPressed: () => _showProductDialog(context),
                   icon: const Icon(Icons.add),
-                  label: const Text(AppStrings.addProduct),
+                  label: Text(AppStrings.addProduct),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryColor,
                     foregroundColor: Colors.white,
@@ -128,7 +128,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                   child: TextField(
                     onChanged: (val) => setState(() => searchQuery = val),
                     decoration: InputDecoration(
-                      hintText: "Mahsulot nomi bo'yicha qidirish...",
+                      hintText: AppStrings.searchProductHint,
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),
@@ -155,11 +155,11 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                         horizontal: 16,
                       ),
                     ),
-                    hint: const Text("Barcha kategoriyalar"),
+                    hint: Text(AppStrings.allCategories),
                     items: [
-                      const DropdownMenuItem(
+                      DropdownMenuItem(
                         value: null,
-                        child: Text("Barcha kategoriyalar"),
+                        child: Text(AppStrings.allCategories),
                       ),
                       ...categoryProvider.categories.map(
                         (c) => DropdownMenuItem(
@@ -187,14 +187,20 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                         horizontal: 16,
                       ),
                     ),
-                    hint: const Text("Barcha holatlar"),
-                    items: const [
+                    hint: Text(AppStrings.allStatuses),
+                    items: [
                       DropdownMenuItem(
                         value: null,
-                        child: Text("Barcha holatlar"),
+                        child: Text(AppStrings.allStatuses),
                       ),
-                      DropdownMenuItem(value: true, child: Text("Faol")),
-                      DropdownMenuItem(value: false, child: Text("Tugagan")),
+                      DropdownMenuItem(
+                        value: true,
+                        child: Text(AppStrings.active),
+                      ),
+                      DropdownMenuItem(
+                        value: false,
+                        child: Text(AppStrings.outOfStock),
+                      ),
                     ],
                     onChanged: (val) =>
                         setState(() => selectedStatusFilter = val),
@@ -243,7 +249,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            "Mahsulotlar topilmadi",
+            AppStrings.noProductsFound,
             style: TextStyle(color: Colors.grey.shade500, fontSize: 18),
           ),
         ],
@@ -324,7 +330,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "${PriceFormatter.format(product.price)} so'm",
+                          "${PriceFormatter.format(product.price)} ${AppStrings.currencyLabel}",
                           style: TextStyle(
                             fontSize: MediaQuery.of(context).size.width <= 1100
                                 ? 16
@@ -336,8 +342,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            const Text(
-                              "Holati:",
+                            Text(
+                              "${AppStrings.statusLabel}:",
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
@@ -413,7 +419,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        isActive ? "Faol" : "Tugagan",
+        isActive ? AppStrings.active : AppStrings.outOfStock,
         style: TextStyle(
           color: isActive ? Colors.green.shade700 : Colors.red.shade700,
           fontWeight: FontWeight.bold,
@@ -427,16 +433,19 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("O'chirishni tasdiqlang"),
-        content: Text("${product.name} ni o'chirmoqchimisiz?"),
+        title: Text(AppStrings.confirmDeleteTitle),
+        content: Text("${product.name} ${AppStrings.confirmDeleteExpense}"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("Bekor qilish"),
+            child: Text(AppStrings.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("O'chirish", style: TextStyle(color: Colors.red)),
+            child: Text(
+              AppStrings.delete,
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -448,8 +457,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
         connectivity: context.read<ConnectivityProvider>(),
       );
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Mahsulot o'chirildi"),
+        SnackBar(
+          content: Text(AppStrings.productDeletedSuccess),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),
@@ -494,8 +503,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
-                            "Mahsulot rasmi",
+                          Text(
+                            AppStrings.productImage,
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 16),
@@ -550,9 +559,9 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                                     Icons.delete,
                                     color: Colors.red,
                                   ),
-                                  label: const Text(
-                                    "Rasmni o'chirish",
-                                    style: TextStyle(color: Colors.red),
+                                  label: Text(
+                                    AppStrings.deleteImage,
+                                    style: const TextStyle(color: Colors.red),
                                   ),
                                 ),
                               ],
@@ -590,7 +599,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
-                                      "Rasm tanlash",
+                                      AppStrings.selectImage,
                                       style: TextStyle(
                                         color: Colors.grey.shade500,
                                       ),
@@ -630,7 +639,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                               ),
                               filled: true,
                               fillColor: const Color(0xFFF8FAFC),
-                              suffixText: "so'm",
+                              suffixText: AppStrings.currencyLabel,
                             ),
                             keyboardType: TextInputType.number,
                           ),
@@ -657,13 +666,11 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                           const SizedBox(height: 16),
                           // SET Taom Toggle
                           SwitchListTile(
-                            title: const Text(
-                              "SET Taom (Kompleks)",
+                            title: Text(
+                              AppStrings.setProduct,
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            subtitle: const Text(
-                              "Ushbu mahsulot bir nechta boshqa mahsulotlardan iborat",
-                            ),
+                            subtitle: Text(AppStrings.setProductDescription),
                             value: isSet,
                             onChanged: (val) {
                               setDialogState(() {
@@ -677,8 +684,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  "Tarkibidagi mahsulotlar",
+                                Text(
+                                  AppStrings.bundleItems,
                                   style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 IconButton(
@@ -691,17 +698,17 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                                     Icons.add_circle_outline,
                                     color: Colors.blue,
                                   ),
-                                  tooltip: "Mahsulot qo'shish",
+                                  tooltip: AppStrings.addProduct,
                                 ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             if (bundleItems!.isEmpty)
-                              const Center(
+                              Center(
                                 child: Padding(
                                   padding: EdgeInsets.all(8.0),
                                   child: Text(
-                                    "Hali mahsulot qo'shilmagan",
+                                    AppStrings.noItemsAdded,
                                     style: TextStyle(
                                       color: Colors.grey,
                                       fontStyle: FontStyle.italic,
@@ -787,16 +794,16 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text(
+                child: Text(
                   AppStrings.cancel,
-                  style: TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Colors.grey),
                 ),
               ),
               ElevatedButton(
                 onPressed: () async {
                   if (selectedCategory == null || nameController.text.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text(AppStrings.selectCategory)),
+                      SnackBar(content: Text(AppStrings.selectCategory)),
                     );
                     return;
                   }
@@ -874,7 +881,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(AppStrings.save),
+                child: Text(AppStrings.save),
               ),
             ],
           );
@@ -906,15 +913,15 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
               .toList();
 
           return AlertDialog(
-            title: const Text("Mahsulot tanlang"),
+            title: Text(AppStrings.selectProduct),
             content: SizedBox(
               width: 400,
               height: 500,
               child: Column(
                 children: [
                   TextField(
-                    decoration: const InputDecoration(
-                      hintText: "Qidirish...",
+                    decoration: InputDecoration(
+                      hintText: AppStrings.searchHint,
                       prefixIcon: Icon(Icons.search),
                     ),
                     onChanged: (val) =>
@@ -979,7 +986,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                 .toList();
 
             return AlertDialog(
-              title: Text("$category - Tartiblash"),
+              title: Text("$category - ${AppStrings.reorder}"),
               content: SizedBox(
                 width: 400,
                 height: 500,
@@ -1007,7 +1014,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text("Yopish"),
+                  child: Text(AppStrings.close),
                 ),
               ],
             );

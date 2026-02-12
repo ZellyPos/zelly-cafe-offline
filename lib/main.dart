@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'core/database_helper.dart';
 import 'core/license_service.dart';
+import 'core/app_strings.dart';
 import 'providers/product_provider.dart';
 import 'providers/cart_provider.dart';
 import 'features/mgmt/products_mgmt_screen.dart';
@@ -33,6 +34,7 @@ import 'features/activation/activation_screen.dart';
 import 'providers/developer_provider.dart';
 import 'features/mgmt/developer_mgmt_screen.dart';
 import 'features/settings/telegram_settings_screen.dart';
+import 'features/settings/language_settings_screen.dart';
 import 'providers/user_provider.dart';
 import 'features/mgmt/cashiers_mgmt_screen.dart';
 import 'providers/expense_provider.dart';
@@ -111,6 +113,9 @@ class TezzroApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appSettings = context.watch<AppSettingsProvider>();
+    AppStrings.setLanguage(appSettings.appLanguage);
+
     return ScreenUtilInit(
       designSize: const Size(1280, 800),
       minTextAdapt: true,
@@ -563,10 +568,12 @@ class _MainLayoutState extends State<MainLayout> {
     const CashiersMgmtScreen(),
     const ExpensesScreen(),
     const CustomersScreen(),
+    const LanguageSettingsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
+    context.watch<AppSettingsProvider>(); // Watch for language changes
     final connectivity = context.watch<ConnectivityProvider>();
     final user = connectivity.currentUser;
     final role = user?['role'] ?? 'admin';
@@ -587,35 +594,43 @@ class _MainLayoutState extends State<MainLayout> {
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     children: [
                       // Stollar - All roles can see
-                      _buildSidebarItem(0, Icons.grid_view_outlined, 'Stollar'),
+                      _buildSidebarItem(
+                        0,
+                        Icons.grid_view_outlined,
+                        AppStrings.tablesNav,
+                      ),
 
                       // Admin - sees everything
                       if (role == 'admin') ...[
                         _buildSidebarItem(
                           1,
                           Icons.inventory_2_outlined,
-                          'Mahsulotlar',
+                          AppStrings.productsNav,
                         ),
                         _buildSidebarItem(
                           2,
                           Icons.category_outlined,
-                          'Kategoriyalar',
+                          AppStrings.categoriesNav,
                         ),
-                        _buildSidebarItem(3, Icons.layers_outlined, 'Joylar'),
+                        _buildSidebarItem(
+                          3,
+                          Icons.layers_outlined,
+                          AppStrings.locationsNav,
+                        ),
                         _buildSidebarItem(
                           4,
                           Icons.table_bar_outlined,
-                          'Stollar (Sozlamalar)',
+                          AppStrings.tablesSettingsNav,
                         ),
                         _buildSidebarItem(
                           5,
                           Icons.people_outline,
-                          'Ofitsiantlar',
+                          AppStrings.waitersNav,
                         ),
                         _buildSidebarItem(
                           13,
                           Icons.person_add_alt_1_outlined,
-                          'Kassirlar',
+                          AppStrings.cashiersNav,
                         ),
                         const Divider(
                           color: Colors.white10,
@@ -623,16 +638,16 @@ class _MainLayoutState extends State<MainLayout> {
                           indent: 20,
                           endIndent: 20,
                         ),
-                        _buildSectionHeader('Moliya'),
+                        _buildSectionHeader(AppStrings.finance),
                         _buildSidebarItem(
                           14,
                           Icons.payments_outlined,
-                          'Xarajatlar',
+                          AppStrings.expensesNav,
                         ),
                         _buildSidebarItem(
                           15,
                           Icons.groups_outlined,
-                          'Mijozlar',
+                          AppStrings.customersNav,
                         ),
                         const Divider(
                           color: Colors.white10,
@@ -640,11 +655,11 @@ class _MainLayoutState extends State<MainLayout> {
                           indent: 20,
                           endIndent: 20,
                         ),
-                        _buildSectionHeader('Tahlil'),
+                        _buildSectionHeader(AppStrings.stats),
                         _buildSidebarItem(
                           6,
                           Icons.bar_chart_rounded,
-                          'Hisobotlar',
+                          AppStrings.reportsNav,
                         ),
                         const Divider(
                           color: Colors.white10,
@@ -653,24 +668,41 @@ class _MainLayoutState extends State<MainLayout> {
                           endIndent: 20,
                         ),
                         _buildSectionHeader('Sozlamalar'),
-                        _buildSidebarItem(7, Icons.print_outlined, 'Printer'),
+                        _buildSidebarItem(
+                          7,
+                          Icons.print_outlined,
+                          AppStrings.printerNav,
+                        ),
                         _buildSidebarItem(
                           8,
                           Icons.receipt_long_outlined,
-                          'Chek',
+                          AppStrings.receiptNav,
                         ),
-                        _buildSidebarItem(9, Icons.lock_outline, 'PIN kod'),
+                        _buildSidebarItem(
+                          9,
+                          Icons.lock_outline,
+                          AppStrings.pinNav,
+                        ),
                         _buildSidebarItem(
                           10,
                           Icons.branding_watermark_outlined,
-                          'Brend',
+                          AppStrings.brandNav,
                         ),
                         _buildSidebarItem(
                           11,
                           Icons.settings_ethernet_outlined,
-                          'Ulanish',
+                          AppStrings.connectionNav,
                         ),
-                        _buildSidebarItem(12, Icons.send_outlined, 'Telegram'),
+                        _buildSidebarItem(
+                          12,
+                          Icons.send_outlined,
+                          AppStrings.telegramNav,
+                        ),
+                        _buildSidebarItem(
+                          16,
+                          Icons.language_outlined,
+                          AppStrings.language,
+                        ),
                       ],
 
                       // Cashier - limited access
@@ -678,12 +710,12 @@ class _MainLayoutState extends State<MainLayout> {
                         _buildSidebarItem(
                           1,
                           Icons.inventory_2_outlined,
-                          'Mahsulotlar',
+                          AppStrings.productsNav,
                         ),
                         _buildSidebarItem(
                           2,
                           Icons.category_outlined,
-                          'Kategoriyalar',
+                          AppStrings.categoriesNav,
                         ),
                         const Divider(
                           color: Colors.white10,
@@ -692,11 +724,15 @@ class _MainLayoutState extends State<MainLayout> {
                           endIndent: 20,
                         ),
                         _buildSectionHeader('Sozlamalar'),
-                        _buildSidebarItem(7, Icons.print_outlined, 'Printer'),
+                        _buildSidebarItem(
+                          7,
+                          Icons.print_outlined,
+                          AppStrings.printerNav,
+                        ),
                         _buildSidebarItem(
                           8,
                           Icons.receipt_long_outlined,
-                          'Chek',
+                          AppStrings.receiptNav,
                         ),
                       ],
 
@@ -732,13 +768,52 @@ class _MainLayoutState extends State<MainLayout> {
           if (_isExpanded) ...[
             const SizedBox(width: 12),
             GestureDetector(
-              onLongPress: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const DeveloperMgmtScreen(),
+              onLongPress: () async {
+                final passwordController = TextEditingController();
+                final correct = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Developer Access'),
+                    content: TextField(
+                      controller: passwordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Parolni kiriting',
+                        hintText: 'Password',
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Bekor qilish'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          if (passwordController.text == 'DEVELOPER2026') {
+                            Navigator.pop(context, true);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Parol noto\'g\'ri!'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('Kirish'),
+                      ),
+                    ],
                   ),
                 );
+
+                if (correct == true && mounted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DeveloperMgmtScreen(),
+                    ),
+                  );
+                }
               },
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

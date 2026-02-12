@@ -7,6 +7,7 @@ import '../../providers/connectivity_provider.dart';
 import '../../models/table.dart';
 import '../../core/theme.dart';
 import '../../core/utils/price_formatter.dart';
+import '../../core/app_strings.dart';
 import 'pos_screen.dart';
 
 class TablesScreen extends StatefulWidget {
@@ -176,8 +177,8 @@ class _TablesScreenState extends State<TablesScreen> {
         );
       },
       icon: const Icon(Icons.shopping_bag_outlined),
-      label: const Text(
-        'SABOY',
+      label: Text(
+        AppStrings.saboy,
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 16,
@@ -281,8 +282,8 @@ class _TablesScreenState extends State<TablesScreen> {
                           color: Colors.green.withOpacity(0.1),
                         ),
                         const SizedBox(height: 6),
-                        const Text(
-                          "Stol bo'sh",
+                        Text(
+                          AppStrings.tableEmpty,
                           style: TextStyle(
                             color: Color(0xFF94A3B8),
                             fontSize: 12,
@@ -334,7 +335,7 @@ class _TablesScreenState extends State<TablesScreen> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        occupied ? "Band" : "Bo'sh",
+        occupied ? AppStrings.occupied : AppStrings.available,
         style: TextStyle(
           color: occupied ? Colors.red.shade700 : Colors.green.shade700,
           fontWeight: FontWeight.bold,
@@ -346,11 +347,13 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   String _formatDuration(DateTime? start) {
-    if (start == null) return "0 daq";
+    if (start == null) return "0 ${AppStrings.minutesShort}";
     final diff = DateTime.now().difference(start);
     final h = diff.inHours;
     final m = diff.inMinutes % 60;
-    return h > 0 ? "$h s $m d" : "$m d";
+    return h > 0
+        ? "$h ${AppStrings.hoursShort} $m ${AppStrings.minutesShortLabel}"
+        : "$m ${AppStrings.minutesShortLabel}";
   }
 
   void _handleTableTap(BuildContext context, TableModel table) {

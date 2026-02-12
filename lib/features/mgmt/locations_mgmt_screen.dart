@@ -29,9 +29,9 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           AppStrings.locationMgmt,
-          style: TextStyle(
+          style: const TextStyle(
             color: Color(0xFF1E293B),
             fontWeight: FontWeight.bold,
           ),
@@ -46,7 +46,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _showLocationDialog(context),
                 icon: const Icon(Icons.add),
-                label: const Text(AppStrings.addLocation),
+                label: Text(AppStrings.addLocation),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   foregroundColor: Colors.white,
@@ -256,7 +256,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
 
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(AppStrings.warningDeleteLocation),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
@@ -302,9 +302,9 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(
+            child: Text(
               AppStrings.cancel,
-              style: TextStyle(color: Colors.grey),
+              style: const TextStyle(color: Colors.grey),
             ),
           ),
           ElevatedButton(
@@ -333,7 +333,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text(AppStrings.save),
+            child: Text(AppStrings.save),
           ),
         ],
       ),

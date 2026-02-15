@@ -9,6 +9,7 @@ import 'screens/waiters_report_screen.dart';
 import 'screens/tables_report_screen.dart';
 import 'screens/locations_report_screen.dart';
 import 'screens/general_report_screen.dart';
+import 'screens/dashboard_screen.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../core/app_strings.dart';
@@ -25,13 +26,14 @@ class ReportsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final reportProvider = context.watch<ReportProvider>();
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Column(
         children: [
           _buildHeader(context),
           const ReportFilterBar(),
-          const AiSummaryBanner(),
           Expanded(
             child: FutureBuilder<Map<String, dynamic>>(
               future: reportProvider.getDashboardStats(),
@@ -59,9 +61,19 @@ class ReportsScreen extends StatelessWidget {
                     mainAxisSpacing: 16,
                     childAspectRatio: _getChildAspectRatio(context),
                   ),
-                  itemCount: 6,
+                  itemCount: 7,
                   itemBuilder: (context, index) {
                     final items = [
+                      _buildReportCard(
+                        context: context,
+                        title: "Vizual Analitika",
+                        subtitle: "Grafiklar va trendlar",
+                        icon: Icons.dashboard_customize,
+                        color: Colors.indigo,
+                        metric: "Grafiklarni ko'rish",
+                        onTap: () =>
+                            _navigateTo(context, const DashboardScreen()),
+                      ),
                       _buildReportCard(
                         context: context,
                         title: AppStrings.ordersTitle,
@@ -135,6 +147,8 @@ class ReportsScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isSmall = MediaQuery.of(context).size.width <= 800;
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -143,7 +157,7 @@ class ReportsScreen extends StatelessWidget {
         isSmall ? 16 : 32,
         isSmall ? 12 : 24,
       ),
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -155,32 +169,19 @@ class ReportsScreen extends StatelessWidget {
                 style: TextStyle(
                   fontSize: isSmall ? 20 : 28,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF0F172A),
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               Text(
                 AppStrings.reportsDescription,
-                style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+                style: TextStyle(
+                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
-          Row(
-            children: [
-              AiActionButton(
-                onAnalyze: () {
-                  final reportProvider = context.read<ReportProvider>();
-                  context.read<AiProvider>().getGeneralReport(
-                    reportProvider.dateFrom,
-                    reportProvider.dateTo,
-                  );
-                },
-                label: AppStrings.aiAnalysis,
-                dialogTitle: AppStrings.generalReportAnalysis,
-              ),
-              const SizedBox(width: 12),
-              _buildTelegramSyncButton(context),
-            ],
-          ),
+          Row(children: [_buildTelegramSyncButton(context)]),
         ],
       ),
     );
@@ -338,6 +339,8 @@ class ReportsScreen extends StatelessWidget {
     required String metric,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isSmall = MediaQuery.of(context).size.width <= 800;
     return InkWell(
       onTap: onTap,
@@ -345,7 +348,7 @@ class ReportsScreen extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.all(isSmall ? 14 : 18),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -372,14 +375,14 @@ class ReportsScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: isSmall ? 15 : 17,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1E293B),
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               subtitle,
               style: TextStyle(
-                color: const Color(0xFF64748B),
+                color: isDark ? Colors.white60 : const Color(0xFF64748B),
                 fontSize: isSmall ? 11 : 12,
               ),
             ),

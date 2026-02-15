@@ -8,6 +8,7 @@ class Product {
   final bool isSet;
   final List<BundleItem>? bundleItems;
   final int sortOrder;
+  final double? quantity;
 
   Product({
     this.id,
@@ -19,7 +20,13 @@ class Product {
     this.isSet = false,
     this.bundleItems,
     this.sortOrder = 0,
+    this.quantity,
+    this.trackType = 0, // 0=none, 1=retail, 2=recipe
+    this.allowNegativeStock = false,
   });
+
+  final int trackType;
+  final bool allowNegativeStock;
 
   Map<String, dynamic> toMap() {
     return {
@@ -31,6 +38,9 @@ class Product {
       'image_path': imagePath,
       'is_set': isSet ? 1 : 0,
       'sort_order': sortOrder,
+      'quantity': quantity,
+      'track_type': trackType,
+      'allow_negative_stock': allowNegativeStock ? 1 : 0,
     };
   }
 
@@ -48,6 +58,11 @@ class Product {
       isSet: map['is_set'] == 1,
       bundleItems: bundleItems,
       sortOrder: map['sort_order'] ?? 0,
+      quantity: map['quantity'] != null
+          ? (map['quantity'] as num).toDouble()
+          : null,
+      trackType: map['track_type'] ?? 0,
+      allowNegativeStock: map['allow_negative_stock'] == 1,
     );
   }
 
@@ -61,6 +76,9 @@ class Product {
     bool? isSet,
     List<BundleItem>? bundleItems,
     int? sortOrder,
+    double? quantity,
+    int? trackType,
+    bool? allowNegativeStock,
   }) {
     return Product(
       id: id ?? this.id,
@@ -72,6 +90,9 @@ class Product {
       isSet: isSet ?? this.isSet,
       bundleItems: bundleItems ?? this.bundleItems,
       sortOrder: sortOrder ?? this.sortOrder,
+      quantity: quantity ?? this.quantity,
+      trackType: trackType ?? this.trackType,
+      allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
     );
   }
 }

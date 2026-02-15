@@ -22,10 +22,15 @@ class PrintingService {
   static Future<PrinterSettings> _loadLatestSettings() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final res = await db.query('settings');
+      final res = await db.query('printers', limit: 1);
       if (res.isNotEmpty) {
+        return PrinterSettings.fromMap(res.first);
+      }
+      // Fallback to old settings table
+      final oldRes = await db.query('settings');
+      if (oldRes.isNotEmpty) {
         Map<String, dynamic> settingsMap = {};
-        for (var row in res) {
+        for (var row in oldRes) {
           settingsMap[row['key'] as String] = row['value'];
         }
         return PrinterSettings.fromMap(settingsMap);
@@ -34,6 +39,154 @@ class PrintingService {
       debugPrint('Error loading settings from DB: $e');
     }
     return PrinterSettings(); // Default
+  }
+
+  static Future<void> printDividedOrder({required Order order}) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      // 1. Load all categories to map names to IDs
+      final catData = await db.query('categories');
+      final Map<String, int> catNameToId = {
+        for (var row in catData) row['name'] as String: row['id'] as int,
+      };
+
+      // 2. Load all printers
+      final printerData = await db.query('printers');
+      final printers = printerData
+          .map((m) => PrinterSettings.fromMap(m))
+          .toList();
+
+      for (var printer in printers) {
+        // Skip printers without assigned categories (these are likely main receipt printers)
+        if (printer.categoryIds.isEmpty) continue;
+
+        // 3. Filter items for this printer
+        final List<OrderItem> itemsToPrint = [];
+        for (var item in order.items) {
+          // Note: In a real app, categoryId should be in OrderItem.
+          // Here we query product to get its category name.
+          final prodData = await db.query(
+            'products',
+            columns: ['category'],
+            where: 'id = ?',
+            whereArgs: [item.productId],
+          );
+          if (prodData.isNotEmpty) {
+            final catName = prodData.first['category'] as String;
+            final catId = catNameToId[catName];
+            if (catId != null && printer.categoryIds.contains(catId)) {
+              itemsToPrint.add(item);
+            }
+          }
+        }
+
+        if (itemsToPrint.isNotEmpty) {
+          // 4. Print "Service Check" (Oshxona cheki)
+          await printServiceCheck(
+            settings: printer,
+            order: order,
+            items: itemsToPrint,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error in printDividedOrder: $e');
+    }
+  }
+
+  static Future<bool> printServiceCheck({
+    required PrinterSettings settings,
+    required Order order,
+    required List<OrderItem> items,
+  }) async {
+    try {
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(PaperSize.mm80, profile);
+      List<int> bytes = [];
+      bytes += [27, 116, 17]; // ESC t 17 (CP866)
+
+      // HEADER
+      bytes += generator.text(
+        _centerLine('*** OSHXONA CHEKI ***'),
+        styles: const PosStyles(bold: true, height: PosTextSize.size2),
+      );
+      bytes += generator.feed(1);
+
+      bytes += generator.text('Buyurtma: #${order.id.substring(0, 8)}');
+      bytes += generator.text(
+        'Sana: ${DateFormat('dd.MM.yyyy HH:mm').format(order.createdAt)}',
+      );
+      if (order.tableName != null) {
+        bytes += generator.text(
+          'STOL: ${order.tableName}',
+          styles: const PosStyles(
+            bold: true,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          ),
+        );
+      }
+      if (order.waiterName != null) {
+        bytes += generator.text('Ofitsiant: ${order.waiterName}');
+      }
+      bytes += generator.hr();
+
+      // ITEMS
+      for (var item in items) {
+        bytes += generator.text(
+          '${item.qty} x ${item.productName}',
+          styles: const PosStyles(bold: true, height: PosTextSize.size2),
+        );
+        if (item.bundleItemsJson != null) {
+          final List<dynamic> components = jsonDecode(item.bundleItemsJson!);
+          for (var comp in components) {
+            bytes += generator.text('  - ${comp['product_name']}');
+          }
+        }
+        bytes += generator.feed(1);
+      }
+
+      bytes += generator.hr();
+      bytes += generator.feed(3);
+      bytes += generator.cut();
+
+      return await _sendToPrinter(settings, bytes);
+    } catch (e) {
+      debugPrint('Service print error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _sendToPrinter(
+    PrinterSettings settings,
+    List<int> bytes,
+  ) async {
+    if (settings.type == PrinterType.network) {
+      if (settings.ipAddress == null || settings.ipAddress!.isEmpty)
+        return false;
+      try {
+        final socket = await Socket.connect(
+          settings.ipAddress!,
+          settings.port,
+          timeout: const Duration(seconds: 5),
+        );
+        socket.add(bytes);
+        await socket.flush();
+        await socket.close();
+        return true;
+      } catch (e) {
+        debugPrint('Network print error: $e');
+        return false;
+      }
+    } else if (settings.type == PrinterType.windows) {
+      if (settings.printerName == null) return false;
+      return await WindowsPrintingHelper.rawPrint(settings.printerName!, bytes);
+    } else if (settings.type == PrinterType.usb_legacy) {
+      // Legacy USB logic...
+      return false;
+    }
+    return false;
   }
 
   static Future<ReceiptSettings> _loadReceiptSettings() async {
@@ -113,20 +266,52 @@ class PrintingService {
   static String _cleanText(Object? input) {
     if (input == null) return '';
     String text = input.toString();
-    // Translate Cyrillic to CP1251 char codes within a String
-    // thermal printers in CP1251 mode expect codes 192-255 for Cyrillic
+    // Thermal printers often use CP866 for Cyrillic (selected by ESC t 17)
     String result = '';
     for (int i = 0; i < text.length; i++) {
       int code = text.codeUnitAt(i);
-      if (code >= 0x0410 && code <= 0x044F) {
-        // А-я
-        result += String.fromCharCode(code - 0x0410 + 0xC0);
+      if (code >= 0x0410 && code <= 0x041F) {
+        // А-П
+        result += String.fromCharCode(code - 0x0410 + 0x80);
+      } else if (code >= 0x0420 && code <= 0x042F) {
+        // Р-Я
+        result += String.fromCharCode(code - 0x0420 + 0x90);
+      } else if (code >= 0x0430 && code <= 0x043F) {
+        // а-п
+        result += String.fromCharCode(code - 0x0430 + 0xA0);
+      } else if (code >= 0x0440 && code <= 0x044F) {
+        // р-я
+        result += String.fromCharCode(code - 0x0440 + 0xE0);
       } else if (code == 0x0401) {
         // Ё
-        result += String.fromCharCode(0xA8);
+        result += String.fromCharCode(0xF0);
       } else if (code == 0x0451) {
         // ё
-        result += String.fromCharCode(0xB8);
+        result += String.fromCharCode(0xF1);
+      } else if (code == 0x040E) {
+        // Ў -> У
+        result += String.fromCharCode(0x93);
+      } else if (code == 0x045E) {
+        // ў -> у
+        result += String.fromCharCode(0xED);
+      } else if (code == 0x049A) {
+        // Қ -> К
+        result += String.fromCharCode(0x8A);
+      } else if (code == 0x049B) {
+        // қ -> к
+        result += String.fromCharCode(0xAA);
+      } else if (code == 0x0492) {
+        // Ғ -> Г
+        result += String.fromCharCode(0x83);
+      } else if (code == 0x0493) {
+        // ғ -> г
+        result += String.fromCharCode(0xA3);
+      } else if (code == 0x04BA || code == 0x04B2) {
+        // Ҳ -> Х
+        result += String.fromCharCode(0x95);
+      } else if (code == 0x04BB || code == 0x04B3) {
+        // ҳ -> х
+        result += String.fromCharCode(0xE5);
       } else {
         result += text[i];
       }
@@ -297,7 +482,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
-      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
+      bytes += [27, 116, 17]; // ESC t 17 (CP866)
 
       // 1. HEADER
       // Logo
@@ -403,7 +588,7 @@ class PrintingService {
         }
       } else {
         bytes += generator.text(
-          _centerLine('SABOY', margin: rSettings.horizontalMargin),
+          _centerLine(_cleanText('SABOY'), margin: rSettings.horizontalMargin),
           styles: const PosStyles(align: PosAlign.left, bold: true),
         );
       }
@@ -633,7 +818,7 @@ class PrintingService {
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
-      bytes += [27, 116, 17]; // ESC t 17 (CP1251)
+      bytes += [27, 116, 17]; // ESC t 17 (CP866)
 
       final summary = data['summary'] ?? {};
       final waiters =
@@ -858,21 +1043,48 @@ class PrintingService {
 
       // Print items
       for (var product in itemsToShow) {
-        final qty = int.tryParse(product['total_qty']?.toString() ?? '0') ?? 0;
-        final revenue =
+        final double soldQty =
+            double.tryParse(product['total_qty']?.toString() ?? '0') ?? 0;
+        final double? currentStock = product['current_stock'] != null
+            ? double.tryParse(product['current_stock'].toString())
+            : null;
+        final double revenue =
             double.tryParse(product['total_revenue']?.toString() ?? '0.0') ??
             0.0;
-        final qtyStr = qty.toString();
-        final revenueStr = PriceFormatter.format(revenue);
 
-        for (var line in _format3ColRows(
-          _cleanText(product['name']),
-          qtyStr,
-          revenueStr,
-          margin: rSettings.horizontalMargin,
-        )) {
-          bytes += generator.text(line);
+        final double kirimQty = currentStock != null
+            ? (soldQty + currentStock)
+            : soldQty;
+
+        // Print Name
+        bytes += generator.text(
+          _padLine(_cleanText(product['name']), rSettings.horizontalMargin),
+          styles: const PosStyles(bold: true),
+        );
+
+        // Print Inventory Info
+        String invInfo = "  Sotildi: ${soldQty.toStringAsFixed(0)}";
+        if (currentStock != null) {
+          invInfo =
+              "  Kirim: ${kirimQty.toStringAsFixed(0)}  Sotildi: ${soldQty.toStringAsFixed(0)}  Qoldiq: ${currentStock.toStringAsFixed(0)}";
         }
+        bytes += generator.text(
+          _padLine(_cleanText(invInfo), rSettings.horizontalMargin),
+          styles: const PosStyles(
+            height: PosTextSize.size1,
+            width: PosTextSize.size1,
+          ),
+        );
+
+        // Print Revenue
+        bytes += generator.text(
+          _format2Col(
+            "  Summa:",
+            PriceFormatter.format(revenue),
+            margin: rSettings.horizontalMargin,
+          ),
+        );
+        bytes += generator.feed(1);
       }
 
       // Show "..." if truncated

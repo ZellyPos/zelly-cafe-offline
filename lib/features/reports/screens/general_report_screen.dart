@@ -5,6 +5,8 @@ import '../../../core/utils/price_formatter.dart';
 import '../../../core/printing_service.dart';
 import '../../../providers/printer_provider.dart';
 import '../widgets/filter_bar.dart';
+import '../../../core/services/export_service.dart';
+import 'package:share_plus/share_plus.dart';
 
 class GeneralReportScreen extends StatelessWidget {
   const GeneralReportScreen({super.key});
@@ -26,7 +28,7 @@ class GeneralReportScreen extends StatelessWidget {
         elevation: 0,
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+            padding: const EdgeInsets.only(right: 8.0),
             child: ElevatedButton.icon(
               onPressed: () async {
                 try {
@@ -67,7 +69,7 @@ class GeneralReportScreen extends StatelessWidget {
                 }
               },
               icon: const Icon(Icons.print),
-              label: const Text("Z-Hisobot Chiqarish"),
+              label: const Text("Z-PV"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
@@ -77,6 +79,58 @@ class GeneralReportScreen extends StatelessWidget {
               ),
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.table_view, color: Colors.green),
+            tooltip: "Excel",
+            onPressed: () async {
+              final data = await reportProvider.getZReportData();
+              final categories = data['categories'] as List? ?? [];
+              final headers = ['Kategoriya', 'Miqdor', 'Tushum'];
+              final rows = categories
+                  .map(
+                    (c) => [
+                      c['category'] ?? '',
+                      c['qty'] ?? 0,
+                      c['total'] ?? 0,
+                    ],
+                  )
+                  .toList();
+              final path = await ExportService.instance.exportToExcel(
+                fileName: 'ZReport_${DateTime.now().millisecondsSinceEpoch}',
+                sheetName: 'Kategoriyalar',
+                headers: headers,
+                rows: rows,
+              );
+              if (path != null && context.mounted) {
+                await Share.shareXFiles([
+                  XFile(path),
+                ], text: 'Z-Report (Excel)');
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf, color: Colors.blue),
+            tooltip: "PDF",
+            onPressed: () async {
+              final data = await reportProvider.getZReportData();
+              final summary = data['summary'] ?? {};
+              final categories = (data['categories'] as List? ?? [])
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList();
+              final path = await ExportService.instance.exportSummaryToPDF(
+                title: 'Z-Report',
+                dateRange: data['date'] ?? '',
+                summary: Map<String, dynamic>.from(summary),
+                items: categories,
+                itemHeaders: ['Kategoriya', 'Miqdor', 'Tushum'],
+                itemKeys: ['category', 'qty', 'total'],
+              );
+              if (path != null && context.mounted) {
+                await Share.shareXFiles([XFile(path)], text: 'Z-Report (PDF)');
+              }
+            },
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(

@@ -90,12 +90,42 @@ class ProductCardWidget extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (product.isSet)
-                        const Icon(
-                          Icons.auto_awesome,
-                          size: 14,
-                          color: Colors.amber,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (product.quantity != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDarkColor
+                                    ? Colors.white24
+                                    : Colors.orange.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                "${product.quantity!.toStringAsFixed(0)} ta",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDarkColor
+                                      ? Colors.white
+                                      : Colors.orange.shade800,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          if (product.isSet) ...[
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.auto_awesome,
+                              size: 14,
+                              color: Colors.amber,
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ],

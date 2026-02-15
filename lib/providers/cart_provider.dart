@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
 import '../core/database_helper.dart';
+import '../core/app_strings.dart';
 import '../models/order.dart';
 import '../models/product.dart';
 import '../core/printing_service.dart';
@@ -11,6 +12,8 @@ import 'table_provider.dart';
 import 'location_provider.dart';
 import 'waiter_provider.dart';
 import 'connectivity_provider.dart';
+import '../core/services/audit_service.dart';
+import '../core/services/security_service.dart';
 
 class CartItem {
   final Product product;
@@ -48,8 +51,21 @@ class CartProvider extends ChangeNotifier {
   }
 
   void setWaiter(int? waiterId, [BuildContext? context]) {
+    final oldWaiterId = _activeWaiterId;
     _activeWaiterId = waiterId;
     _syncOrderHeader(context);
+
+    // Audit: Ofitsiant o'zgarganda
+    if (_activeOrderId != null && oldWaiterId != waiterId) {
+      AuditService.instance.logAction(
+        action: 'change_waiter',
+        entity: 'order',
+        entityId: _activeOrderId!,
+        before: {'waiter_id': oldWaiterId},
+        after: {'waiter_id': waiterId},
+      );
+    }
+
     notifyListeners();
   }
 
@@ -131,7 +147,7 @@ class CartProvider extends ChangeNotifier {
 
           final itemsRes = await db.rawQuery(
             '''
-            SELECT oi.*, p.name as product_name, p.price as product_price, p.category as product_category
+            SELECT oi.*, p.name as product_name, p.price as product_price, p.category as product_category, p.quantity as product_quantity
             FROM order_items oi
             JOIN products p ON oi.product_id = p.id
             WHERE oi.order_id = ?
@@ -145,6 +161,7 @@ class CartProvider extends ChangeNotifier {
               name: row['product_name'] as String,
               price: (row['product_price'] as num).toDouble(),
               category: row['product_category'] as String,
+              quantity: (row['product_quantity'] as num?)?.toDouble(),
             );
             _items[product.id!] = CartItem(
               product: product,
@@ -306,6 +323,20 @@ class CartProvider extends ChangeNotifier {
     BuildContext? context,
     int quantity = 1,
   ]) {
+    int currentInCart = _items[product.id]?.quantity ?? 0;
+    if (product.quantity != null &&
+        (currentInCart + quantity) > product.quantity!) {
+      if (context != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppStrings.insufficientStock),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
     if (_items.containsKey(product.id)) {
       _items.update(
         product.id!,
@@ -341,6 +372,19 @@ class CartProvider extends ChangeNotifier {
     BuildContext? context,
   ]) {
     if (_items.containsKey(productId)) {
+      final product = _items[productId]!.product;
+      if (product.quantity != null && quantity > (product.quantity!)) {
+        if (context != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppStrings.insufficientStock),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       if (quantity <= 0) {
         _items.remove(productId);
       } else {
@@ -473,6 +517,14 @@ class CartProvider extends ChangeNotifier {
           );
           await txn.insert('order_items', orderItem.toMap());
           orderItems.add(orderItem);
+
+          // Inventory Management: Decrement product quantity if it exists
+          if (item.product.quantity != null) {
+            await txn.rawUpdate(
+              'UPDATE products SET quantity = quantity - ? WHERE id = ?',
+              [item.quantity, item.product.id],
+            );
+          }
         }
 
         if (tableId != null || _activeTableId != null) {
@@ -539,6 +591,8 @@ class CartProvider extends ChangeNotifier {
       if (shouldPrint) {
         try {
           await PrintingService.printReceipt(order: populatedOrder);
+          // NEW: Also print to department printers
+          await PrintingService.printDividedOrder(order: populatedOrder);
         } catch (printError) {
           _lastPrintError = 'Printer xatoligi: $printError';
           notifyListeners();
@@ -610,6 +664,7 @@ class CartProvider extends ChangeNotifier {
     if (_activeOrderId == null) return false;
 
     try {
+      final oldOrderId = _activeOrderId;
       if (connectivity != null &&
           connectivity.mode == ConnectivityMode.client) {
         // Client mode: send cancel request to server
@@ -730,6 +785,20 @@ class CartProvider extends ChangeNotifier {
             whereArgs: [newTableId],
           );
         });
+      }
+
+      // Audit: Stol o'zgarganda
+      if (_activeOrderId != null) {
+        AuditService.instance.logAction(
+          action: 'change_table',
+          entity: 'order',
+          entityId: _activeOrderId!,
+          before: {
+            'table_id': _activeTableId,
+            'location_id': _activeLocationId,
+          },
+          after: {'table_id': newTableId, 'location_id': newLocationId},
+        );
       }
 
       // Update cart state

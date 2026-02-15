@@ -110,6 +110,40 @@ class _QuantityDialogState extends State<QuantityDialog> {
                 ),
               ],
             ),
+            if (widget.product.quantity != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Mavjud qoldiq:",
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  ),
+                  Text(
+                    "${widget.product.quantity!.toStringAsFixed(0)} ta",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: quantity > widget.product.quantity!
+                          ? Colors.red
+                          : Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+              if (quantity > widget.product.quantity!)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    "Omborda mahsulot yetarli emas!",
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
             const SizedBox(height: 24),
             // Numpad Grid
             GridView.count(
@@ -172,7 +206,10 @@ class _QuantityDialogState extends State<QuantityDialog> {
                   child: SizedBox(
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: quantity > 0
+                      onPressed:
+                          (quantity > 0 &&
+                              (widget.product.quantity == null ||
+                                  quantity <= widget.product.quantity!))
                           ? () => Navigator.pop(context, quantity)
                           : null,
                       style: ElevatedButton.styleFrom(

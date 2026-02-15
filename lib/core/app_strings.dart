@@ -57,6 +57,10 @@ class AppStrings {
       Translations.get('product_category', _lang);
   static String get selectCategory =>
       Translations.get('select_category', _lang);
+  static String get productQuantity =>
+      Translations.get('product_quantity', _lang);
+  static String get insufficientStock =>
+      Translations.get('insufficient_stock', _lang);
 
   // Categories
   static String get categoryMgmt => Translations.get('category_mgmt', _lang);

@@ -2,47 +2,76 @@ import 'package:flutter/material.dart';
 import '../models/printer_settings.dart';
 import '../core/database_helper.dart';
 import '../core/printing_service.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class PrinterProvider with ChangeNotifier {
-  PrinterSettings _settings = PrinterSettings();
+  List<PrinterSettings> _printers = [];
   List<String> _windowsPrinters = [];
   List<String> _legacyUsbPrinters = []; // For fallback
   bool _isLoading = false;
 
-  PrinterSettings get settings => _settings;
+  List<PrinterSettings> get printers => _printers;
+  // Keeps compatibility with old code that expects single settings
+  PrinterSettings get settings =>
+      _printers.isNotEmpty ? _printers.first : PrinterSettings();
   List<String> get windowsPrinters => _windowsPrinters;
   List<String> get legacyUsbPrinters => _legacyUsbPrinters;
   bool get isLoading => _isLoading;
 
   Future<void> loadSettings() async {
     final db = await DatabaseHelper.instance.database;
-    final res = await db.query('settings');
+    final res = await db.query('printers');
 
     if (res.isNotEmpty) {
-      Map<String, dynamic> settingsMap = {};
-      for (var row in res) {
-        settingsMap[row['key'] as String] = row['value'];
+      _printers = res.map((m) => PrinterSettings.fromMap(m)).toList();
+    } else {
+      // Fallback/Migration: check old settings table
+      final oldRes = await db.query('settings');
+      if (oldRes.isNotEmpty) {
+        Map<String, dynamic> settingsMap = {};
+        for (var row in oldRes) {
+          settingsMap[row['key'] as String] = row['value'];
+        }
+        if (settingsMap.containsKey('printer_type')) {
+          final oldSettings = PrinterSettings.fromMap(
+            settingsMap,
+          ).copyWith(displayName: 'Asosiy Printer');
+          _printers = [oldSettings];
+          // Proactively save to new table
+          await savePrinter(oldSettings);
+        }
       }
-      _settings = PrinterSettings.fromMap(settingsMap);
-      notifyListeners();
     }
+    notifyListeners();
+  }
+
+  Future<void> savePrinter(PrinterSettings printer) async {
+    final db = await DatabaseHelper.instance.database;
+    if (printer.id == null) {
+      await db.insert('printers', printer.toMap());
+    } else {
+      await db.update(
+        'printers',
+        printer.toMap(),
+        where: 'id = ?',
+        whereArgs: [printer.id],
+      );
+    }
+    await loadSettings();
+  }
+
+  Future<void> deletePrinter(int id) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.delete('printers', where: 'id = ?', whereArgs: [id]);
+    await loadSettings();
   }
 
   Future<void> saveSettings(PrinterSettings newSettings) async {
-    _settings = newSettings;
-    final db = await DatabaseHelper.instance.database;
-    final map = _settings.toMap();
-
-    final batch = db.batch();
-    map.forEach((key, value) {
-      batch.insert('settings', {
-        'key': key,
-        'value': value,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    });
-    await batch.commit();
-    notifyListeners();
+    // For compatibility with old single-printer code
+    if (_printers.isEmpty) {
+      await savePrinter(newSettings);
+    } else {
+      await savePrinter(newSettings.copyWith(id: _printers.first.id));
+    }
   }
 
   Future<void> scanPrinters() async {
@@ -57,6 +86,8 @@ class PrinterProvider with ChangeNotifier {
   }
 
   Future<bool> testPrint([PrinterSettings? settings]) async {
-    return await PrintingService.testPrint(settings: settings ?? _settings);
+    return await PrintingService.testPrint(
+      settings: settings ?? (this.settings),
+    );
   }
 }

@@ -230,9 +230,11 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _buildDineInHeader(BuildContext context, bool isCompact) {
     final cartProvider = context.read<CartProvider>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: Colors.blue.shade50,
+      color: isDark ? theme.colorScheme.surface : Colors.blue.shade50,
       child: Row(
         children: [
           ElevatedButton.icon(
@@ -276,9 +278,13 @@ class _PosScreenState extends State<PosScreen> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: theme.colorScheme.surface,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white12
+                        : Colors.blue.withOpacity(0.2),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -319,16 +325,18 @@ class _PosScreenState extends State<PosScreen> {
           const SizedBox(width: 12),
           const SizedBox(width: 12),
           const SizedBox(width: 12),
-          _buildSortButton(),
+          _buildSortButton(context),
         ],
       ),
     );
   }
 
   Widget _buildSaboyHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.orange.shade50,
+      color: isDark ? theme.colorScheme.surface : Colors.orange.shade50,
       child: Row(
         children: [
           ElevatedButton.icon(
@@ -352,7 +360,7 @@ class _PosScreenState extends State<PosScreen> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           ),
           const Spacer(),
-          _buildSortButton(),
+          _buildSortButton(context),
         ],
       ),
     );
@@ -447,6 +455,9 @@ class _PosScreenState extends State<PosScreen> {
     CategoryProvider categoryProvider,
     bool isCompact,
   ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return ListView.separated(
       controller: _categoryScrollController,
       scrollDirection: Axis.horizontal,
@@ -473,7 +484,9 @@ class _PosScreenState extends State<PosScreen> {
             cat,
             style: TextStyle(
               fontSize: isCompact ? 16 : 18,
-              color: isSelected ? Colors.white : Colors.black,
+              color: isSelected
+                  ? Colors.white
+                  : (isDark ? Colors.white70 : Colors.black),
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -490,7 +503,9 @@ class _PosScreenState extends State<PosScreen> {
             }
           },
           selectedColor: catColor ?? AppTheme.primaryColor,
-          backgroundColor: catColor?.withOpacity(1) ?? Colors.grey.shade100,
+          backgroundColor:
+              catColor?.withOpacity(1) ??
+              (isDark ? theme.colorScheme.surface : Colors.grey.shade100),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         );
       },
@@ -515,6 +530,11 @@ class _PosScreenState extends State<PosScreen> {
       ),
     ).then((success) {
       if (success == true) {
+        // Refresh products to update stock quantities
+        context.read<ProductProvider>().loadProducts(
+          connectivity: context.read<ConnectivityProvider>(),
+        );
+
         if (cartProvider.lastPrintError != null) {
           showDialog(
             context: context,
@@ -601,7 +621,9 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  Widget _buildSortButton() {
+  Widget _buildSortButton(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return PopupMenuButton<ProductSortMode>(
       initialValue: _currentSort,
       onSelected: (ProductSortMode result) {
@@ -613,9 +635,11 @@ class _PosScreenState extends State<PosScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(
+            color: isDark ? Colors.white12 : Colors.grey.shade300,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

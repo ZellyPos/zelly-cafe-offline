@@ -34,7 +34,6 @@ import 'features/activation/activation_screen.dart';
 import 'providers/developer_provider.dart';
 import 'features/mgmt/developer_mgmt_screen.dart';
 import 'features/settings/telegram_settings_screen.dart';
-import 'features/settings/language_settings_screen.dart';
 import 'providers/user_provider.dart';
 import 'features/mgmt/cashiers_mgmt_screen.dart';
 import 'providers/expense_provider.dart';
@@ -108,13 +107,25 @@ void main() async {
   );
 }
 
-class TezzroApp extends StatelessWidget {
+class TezzroApp extends StatefulWidget {
   const TezzroApp({super.key});
 
   @override
+  State<TezzroApp> createState() => _TezzroAppState();
+}
+
+class _TezzroAppState extends State<TezzroApp> {
+  late Future<bool> _licenseFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _licenseFuture = LicenseService.instance.isActivated();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final appSettings = context.watch<AppSettingsProvider>();
-    AppStrings.setLanguage(appSettings.appLanguage);
+    AppStrings.setLanguage('uz');
 
     return ScreenUtilInit(
       designSize: const Size(1280, 800),
@@ -125,8 +136,9 @@ class TezzroApp extends StatelessWidget {
           title: 'ZELLY',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
+          themeMode: ThemeMode.light,
           home: FutureBuilder<bool>(
-            future: LicenseService.instance.isActivated(),
+            future: _licenseFuture,
             builder: (context, snapshot) {
               // Show loading while checking license
               if (!snapshot.hasData) {
@@ -329,9 +341,11 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettingsProvider>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Row(
         children: [
           // Left: Numpad
@@ -351,10 +365,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         children: [
                           Text(
                             isClient ? 'Ofitsiant PIN kodi' : 'Kirish',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E293B),
+                              color: theme.colorScheme.onSurface,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -392,9 +406,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Tizimga kirish uchun PIN kodni kiriting',
-                    style: TextStyle(color: Color(0xFF64748B), fontSize: 16),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      fontSize: 16,
+                    ),
                   ),
                   const SizedBox(height: 60),
                   // PIN Display
@@ -409,12 +426,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: _enteredPin.length > index
-                              ? const Color(0xFF4C1D95)
-                              : const Color(0xFFF1F5F9),
+                              ? theme.colorScheme.primary
+                              : (isDark
+                                    ? Colors.white10
+                                    : const Color(0xFFF1F5F9)),
                           border: Border.all(
                             color: _enteredPin.length > index
-                                ? const Color(0xFF4C1D95)
-                                : const Color(0xFFE2E8F0),
+                                ? theme.colorScheme.primary
+                                : (isDark
+                                      ? Colors.white24
+                                      : const Color(0xFFE2E8F0)),
                           ),
                         ),
                       ),
@@ -441,14 +462,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           '7',
                           '8',
                           '9',
-                        ].map((n) => _buildPinButton(n)),
+                        ].map((n) => _buildPinButton(context, n)),
                         _buildPinButton(
+                          context,
                           'C',
                           color: Colors.orange.shade50,
                           textColor: Colors.orange.shade700,
                         ),
-                        _buildPinButton('0'),
+                        _buildPinButton(context, '0'),
                         _buildPinButton(
+                          context,
                           '⌫',
                           color: Colors.red.shade50,
                           textColor: Colors.red.shade700,
@@ -467,7 +490,7 @@ class _LoginScreenState extends State<LoginScreen> {
               margin: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(32),
-                color: const Color(0xFFF8FAFC),
+                color: theme.colorScheme.surface,
                 image: settings.brandImagePath != null
                     ? DecorationImage(
                         image: FileImage(File(settings.brandImagePath!)),
@@ -518,9 +541,19 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildPinButton(String text, {Color? color, Color? textColor}) {
+  Widget _buildPinButton(
+    BuildContext context,
+    String text, {
+    Color? color,
+    Color? textColor,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Material(
-      color: color ?? const Color(0xFFF8FAFC),
+      color:
+          color ??
+          (isDark ? theme.colorScheme.surface : const Color(0xFFF8FAFC)),
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         onTap: () => _handlePinPress(text),
@@ -531,7 +564,7 @@ class _LoginScreenState extends State<LoginScreen> {
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
-              color: textColor ?? const Color(0xFF1E293B),
+              color: textColor ?? theme.colorScheme.onSurface,
             ),
           ),
         ),
@@ -568,7 +601,6 @@ class _MainLayoutState extends State<MainLayout> {
     const CashiersMgmtScreen(),
     const ExpensesScreen(),
     const CustomersScreen(),
-    const LanguageSettingsScreen(),
   ];
 
   @override
@@ -578,6 +610,9 @@ class _MainLayoutState extends State<MainLayout> {
     final user = connectivity.currentUser;
     final role = user?['role'] ?? 'admin';
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
       body: Row(
         children: [
@@ -585,7 +620,7 @@ class _MainLayoutState extends State<MainLayout> {
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             width: _isExpanded ? 250 : 70,
-            color: const Color(0xFF1E293B),
+            color: isDark ? theme.colorScheme.surface : const Color(0xFF1E293B),
             child: Column(
               children: [
                 _buildSidebarHeader(),
@@ -698,11 +733,6 @@ class _MainLayoutState extends State<MainLayout> {
                           Icons.send_outlined,
                           AppStrings.telegramNav,
                         ),
-                        _buildSidebarItem(
-                          16,
-                          Icons.language_outlined,
-                          AppStrings.language,
-                        ),
                       ],
 
                       // Cashier - limited access
@@ -747,7 +777,7 @@ class _MainLayoutState extends State<MainLayout> {
           // Main Content Area
           Expanded(
             child: Container(
-              color: const Color(0xFFF8FAFC),
+              color: Theme.of(context).scaffoldBackgroundColor,
               child: IndexedStack(index: _selectedIndex, children: _screens),
             ),
           ),

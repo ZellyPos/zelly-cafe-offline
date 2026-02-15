@@ -242,7 +242,7 @@ class ProductsReportScreen extends StatelessWidget {
       child: Row(
         children: const [
           Expanded(
-            flex: 5,
+            flex: 3,
             child: Text(
               "Taom nomi",
               style: TextStyle(
@@ -252,9 +252,9 @@ class ProductsReportScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            flex: 2,
+            flex: 1,
             child: Text(
-              "Soni",
+              "Kirim",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF64748B),
@@ -263,7 +263,29 @@ class ProductsReportScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            flex: 3,
+            flex: 1,
+            child: Text(
+              "Sotildi",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF64748B),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Text(
+              "Qoldiq",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF64748B),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          Expanded(
+            flex: 2,
             child: Text(
               "Jami summa",
               style: TextStyle(
@@ -279,23 +301,54 @@ class ProductsReportScreen extends StatelessWidget {
   }
 
   Widget _buildProductRow(Map<String, dynamic> item) {
+    final double soldQty = (item['total_qty'] as num).toDouble();
+    final double? currentStock = (item['current_stock'] as num?)?.toDouble();
+    final double kirimQty = currentStock != null
+        ? (soldQty + currentStock)
+        : soldQty;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Row(
         children: [
           Expanded(
-            flex: 5,
+            flex: 3,
             child: Text(
               item['name'],
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
           ),
           Expanded(
-            flex: 2,
-            child: Text("${item['total_qty']} ta", textAlign: TextAlign.center),
+            flex: 1,
+            child: Text(
+              currentStock != null ? "${kirimQty.toStringAsFixed(0)} ta" : "-",
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.blueGrey),
+            ),
           ),
           Expanded(
-            flex: 3,
+            flex: 1,
+            child: Text(
+              "${soldQty.toStringAsFixed(0)} ta",
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Text(
+              currentStock != null
+                  ? "${currentStock.toStringAsFixed(0)} ta"
+                  : "-",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: (currentStock ?? 0) <= 5 ? Colors.red : Colors.orange,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
             child: Text(
               "${PriceFormatter.format((item['total_revenue'] as num).toDouble())} so'm",
               textAlign: TextAlign.right,

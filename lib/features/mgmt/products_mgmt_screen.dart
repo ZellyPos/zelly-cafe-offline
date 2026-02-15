@@ -43,17 +43,20 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
       return matchesSearch && matchesCategory && matchesStatus;
     }).toList();
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           AppStrings.productMgmt,
-          style: const TextStyle(
-            color: Color(0xFF1E293B),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.surface,
         elevation: 0,
         centerTitle: false,
         actions: [
@@ -120,7 +123,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
           // Filter Bar
           Container(
             padding: const EdgeInsets.all(24),
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             child: Row(
               children: [
                 Expanded(
@@ -131,7 +134,9 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                       hintText: AppStrings.searchProductHint,
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
+                      fillColor: isDark
+                          ? Colors.white12
+                          : const Color(0xFFF1F5F9),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -258,9 +263,11 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
   }
 
   Widget _buildProductCard(BuildContext context, Product product) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -269,7 +276,9 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
             offset: const Offset(0, 4),
           ),
         ],
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -292,12 +301,32 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                               ? 14
                               : 16,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1E293B),
+                          color: theme.colorScheme.onSurface,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    if (product.quantity != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          "${product.quantity!.toStringAsFixed(0)} ta",
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     const SizedBox(width: 8),
                     _buildStatusBadge(product.isActive),
                   ],
@@ -336,7 +365,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                                 ? 16
                                 : 18,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF0F172A),
+                            color: theme.colorScheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -470,6 +499,9 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
     final nameController = TextEditingController(text: product?.name ?? '');
     final priceController = TextEditingController(
       text: product?.price.toString() ?? '',
+    );
+    final quantityController = TextEditingController(
+      text: product?.quantity?.toString() ?? '',
     );
     String? selectedCategory = product?.category;
     String? selectedImagePath = product?.imagePath;
@@ -664,6 +696,20 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                                 setDialogState(() => selectedCategory = val),
                           ),
                           const SizedBox(height: 16),
+                          TextField(
+                            controller: quantityController,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.productQuantity,
+                              hintText: "Masalan: 50",
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                          const SizedBox(height: 16),
                           // SET Taom Toggle
                           SwitchListTile(
                             title: Text(
@@ -851,9 +897,9 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     category: selectedCategory!,
                     isActive: product?.isActive ?? true,
                     imagePath: finalImagePath,
-                    isSet: isSet,
                     bundleItems: isSet ? bundleItems : null,
                     sortOrder: product?.sortOrder ?? 0,
+                    quantity: double.tryParse(quantityController.text),
                   );
 
                   if (product == null) {

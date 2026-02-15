@@ -87,8 +87,9 @@ class _TablesScreenState extends State<TablesScreen> {
 
     final tables = filteredTables.toList();
 
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -97,7 +98,7 @@ class _TablesScreenState extends State<TablesScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(child: _buildLocationTabs(locationProvider)),
+                Expanded(child: _buildLocationTabs(context, locationProvider)),
                 const SizedBox(width: 24),
                 _buildSaboyButton(context),
               ],
@@ -133,7 +134,12 @@ class _TablesScreenState extends State<TablesScreen> {
     );
   }
 
-  Widget _buildLocationTabs(LocationProvider locationProvider) {
+  Widget _buildLocationTabs(
+    BuildContext context,
+    LocationProvider locationProvider,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return SizedBox(
       height: 60,
       child: ListView.builder(
@@ -149,9 +155,13 @@ class _TablesScreenState extends State<TablesScreen> {
               selected: isSelected,
               onSelected: (val) => setState(() => _selectedLocationId = loc.id),
               selectedColor: AppTheme.primaryColor,
-              backgroundColor: Colors.white,
+              backgroundColor: isDark
+                  ? theme.colorScheme.surface
+                  : Colors.white,
               labelStyle: TextStyle(
-                color: isSelected ? Colors.white : const Color(0xFF64748B),
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.white70 : const Color(0xFF64748B)),
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
                 inherit: true,
@@ -196,17 +206,19 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   Widget _buildTableCard(BuildContext context, TableModel table) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isOccupied = table.status == 1;
     final info = table.activeOrder;
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isOccupied
-              ? Colors.red.withOpacity(0.2)
-              : const Color(0xFFE2E8F0),
+              ? Colors.red.withOpacity(0.3)
+              : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
           width: 2,
         ),
         boxShadow: [
@@ -233,10 +245,10 @@ class _TablesScreenState extends State<TablesScreen> {
                     Expanded(
                       child: Text(
                         table.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
+                          color: theme.colorScheme.onSurface,
                           inherit: true,
                         ),
                         maxLines: 1,
@@ -249,6 +261,7 @@ class _TablesScreenState extends State<TablesScreen> {
                 const SizedBox(height: 8),
                 if (isOccupied && info != null) ...[
                   _buildIconText(
+                    context,
                     Icons.person_outline,
                     info.waiterName ?? "Kassa",
                   ),
@@ -256,6 +269,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     Padding(
                       padding: const EdgeInsets.only(top: 6.0),
                       child: _buildIconText(
+                        context,
                         Icons.timer_outlined,
                         _formatDuration(info.openedAt),
                         color: Colors.orange,
@@ -264,10 +278,10 @@ class _TablesScreenState extends State<TablesScreen> {
                   const Spacer(),
                   Text(
                     "${PriceFormatter.format(info.totalAmount)} so'm",
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
+                      color: theme.colorScheme.onSurface,
                       inherit: true,
                     ),
                   ),
@@ -305,18 +319,27 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   Widget _buildIconText(
+    BuildContext context,
     IconData icon,
     String text, {
-    Color color = const Color(0xFF64748B),
+    Color? color,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final effectiveColor =
+        color ?? (isDark ? Colors.white60 : const Color(0xFF64748B));
     return Row(
       children: [
-        Icon(icon, size: 16, color: color),
+        Icon(icon, size: 16, color: effectiveColor),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
-            style: TextStyle(color: color, fontSize: 14, inherit: true),
+            style: TextStyle(
+              color: effectiveColor,
+              fontSize: 14,
+              inherit: true,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

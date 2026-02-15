@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/database_helper.dart';
 import '../models/product.dart';
 import 'connectivity_provider.dart';
+import '../core/services/audit_service.dart';
 
 class ProductProvider extends ChangeNotifier {
   List<Product> _products = [];
@@ -123,11 +124,27 @@ class ProductProvider extends ChangeNotifier {
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
       await connectivity.postRemoteData('/products', product.toMap());
     } else {
+      final oldProductMap = await DatabaseHelper.instance.queryByColumn(
+        'products',
+        'id',
+        product.id,
+      );
+      final oldProduct = oldProductMap.isNotEmpty ? oldProductMap.first : null;
+
       await DatabaseHelper.instance.update(
         'products',
         product.toMap(),
         'id = ?',
         [product.id],
+      );
+
+      // Audit: Mahsulot tahrirlanganda
+      AuditService.instance.logAction(
+        action: 'edit_product',
+        entity: 'product',
+        entityId: product.id.toString(),
+        before: oldProduct,
+        after: product.toMap(),
       );
 
       // Update bundle items if it's a SET

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/printer_provider.dart';
+import '../../providers/category_provider.dart';
 import '../../models/printer_settings.dart';
 import '../../core/theme.dart';
 
@@ -12,27 +13,13 @@ class PrinterSettingsScreen extends StatefulWidget {
 }
 
 class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
-  final _ipController = TextEditingController();
-  final _portController = TextEditingController();
-  PrinterType _selectedType = PrinterType.network;
-  String? _selectedPrinterName;
-  String _lastStatus = 'Noma\'lum';
-  bool _isSuccess = false;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = context.read<PrinterProvider>();
-      provider.loadSettings().then((_) {
-        setState(() {
-          _selectedType = provider.settings.type;
-          _ipController.text = provider.settings.ipAddress ?? '';
-          _portController.text = provider.settings.port.toString();
-          _selectedPrinterName = provider.settings.printerName;
-        });
-      });
-      provider.scanPrinters();
+      context.read<PrinterProvider>().loadSettings();
+      context.read<CategoryProvider>().loadCategories();
+      context.read<PrinterProvider>().scanPrinters();
     });
   }
 
@@ -42,466 +29,178 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 32),
-
-                  _buildSection(
-                    title: '1. Printer rejimi',
-                    hint: 'Ulanish usulini tanlang',
-                    child: Row(
-                      children: [
-                        _buildTypeCard(
-                          'IP printer (tavsiya)',
-                          'Router bo‘lsa eng barqaror usul',
-                          Icons.lan_outlined,
-                          PrinterType.network,
-                        ),
-                        const SizedBox(width: 20),
-                        _buildTypeCard(
-                          'USB printer',
-                          'Router bo‘lmasa ishlaydi (RAW)',
-                          Icons.usb_outlined,
-                          PrinterType.windows,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  if (_selectedType == PrinterType.network)
-                    _buildSection(
-                      title: '2. Network sozlamalari',
-                      hint: 'Printerning lokal IP manzilini kiriting',
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: _buildTextField(
-                                label: 'IP manzil',
-                                controller: _ipController,
-                                hintText: '192.168.1.100',
-                                icon: Icons.settings_ethernet,
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              flex: 1,
-                              child: _buildTextField(
-                                label: 'Port',
-                                controller: _portController,
-                                hintText: '9100',
-                                keyboardType: TextInputType.number,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                  if (_selectedType == PrinterType.windows)
-                    _buildSection(
-                      title: '2. USB (Windows) printer',
-                      hint: 'Tizimga o\'rnatilgan printerni tanlang',
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Column(
-                          children: [
-                            if (provider.isLoading)
-                              const Center(child: LinearProgressIndicator())
-                            else if (provider.windowsPrinters.isEmpty)
-                              const Text(
-                                'Printerlar topilmadi. USB ulanishini tekshiring.',
-                              )
-                            else
-                              Wrap(
-                                spacing: 12,
-                                runSpacing: 12,
-                                children: provider.windowsPrinters.map((name) {
-                                  final isSelected =
-                                      _selectedPrinterName == name;
-                                  return InkWell(
-                                    onTap: () => setState(
-                                      () => _selectedPrinterName = name,
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 12,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? AppTheme.primaryColor
-                                            : Colors.white,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: isSelected
-                                              ? AppTheme.primaryColor
-                                              : const Color(0xFFE2E8F0),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            isSelected
-                                                ? Icons.check_circle
-                                                : Icons.print_outlined,
-                                            size: 18,
-                                            color: isSelected
-                                                ? Colors.white
-                                                : const Color(0xFF64748B),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            name,
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              color: isSelected
-                                                  ? Colors.white
-                                                  : const Color(0xFF1E293B),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            const SizedBox(height: 16),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                onPressed: () => provider.scanPrinters(),
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Qayta qidirish'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                  const SizedBox(height: 24),
-
-                  _buildSection(
-                    title: '3. Holat va Diagnostika',
-                    hint: 'Hozirgi sozlamalar qisqacha ma\'lumoti',
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
+      appBar: AppBar(
+        title: const Text('Printerlar boshqaruvi'),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1E293B),
+        elevation: 0,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: ElevatedButton.icon(
+              onPressed: () => _showPrinterDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Printer qo\'shish'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: provider.isLoading && provider.printers.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                if (provider.printers.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildStatusItem(
-                            'Rejim',
-                            _selectedType == PrinterType.network
-                                ? 'IP Network'
-                                : 'USB Windows',
-                            Icons.tune,
+                          Icon(
+                            Icons.print_disabled,
+                            size: 64,
+                            color: Colors.grey[400],
                           ),
-                          const VerticalDivider(width: 40),
-                          _buildStatusItem(
-                            'Manzil / Nomi',
-                            _selectedType == PrinterType.network
-                                ? '${_ipController.text}:${_portController.text}'
-                                : (_selectedPrinterName ?? 'Tanlanmagan'),
-                            Icons.link,
-                          ),
-                          const VerticalDivider(width: 40),
-                          _buildStatusItem(
-                            'Oxirgi test',
-                            _lastStatus,
-                            _isSuccess
-                                ? Icons.check_circle
-                                : Icons.error_outline,
-                            color: _isSuccess
-                                ? Colors.green
-                                : (_lastStatus == 'Noma\'lum'
-                                      ? Colors.grey
-                                      : Colors.red),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Hali hech qanday printer qo\'shilmagan',
+                            style: TextStyle(color: Colors.grey, fontSize: 16),
                           ),
                         ],
                       ),
                     ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(24),
+                      itemCount: provider.printers.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 16),
+                      itemBuilder: (context, index) {
+                        final printer = provider.printers[index];
+                        return _buildPrinterCard(context, printer);
+                      },
+                    ),
                   ),
-
-                  const SizedBox(height: 100), // Space for sticky bar
-                ],
-              ),
+                _buildInfoSection(),
+              ],
             ),
-          ),
-          _buildStickyBar(),
-        ],
-      ),
     );
   }
 
-  Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Printer sozlamalari',
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1E293B),
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Cheklar chiqishi uchun printer ulanishini to‘g‘rilang',
-          style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
-        ),
-        const SizedBox(height: 16),
-        const Divider(),
-      ],
-    );
-  }
+  Widget _buildPrinterCard(BuildContext context, PrinterSettings printer) {
+    final categories = context.read<CategoryProvider>().categories;
+    final assignedCats = categories
+        .where((c) => printer.categoryIds.contains(c.id))
+        .map((c) => c.name)
+        .join(', ');
 
-  Widget _buildSection({
-    required String title,
-    required String hint,
-    required Widget child,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1E293B),
-          ),
-        ),
-        Text(
-          hint,
-          style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-        ),
-        const SizedBox(height: 16),
-        child,
-      ],
-    );
-  }
-
-  Widget _buildTypeCard(
-    String title,
-    String subtitle,
-    IconData icon,
-    PrinterType type,
-  ) {
-    final isSelected = _selectedType == type;
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _selectedType = type),
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isSelected
-                  ? AppTheme.primaryColor
-                  : const Color(0xFFE2E8F0),
-              width: 2,
-            ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : [],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppTheme.primaryColor.withOpacity(0.1)
-                      : const Color(0xFFF1F5F9),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: isSelected
-                      ? AppTheme.primaryColor
-                      : const Color(0xFF64748B),
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (isSelected)
-                const Icon(Icons.check_circle, color: AppTheme.primaryColor),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required String label,
-    required TextEditingController controller,
-    String? hintText,
-    IconData? icon,
-    TextInputType? keyboardType,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF64748B),
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          decoration: InputDecoration(
-            hintText: hintText,
-            prefixIcon: icon != null ? Icon(icon, size: 20) : null,
-            filled: true,
-            fillColor: const Color(0xFFF8FAFC),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusItem(
-    String label,
-    String value,
-    IconData icon, {
-    Color? color,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color ?? const Color(0xFF1E293B)),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: color ?? const Color(0xFF1E293B),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStickyBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.1))),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.02),
             blurRadius: 10,
-            offset: const Offset(0, -4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Row(
         children: [
-          OutlinedButton.icon(
-            onPressed: _testPrint,
-            icon: const Icon(Icons.print),
-            label: const Text('Test chek chiqarish'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              printer.type == PrinterType.network
+                  ? Icons.lan_outlined
+                  : Icons.usb_outlined,
+              color: AppTheme.primaryColor,
+              size: 28,
             ),
           ),
-          const Spacer(),
-          ElevatedButton.icon(
-            onPressed: _saveSettings,
-            icon: const Icon(Icons.save),
-            label: const Text('Sozlamalarni saqlash'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-              backgroundColor: AppTheme.primaryColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  printer.displayName,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                Text(
+                  printer.type == PrinterType.network
+                      ? 'IP: ${printer.ipAddress}:${printer.port}'
+                      : 'USB: ${printer.printerName}',
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 14,
+                  ),
+                ),
+                if (printer.categoryIds.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Kategoriyalar: $assignedCats',
+                    style: const TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => _testPrinter(context, printer),
+            icon: const Icon(Icons.print_outlined),
+            color: Colors.blue,
+            tooltip: 'Test print',
+          ),
+          IconButton(
+            onPressed: () => _showPrinterDialog(context, printer),
+            icon: const Icon(Icons.edit_outlined),
+            color: Colors.grey[700],
+          ),
+          IconButton(
+            onPressed: () => _deletePrinter(context, printer),
+            icon: const Icon(Icons.delete_outline),
+            color: Colors.red,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoSection() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      color: Colors.white,
+      child: const Row(
+        children: [
+          Icon(Icons.info_outline, color: Colors.blue),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Printerlarni kategoriyalar bo‘yicha ajatsangiz, buyurtmalar avtomatik ravishda tegishli departamentlarga (oshxona, bar va h.k.) yuboriladi.',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
             ),
           ),
         ],
@@ -509,49 +208,252 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     );
   }
 
-  void _saveSettings() async {
-    final settings = PrinterSettings(
-      type: _selectedType,
-      printerName: _selectedPrinterName,
-      ipAddress: _ipController.text,
-      port: int.tryParse(_portController.text) ?? 9100,
+  Future<void> _showPrinterDialog(
+    BuildContext context, [
+    PrinterSettings? printer,
+  ]) async {
+    final isEdit = printer != null;
+    final ipController = TextEditingController(text: printer?.ipAddress ?? '');
+    final portController = TextEditingController(
+      text: printer?.port.toString() ?? '9100',
     );
+    final nameController = TextEditingController(
+      text: printer?.displayName ?? 'Yangi printer',
+    );
+    PrinterType selectedType = printer?.type ?? PrinterType.network;
+    String? selectedPrinterName = printer?.printerName;
+    List<int> selectedCategoryIds = List.from(printer?.categoryIds ?? []);
 
-    await context.read<PrinterProvider>().saveSettings(settings);
-    if (mounted) {
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final categories = context.read<CategoryProvider>().categories;
+          final provider = context.watch<PrinterProvider>();
+
+          return AlertDialog(
+            title: Text(isEdit ? 'Printerni tahrirlash' : 'Yangi printer'),
+            content: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Printer nomi',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        _buildTypeChoice(
+                          'IP Network',
+                          PrinterType.network,
+                          selectedType,
+                          (val) => setDialogState(() => selectedType = val),
+                        ),
+                        const SizedBox(width: 12),
+                        _buildTypeChoice(
+                          'USB Windows',
+                          PrinterType.windows,
+                          selectedType,
+                          (val) => setDialogState(() => selectedType = val),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (selectedType == PrinterType.network) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: ipController,
+                              decoration: const InputDecoration(
+                                labelText: 'IP manzil',
+                                hintText: '192.168.1.100',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 1,
+                            child: TextField(
+                              controller: portController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Port',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const Text(
+                        'Printer tanlang:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      provider.windowsPrinters.isEmpty
+                          ? const Text('Printerlar topilmadi')
+                          : Wrap(
+                              spacing: 8,
+                              children: provider.windowsPrinters.map((name) {
+                                final isSel = selectedPrinterName == name;
+                                return ChoiceChip(
+                                  label: Text(name),
+                                  selected: isSel,
+                                  onSelected: (val) => setDialogState(
+                                    () => selectedPrinterName = name,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                      TextButton.icon(
+                        onPressed: () => provider.scanPrinters(),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Qayta qidirish'),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Kategoriyalarni biriktirish:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: categories.map((cat) {
+                        final isSel = selectedCategoryIds.contains(cat.id);
+                        return FilterChip(
+                          label: Text(cat.name),
+                          selected: isSel,
+                          onSelected: (val) {
+                            setDialogState(() {
+                              if (val) {
+                                selectedCategoryIds.add(cat.id!);
+                              } else {
+                                selectedCategoryIds.remove(cat.id);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Bekor qilish'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final newPrinter = (printer ?? PrinterSettings()).copyWith(
+                    displayName: nameController.text,
+                    type: selectedType,
+                    ipAddress: ipController.text,
+                    port: int.tryParse(portController.text) ?? 9100,
+                    printerName: selectedPrinterName,
+                    categoryIds: selectedCategoryIds,
+                  );
+                  await context.read<PrinterProvider>().savePrinter(newPrinter);
+                  if (context.mounted) Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Saqlash'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTypeChoice(
+    String label,
+    PrinterType type,
+    PrinterType selected,
+    Function(PrinterType) onSelect,
+  ) {
+    final isSel = type == selected;
+    return Expanded(
+      child: InkWell(
+        onTap: () => onSelect(type),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSel
+                ? AppTheme.primaryColor.withOpacity(0.1)
+                : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSel ? AppTheme.primaryColor : Colors.grey[300]!,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                color: isSel ? AppTheme.primaryColor : Colors.black,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _testPrinter(BuildContext context, PrinterSettings printer) async {
+    final result = await context.read<PrinterProvider>().testPrint(printer);
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Sozlamalar saqlandi ✅'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+          content: Text(
+            result ? 'Test chek chiqarildi!' : 'Xatolik yuz berdi.',
           ),
+          backgroundColor: result ? Colors.green : Colors.red,
         ),
       );
     }
   }
 
-  void _testPrint() async {
-    final settings = PrinterSettings(
-      type: _selectedType,
-      printerName: _selectedPrinterName,
-      ipAddress: _ipController.text,
-      port: int.tryParse(_portController.text) ?? 9100,
+  void _deletePrinter(BuildContext context, PrinterSettings printer) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Printerni o\'chirish'),
+        content: Text(
+          'Rostdan ham "${printer.displayName}" printerni o\'chirib tashlamoqchimisiz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Yo\'q'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Ha, o\'chirish',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
 
-    final success = await context.read<PrinterProvider>().testPrint(settings);
-    setState(() {
-      _isSuccess = success;
-      _lastStatus = success ? 'Muvaffaqiyatli ✅' : 'Xatolik ❌';
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? 'Chek chiqarildi!' : 'Xatolik yuz berdi.'),
-          backgroundColor: success ? Colors.green : Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    if (confirm == true && mounted) {
+      await context.read<PrinterProvider>().deletePrinter(printer.id!);
     }
   }
 }

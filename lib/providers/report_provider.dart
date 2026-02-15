@@ -187,12 +187,13 @@ class ReportProvider extends ChangeNotifier {
       SELECT 
         p.name as name, 
         SUM(oi.qty) as total_qty, 
-        SUM(oi.qty * oi.price) as total_revenue
+        SUM(oi.qty * oi.price) as total_revenue,
+        p.quantity as current_stock
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
       WHERE $whereClause
-      GROUP BY p.id, p.name
+      GROUP BY p.id, p.name, p.quantity
       ORDER BY total_revenue DESC
     ''', whereArgs);
   }

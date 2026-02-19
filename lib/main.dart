@@ -5,7 +5,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'core/database_helper.dart';
-import 'core/license_service.dart';
+import 'core/services/license_service.dart';
+import 'models/license_model.dart';
+import 'features/license/screens/license_import_screen.dart';
 import 'core/app_strings.dart';
 import 'providers/product_provider.dart';
 import 'providers/cart_provider.dart';
@@ -30,17 +32,18 @@ import 'features/settings/pin_settings_screen.dart';
 import 'features/settings/brand_settings_screen.dart';
 import 'features/settings/connection_settings_screen.dart';
 import 'providers/connectivity_provider.dart';
-import 'features/activation/activation_screen.dart';
 import 'providers/developer_provider.dart';
 import 'features/mgmt/developer_mgmt_screen.dart';
 import 'features/settings/telegram_settings_screen.dart';
 import 'providers/user_provider.dart';
-import 'features/mgmt/cashiers_mgmt_screen.dart';
-import 'providers/expense_provider.dart';
 import 'providers/customer_provider.dart';
 import 'providers/ai_provider.dart';
+import 'providers/inventory_provider.dart';
+import 'providers/expense_provider.dart';
+import 'features/inventory/inventory_menu_screen.dart';
 import 'features/mgmt/expenses_screen.dart';
 import 'features/mgmt/customers_screen.dart';
+import 'features/mgmt/cashiers_mgmt_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +66,9 @@ void main() async {
 
   // Initialize Database
   await DatabaseHelper.instance.database;
+
+  // Initialize License
+  final initialLicenseStatus = await LicenseService.instance.init();
 
   runApp(
     MultiProvider(
@@ -101,27 +107,18 @@ void main() async {
           create: (_) => CustomerProvider()..loadCustomers(),
         ),
         ChangeNotifierProvider(create: (_) => AiProvider()),
+        ChangeNotifierProvider(
+          create: (_) => InventoryProvider()..loadIngredients(),
+        ),
+        ChangeNotifierProvider.value(value: LicenseService.instance),
       ],
       child: const TezzroApp(),
     ),
   );
 }
 
-class TezzroApp extends StatefulWidget {
+class TezzroApp extends StatelessWidget {
   const TezzroApp({super.key});
-
-  @override
-  State<TezzroApp> createState() => _TezzroAppState();
-}
-
-class _TezzroAppState extends State<TezzroApp> {
-  late Future<bool> _licenseFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _licenseFuture = LicenseService.instance.isActivated();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -132,32 +129,30 @@ class _TezzroAppState extends State<TezzroApp> {
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {
+        final licenseService = context.watch<LicenseService>();
+        final status = licenseService.currentStatus;
+
         return MaterialApp(
           title: 'ZELLY',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           themeMode: ThemeMode.light,
-          home: FutureBuilder<bool>(
-            future: _licenseFuture,
-            builder: (context, snapshot) {
-              // Show loading while checking license
-              if (!snapshot.hasData) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-
-              // Check if activated
-              if (snapshot.data == true) {
-                return const LoginScreen(); // Activated - go to login
-              }
-
-              return const ActivationScreen(); // Not activated - show activation
-            },
-          ),
+          home: _getHome(status),
         );
       },
     );
+  }
+
+  Widget _getHome(LicenseStatus status) {
+    // Agar litsenziya faol bo'lsa yoki imtiyozli davrda bo'lsa - Login sahifasiga
+    if (status.isValid) {
+      return const LoginScreen();
+    }
+
+    // Agar litsenziya muddati tugagan bo'lsa, lekin import sahifasiga kirish ruxsat berilgan bo'lsa
+    // Bu yerda foydalanuvchi hisobotlarni ko'rishi ham mumkin (talab bo'yicha),
+    // lekin biz to'g'ridan-to'g'ri aktivatsiya o'rniga litsenziya oynasini ko'rsatamiz.
+    return const LicenseImportScreen();
   }
 }
 
@@ -601,6 +596,7 @@ class _MainLayoutState extends State<MainLayout> {
     const CashiersMgmtScreen(),
     const ExpensesScreen(),
     const CustomersScreen(),
+    const InventoryMenuScreen(),
   ];
 
   @override
@@ -732,6 +728,11 @@ class _MainLayoutState extends State<MainLayout> {
                           12,
                           Icons.send_outlined,
                           AppStrings.telegramNav,
+                        ),
+                        _buildSidebarItem(
+                          16,
+                          Icons.warehouse_outlined,
+                          'Ombor',
                         ),
                       ],
 

@@ -27,6 +27,21 @@ class InventoryRepository {
     return List.generate(maps.length, (i) => Ingredient.fromMap(maps[i]));
   }
 
+  Future<int> updateIngredient(Ingredient ingredient) async {
+    final db = await _dbHelper.database;
+    return await db.update(
+      'ingredients',
+      ingredient.toMap(),
+      where: 'id = ?',
+      whereArgs: [ingredient.id],
+    );
+  }
+
+  Future<int> deleteIngredient(int id) async {
+    final db = await _dbHelper.database;
+    return await db.delete('ingredients', where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<IngredientStock?> getIngredientStock(int ingredientId) async {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -159,5 +174,16 @@ class InventoryRepository {
       flag.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  Future<List<Map<String, dynamic>>> getStockMovements() async {
+    final db = await _dbHelper.database;
+    return await db.rawQuery('''
+      SELECT sm.*, i.name as ingredient_name, i.base_unit
+      FROM stock_movements sm
+      JOIN ingredients i ON sm.ingredient_id = i.id
+      ORDER BY sm.created_at DESC
+      LIMIT 100
+    ''');
   }
 }

@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 26,
+      version: 27,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -606,6 +606,37 @@ class DatabaseHelper {
         );
       } catch (e) {
         print('Error upgrading database to v26: $e');
+      }
+    }
+
+    if (oldVersion < 27) {
+      // Litsenziya va vaqt nazorati uchun settings jadvallari v3 da yaratilgan,
+      // biz faqat kerakli default qiymatlarni kiritishimiz yoki
+      // qo'shimcha jadval (agar kerak bo'lsa) qo'shishimiz mumkin.
+      // Lekin xavfsizlik uchun alohida jadval ma'qul.
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS security_logs (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TEXT
+          )
+        ''');
+
+        // Boshlang'ich vaqt yozuvlari
+        await db.insert('security_logs', {
+          'key': 'last_wall_time',
+          'value': DateTime.now().toUtc().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+
+        await db.insert('security_logs', {
+          'key': 'last_uptime_ms',
+          'value': '0',
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        print('Error upgrading database to v27: $e');
       }
     }
   }

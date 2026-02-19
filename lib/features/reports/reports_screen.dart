@@ -15,9 +15,6 @@ import '../../providers/connectivity_provider.dart';
 import '../../core/app_strings.dart';
 import '../../core/telegram_service.dart';
 import 'package:intl/intl.dart';
-import '../../widgets/ai_action_button.dart';
-import '../../widgets/ai_summary_banner.dart';
-import '../../providers/ai_provider.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});

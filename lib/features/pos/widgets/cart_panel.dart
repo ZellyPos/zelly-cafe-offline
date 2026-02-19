@@ -7,6 +7,7 @@ import '../../../core/app_strings.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../models/table.dart';
 import 'quantity_dialog.dart';
+import '../../license/widgets/license_gate.dart';
 
 class CartPanelWidget extends StatelessWidget {
   final int orderType;
@@ -397,19 +398,21 @@ class CartPanelWidget extends StatelessWidget {
               Expanded(
                 child: SizedBox(
                   height: 60,
-                  child: ElevatedButton(
-                    onPressed: onShowPaymentDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.secondaryColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  child: LicenseGate(
+                    child: ElevatedButton(
+                      onPressed: onShowPaymentDialog,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.secondaryColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      isWaiter ? 'SAQLASH' : AppStrings.checkout,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                      child: Text(
+                        isWaiter ? 'SAQLASH' : AppStrings.checkout,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),

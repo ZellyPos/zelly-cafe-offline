@@ -61,6 +61,7 @@ dependencies:
   pdf: ^3.10.10
   printing: ^5.11.1
   share_plus: ^10.1.0
+  pointycastle: ^3.9.1
 
 dev_dependencies:
   flutter_test:

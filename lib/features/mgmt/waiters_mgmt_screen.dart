@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../providers/waiter_provider.dart';
 import '../../models/waiter.dart';
 import '../../core/app_strings.dart';
-import '../../core/theme.dart';
 import './waiter_profile_screen.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../widgets/ai_action_button.dart';
@@ -46,17 +45,19 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
       return matchesSearch && matchesType;
     }).toList();
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           AppStrings.waiterMgmt,
-          style: const TextStyle(
-            color: Color(0xFF1E293B),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.surface,
         elevation: 0,
         centerTitle: false,
         actions: [
@@ -79,8 +80,8 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                   icon: const Icon(Icons.add),
                   label: Text(AppStrings.addWaiter),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
                       vertical: 16,
@@ -100,18 +101,27 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
           // Filter Bar
           Container(
             padding: const EdgeInsets.all(24),
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             child: Row(
               children: [
                 Expanded(
                   flex: 2,
                   child: TextField(
                     onChanged: (val) => setState(() => searchQuery = val),
+                    style: TextStyle(color: theme.colorScheme.onSurface),
                     decoration: InputDecoration(
                       hintText: AppStrings.searchWaiterHint,
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      ),
                       filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
+                      fillColor: theme.brightness == Brightness.light
+                          ? const Color(0xFFF1F5F9)
+                          : theme.colorScheme.onSurface.withOpacity(0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -123,10 +133,14 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<int?>(
-                    value: filterType,
+                    initialValue: filterType,
+                    dropdownColor: theme.colorScheme.surface,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
+                      fillColor: theme.brightness == Brightness.light
+                          ? const Color(0xFFF1F5F9)
+                          : theme.colorScheme.onSurface.withOpacity(0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -185,15 +199,23 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
   }
 
   Widget _buildEmptyState() {
+    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.people_outline, size: 64, color: Colors.grey.shade300),
+          Icon(
+            Icons.people_outline,
+            size: 64,
+            color: theme.colorScheme.onSurface.withOpacity(0.1),
+          ),
           const SizedBox(height: 16),
           Text(
             AppStrings.noWaitersFound,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 18),
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              fontSize: 18,
+            ),
           ),
         ],
       ),
@@ -218,18 +240,24 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
       valueText = AppStrings.primaryStaff;
     }
 
+    final theme = Theme.of(context);
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: theme.shadowColor.withOpacity(0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: theme.brightness == Brightness.light
+              ? const Color(0xFFE2E8F0)
+              : theme.colorScheme.onSurface.withOpacity(0.1),
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -259,7 +287,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                               ? 15
                               : 16,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1E293B),
+                          color: theme.colorScheme.onSurface,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -298,7 +326,10 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                 ),
                 Text(
                   valueText,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 if (!isKassa && waiter.pinCode != null)
@@ -402,133 +433,164 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            waiter == null ? AppStrings.addWaiter : AppStrings.editWaiter,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                enabled: !isKassa,
-                decoration: InputDecoration(
-                  labelText: AppStrings.waiterName,
-                  border: OutlineInputBorder(
+        builder: (context, setDialogState) {
+          final theme = Theme.of(context);
+          return AlertDialog(
+            backgroundColor: theme.colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text(
+              waiter == null ? AppStrings.addWaiter : AppStrings.editWaiter,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  enabled: !isKassa,
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                  decoration: InputDecoration(
+                    labelText: AppStrings.waiterName,
+                    labelStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                if (!isKassa) ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedType,
+                    dropdownColor: theme.colorScheme.surface,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.waiterType,
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    items: [
+                      DropdownMenuItem(value: 0, child: Text(AppStrings.fixed)),
+                      DropdownMenuItem(
+                        value: 1,
+                        child: Text(AppStrings.percentage),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      setDialogState(() => selectedType = val!);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: valueController,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                    decoration: InputDecoration(
+                      labelText: selectedType == 0
+                          ? AppStrings.serviceFeeFixed
+                          : AppStrings.serviceFeePercentage,
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      hintText: selectedType == 0
+                          ? AppStrings.exampleFixed
+                          : AppStrings.examplePercentage,
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: pinController,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.pinCodeLabel,
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      hintText: AppStrings.digitsOnlyHint,
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    title: Text(AppStrings.activeStaff),
+                    value: isActive == 1,
+                    onChanged: (val) =>
+                        setDialogState(() => isActive = val ? 1 : 0),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  AppStrings.cancel,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (nameController.text.isEmpty && !isKassa) return;
+                  final newWaiter = Waiter(
+                    id: waiter?.id,
+                    name: nameController.text,
+                    type: isKassa ? 0 : selectedType,
+                    value: isKassa
+                        ? 0.0
+                        : (double.tryParse(valueController.text) ?? 0.0),
+                    pinCode: isKassa
+                        ? null
+                        : pinController.text.isEmpty
+                        ? null
+                        : pinController.text,
+                    isActive: isActive,
+                  );
+                  if (waiter == null) {
+                    context.read<WaiterProvider>().addWaiter(
+                      newWaiter,
+                      connectivity: context.read<ConnectivityProvider>(),
+                    );
+                  } else {
+                    context.read<WaiterProvider>().updateWaiter(
+                      newWaiter,
+                      connectivity: context.read<ConnectivityProvider>(),
+                    );
+                  }
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
+                child: Text(AppStrings.save),
               ),
-              if (!isKassa) ...[
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  value: selectedType,
-                  decoration: InputDecoration(
-                    labelText: AppStrings.waiterType,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  items: [
-                    DropdownMenuItem(value: 0, child: Text(AppStrings.fixed)),
-                    DropdownMenuItem(
-                      value: 1,
-                      child: Text(AppStrings.percentage),
-                    ),
-                  ],
-                  onChanged: (val) {
-                    setDialogState(() => selectedType = val!);
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: valueController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: selectedType == 0
-                        ? AppStrings.serviceFeeFixed
-                        : AppStrings.serviceFeePercentage,
-                    hintText: selectedType == 0
-                        ? AppStrings.exampleFixed
-                        : AppStrings.examplePercentage,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: pinController,
-                  decoration: InputDecoration(
-                    labelText: AppStrings.pinCodeLabel,
-                    hintText: AppStrings.digitsOnlyHint,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  title: Text(AppStrings.activeStaff),
-                  value: isActive == 1,
-                  onChanged: (val) =>
-                      setDialogState(() => isActive = val ? 1 : 0),
-                ),
-              ],
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                AppStrings.cancel,
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (nameController.text.isEmpty && !isKassa) return;
-                final newWaiter = Waiter(
-                  id: waiter?.id,
-                  name: nameController.text,
-                  type: isKassa ? 0 : selectedType,
-                  value: isKassa
-                      ? 0.0
-                      : (double.tryParse(valueController.text) ?? 0.0),
-                  pinCode: isKassa
-                      ? null
-                      : pinController.text.isEmpty
-                      ? null
-                      : pinController.text,
-                  isActive: isActive,
-                );
-                if (waiter == null) {
-                  context.read<WaiterProvider>().addWaiter(
-                    newWaiter,
-                    connectivity: context.read<ConnectivityProvider>(),
-                  );
-                } else {
-                  context.read<WaiterProvider>().updateWaiter(
-                    newWaiter,
-                    connectivity: context.read<ConnectivityProvider>(),
-                  );
-                }
-                Navigator.pop(context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(AppStrings.save),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

@@ -4,9 +4,7 @@ import 'package:tezzro/core/database_helper.dart';
 import 'package:tezzro/core/services/inventory_service.dart';
 import 'package:tezzro/models/inventory_models.dart';
 import 'package:tezzro/models/order.dart';
-import 'package:tezzro/models/product.dart';
 import 'package:tezzro/repositories/inventory_repository.dart';
-import 'dart:io';
 
 void main() {
   sqfliteFfiInit();

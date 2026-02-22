@@ -273,7 +273,7 @@ class _IngredientsScreenState extends State<IngredientsScreen> {
                     Expanded(
                       flex: 2,
                       child: DropdownButtonFormField<String>(
-                        value: baseUnit,
+                        initialValue: baseUnit,
                         decoration: InputDecoration(
                           labelText: 'O\'lchov birligi',
                           border: OutlineInputBorder(

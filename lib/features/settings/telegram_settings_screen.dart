@@ -47,13 +47,14 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Telegram Sozlamalari'),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
+        backgroundColor: theme.colorScheme.surface,
+        foregroundColor: theme.colorScheme.onSurface,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
@@ -63,11 +64,11 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
+                    color: theme.shadowColor.withOpacity(0.03),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -76,18 +77,21 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Bot Sozlamalari',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Hisobotlarni Telegram botga yuborish uchun quyidagi ma\'lumotlarni kiriting.',
-                    style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      fontSize: 14,
+                    ),
                   ),
                   const SizedBox(height: 32),
 
@@ -99,11 +103,15 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                       prefixIcon: const Icon(Icons.token_outlined),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.onSurface.withOpacity(0.15),
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.onSurface.withOpacity(0.15),
+                        ),
                       ),
                     ),
                   ),
@@ -117,11 +125,15 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                       prefixIcon: const Icon(Icons.chat_bubble_outline),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.onSurface.withOpacity(0.15),
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.onSurface.withOpacity(0.15),
+                        ),
                       ),
                     ),
                   ),
@@ -133,8 +145,8 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                     child: ElevatedButton(
                       onPressed: _saveSettings,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4C1D95),
-                        foregroundColor: Colors.white,
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: theme.colorScheme.onPrimary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -161,39 +173,58 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
   }
 
   Widget _buildLabel(String text) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: Color(0xFF475569),
+          color: theme.colorScheme.onSurface.withOpacity(0.6),
         ),
       ),
     );
   }
 
   Widget _buildInstructions() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark
+        ? theme.colorScheme.primary.withOpacity(0.08)
+        : const Color(0xFFEFF6FF);
+    final borderColor = isDark
+        ? theme.colorScheme.primary.withOpacity(0.2)
+        : const Color(0xFFDBEAFE);
+    final headingColor = isDark
+        ? theme.colorScheme.primary
+        : const Color(0xFF1E40AF);
+    final textColor = isDark
+        ? theme.colorScheme.primary.withOpacity(0.85)
+        : const Color(0xFF1E40AF);
+    final iconColor = isDark
+        ? theme.colorScheme.primary
+        : const Color(0xFF2563EB);
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF),
+        color: bgColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFDBEAFE)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
-              Icon(Icons.info_outline, color: Color(0xFF2563EB), size: 20),
-              SizedBox(width: 8),
+            children: [
+              Icon(Icons.info_outline, color: iconColor, size: 20),
+              const SizedBox(width: 8),
               Text(
                 'Qanday sozlanadi?',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E40AF),
+                  color: headingColor,
                 ),
               ),
             ],
@@ -202,22 +233,29 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
           _buildStep(
             1,
             'Telegramda @BotFather orqasli yangi bot yarating va Token-ni oling.',
+            textColor,
           ),
-          _buildStep(2, 'Botni o\'zingizning guruhingizga qo\'shing.'),
+          _buildStep(
+            2,
+            'Botni o\'zingizning guruhingizga qo\'shing.',
+            textColor,
+          ),
           _buildStep(
             3,
             'Guruhning ID raqamini aniqlash uchun @GetMyChatID_Bot botidan foydalaning.',
+            textColor,
           ),
           _buildStep(
             4,
             'Olingan ma\'lumotlarni yuqoridagi maydonlarga kiriting va "Saqlash" tugmasini bosing.',
+            textColor,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStep(int number, String text) {
+  Widget _buildStep(int number, String text, Color textColor) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -225,16 +263,10 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
         children: [
           Text(
             '$number. ',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E40AF),
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
           ),
           Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: Color(0xFF1E40AF), fontSize: 13),
-            ),
+            child: Text(text, style: TextStyle(color: textColor, fontSize: 13)),
           ),
         ],
       ),

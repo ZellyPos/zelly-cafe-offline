@@ -76,8 +76,7 @@ class ShiftService {
     final updatedShift = shift.copyWith(
       status: 0,
       notes:
-          (shift.notes ?? '') +
-          '\n[Qayta ochildi: $reason (Admin ID: $adminId)]',
+          '${shift.notes ?? ''}\n[Qayta ochildi: $reason (Admin ID: $adminId)]',
     );
 
     await _repo.updateShift(updatedShift);

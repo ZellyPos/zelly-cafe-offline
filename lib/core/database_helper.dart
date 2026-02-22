@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 27,
+      version: 31,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -639,6 +639,78 @@ class DatabaseHelper {
         print('Error upgrading database to v27: $e');
       }
     }
+
+    if (oldVersion < 28) {
+      try {
+        // Add active_order_id to tables
+        await db.execute('ALTER TABLE tables ADD COLUMN active_order_id TEXT');
+
+        // Pre-fill active_order_id for currently occupied tables
+        final openOrders = await db.query(
+          'orders',
+          where: 'status = 0 AND table_id IS NOT NULL',
+        );
+
+        for (var order in openOrders) {
+          final tableId = order['table_id'];
+          final orderId = order['id'];
+          if (tableId != null && orderId != null) {
+            await db.update(
+              'tables',
+              {'active_order_id': orderId},
+              where: 'id = ?',
+              whereArgs: [tableId],
+            );
+          }
+        }
+      } catch (e) {
+        print('Error upgrading database to v28: $e');
+      }
+    }
+
+    if (oldVersion < 29) {
+      try {
+        await db.execute('ALTER TABLE tables ADD COLUMN x REAL DEFAULT 0');
+        await db.execute('ALTER TABLE tables ADD COLUMN y REAL DEFAULT 0');
+        await db.execute(
+          'ALTER TABLE tables ADD COLUMN width REAL DEFAULT 0.1',
+        );
+        await db.execute(
+          'ALTER TABLE tables ADD COLUMN height REAL DEFAULT 0.1',
+        );
+        await db.execute(
+          'ALTER TABLE tables ADD COLUMN shape INTEGER DEFAULT 0',
+        ); // 0: square, 1: circle
+      } catch (e) {
+        print('Error upgrading database to v29: $e');
+      }
+    }
+
+    if (oldVersion < 30) {
+      try {
+        await db.execute(
+          'ALTER TABLE products ADD COLUMN no_service_charge INTEGER DEFAULT 0',
+        );
+      } catch (e) {
+        print('Error upgrading database to v30: $e');
+      }
+    }
+
+    if (oldVersion < 31) {
+      try {
+        await db.execute(
+          'ALTER TABLE order_items ADD COLUMN product_name TEXT',
+        );
+        // Backfill product_name from products table where possible
+        await db.execute('''
+          UPDATE order_items 
+          SET product_name = (SELECT name FROM products WHERE products.id = order_items.product_id)
+          WHERE product_name IS NULL
+        ''');
+      } catch (e) {
+        print('Error upgrading database to v31: $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -666,7 +738,8 @@ CREATE TABLE IF NOT EXISTS products (
   image_path TEXT,
   is_set $integerType DEFAULT 0,
   sort_order INTEGER DEFAULT 0,
-  quantity REAL
+  quantity REAL,
+  no_service_charge INTEGER DEFAULT 0
 )
 ''');
 
@@ -708,6 +781,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   id $idType,
   order_id $textType,
   product_id $integerType,
+  product_name TEXT,
   qty $integerType,
   price $realType,
   bundle_items_json TEXT,
@@ -738,7 +812,13 @@ CREATE TABLE IF NOT EXISTS tables (
   pricing_type INTEGER NOT NULL DEFAULT 0,
   hourly_rate REAL DEFAULT 0,
   fixed_amount REAL DEFAULT 0,
-  service_percentage REAL DEFAULT 0
+  service_percentage REAL DEFAULT 0,
+  active_order_id TEXT,
+  x REAL DEFAULT 0,
+  y REAL DEFAULT 0,
+  width REAL DEFAULT 0.1,
+  height REAL DEFAULT 0.1,
+  shape INTEGER DEFAULT 0
 )
 ''');
 
@@ -1008,6 +1088,28 @@ CREATE TABLE IF NOT EXISTS users (
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items (product_id)',
     );
+
+    // Security Logs Table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS security_logs (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TEXT
+      )
+    ''');
+
+    // Initial time records
+    await db.insert('security_logs', {
+      'key': 'last_wall_time',
+      'value': DateTime.now().toUtc().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+
+    await db.insert('security_logs', {
+      'key': 'last_uptime_ms',
+      'value': '0',
+      'updated_at': DateTime.now().toIso8601String(),
+    });
   }
 
   // Generic methods

@@ -65,15 +65,16 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           "PIN / Parolni o'zgartirish",
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
+        backgroundColor: theme.colorScheme.surface,
+        foregroundColor: theme.colorScheme.onSurface,
         elevation: 0,
       ),
       body: Center(
@@ -82,10 +83,13 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
           margin: const EdgeInsets.all(32),
           padding: const EdgeInsets.all(32),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20),
+              BoxShadow(
+                color: theme.shadowColor.withOpacity(0.04),
+                blurRadius: 20,
+              ),
             ],
           ),
           child: Column(
@@ -97,9 +101,12 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 "Xavfsizlik uchun joriy PIN kodni kiriting",
-                style: TextStyle(color: Colors.grey, fontSize: 13),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 32),
               _buildPinField(
@@ -129,8 +136,8 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
                 child: ElevatedButton(
                   onPressed: _savePin,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4C1D95),
-                    foregroundColor: Colors.white,
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -154,14 +161,15 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
     bool obscure,
     Function(bool) onToggle,
   ) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w500,
-            color: Color(0xFF64748B),
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
             fontSize: 13,
           ),
         ),
@@ -171,15 +179,18 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
           obscureText: obscure,
           keyboardType: TextInputType.number,
           maxLength: 4,
-          style: const TextStyle(
+          style: TextStyle(
             letterSpacing: 8,
             fontSize: 18,
             fontWeight: FontWeight.bold,
+            color: theme.colorScheme.onSurface,
           ),
           decoration: InputDecoration(
             counterText: "",
             filled: true,
-            fillColor: const Color(0xFFF8FAFC),
+            fillColor: theme.brightness == Brightness.light
+                ? const Color(0xFFF8FAFC)
+                : theme.colorScheme.onSurface.withOpacity(0.08),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,

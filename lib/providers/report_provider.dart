@@ -18,7 +18,7 @@ class ReportFilter {
 }
 
 class ReportProvider extends ChangeNotifier {
-  ReportFilter _filter = ReportFilter(
+  final ReportFilter _filter = ReportFilter(
     startDate: DateTime.now().subtract(const Duration(days: 7)),
     endDate: DateTime.now(),
   );
@@ -27,7 +27,7 @@ class ReportProvider extends ChangeNotifier {
   DateTime get dateFrom => _filter.startDate;
   DateTime get dateTo => _filter.endDate;
 
-  bool _isLoading = false;
+  final bool _isLoading = false;
   bool get isLoading => _isLoading;
 
   void updateFilter({
@@ -43,19 +43,19 @@ class ReportProvider extends ChangeNotifier {
     if (startDate != null) _filter.startDate = startDate;
     if (endDate != null) _filter.endDate = endDate;
 
-    if (clearOrderType)
+    if (clearOrderType) {
       _filter.orderType = null;
-    else if (orderType != null)
+    } else if (orderType != null)
       _filter.orderType = orderType;
 
-    if (clearLocation)
+    if (clearLocation) {
       _filter.locationId = null;
-    else if (locationId != null)
+    } else if (locationId != null)
       _filter.locationId = locationId;
 
-    if (clearWaiter)
+    if (clearWaiter) {
       _filter.waiterId = null;
-    else if (waiterId != null)
+    } else if (waiterId != null)
       _filter.waiterId = waiterId;
 
     notifyListeners();

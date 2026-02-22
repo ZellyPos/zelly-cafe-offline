@@ -148,7 +148,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String?>(
-                    value: selectedCategoryFilter,
+                    initialValue: selectedCategoryFilter,
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),
@@ -180,7 +180,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<bool?>(
-                    value: selectedStatusFilter,
+                    initialValue: selectedStatusFilter,
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),
@@ -394,7 +394,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                                               .read<ConnectivityProvider>(),
                                         );
                                   },
-                                  activeColor: Colors.green,
+                                  activeThumbColor: Colors.green,
                                 ),
                               ),
                             ),
@@ -510,6 +510,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
     List<BundleItem>? bundleItems = product?.bundleItems != null
         ? List.from(product!.bundleItems!)
         : null;
+    bool noServiceCharge = product?.noServiceCharge ?? false;
 
     showDialog(
       context: context,
@@ -677,7 +678,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                           ),
                           const SizedBox(height: 16),
                           DropdownButtonFormField<String>(
-                            value: selectedCategory,
+                            initialValue: selectedCategory,
                             decoration: InputDecoration(
                               labelText: AppStrings.productCategory,
                               border: OutlineInputBorder(
@@ -722,6 +723,20 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                               setDialogState(() {
                                 isSet = val;
                                 if (isSet) bundleItems ??= [];
+                              });
+                            },
+                          ),
+                          SwitchListTile(
+                            title: Text(
+                              AppStrings.noServiceCharge,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            value: noServiceCharge,
+                            onChanged: (val) {
+                              setDialogState(() {
+                                noServiceCharge = val;
                               });
                             },
                           ),
@@ -900,6 +915,9 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     bundleItems: isSet ? bundleItems : null,
                     sortOrder: product?.sortOrder ?? 0,
                     quantity: double.tryParse(quantityController.text),
+                    trackType: product?.trackType ?? 0,
+                    allowNegativeStock: product?.allowNegativeStock ?? false,
+                    noServiceCharge: noServiceCharge,
                   );
 
                   if (product == null) {

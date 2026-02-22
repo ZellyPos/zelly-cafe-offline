@@ -224,6 +224,7 @@ class Translations {
           'Ushbu kategoriyada mahsulotlar bor. O\'chirish imkonsiz!',
       'category_color': 'Kategoriya rangi',
       'reorder_categories': 'Kategoriyalarni tartiblash',
+      'no_service_charge': 'Foiz hisoblanmasin',
     },
     'ru': {
       'app_name': 'Zelly ',
@@ -446,6 +447,7 @@ class Translations {
           'В этой категории есть продукты. Удаление невозможно!',
       'category_color': 'Цвет категории',
       'reorder_categories': 'Сортировка категорий',
+      'no_service_charge': 'Не считать процент',
     },
     'ky': {
       'app_name': 'Zelly ',
@@ -668,6 +670,7 @@ class Translations {
           'Бул категорияда продуктылар бар. Өчүрүү мүмкүн эмес!',
       'category_color': 'Категория түсү',
       'reorder_categories': 'Категорияларды иреттөө',
+      'no_service_charge': 'Пайыз эсептелбесин',
     },
     'kk': {
       'app_name': 'Zelly ',
@@ -886,6 +889,7 @@ class Translations {
       'category_has_products': 'Бұл санатта өнімдер бар. Өшіру мүмкін емес!',
       'category_color': 'Санат түсі',
       'reorder_categories': 'Санаттарды реттеу',
+      'no_service_charge': 'Пайыз есептелмесін',
     },
   };
 

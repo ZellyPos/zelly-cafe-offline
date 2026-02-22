@@ -6,15 +6,13 @@ import '../../providers/product_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../core/theme.dart';
-import '../../models/product.dart';
 import '../../core/app_strings.dart';
-
 import '../../core/printing_service.dart';
-
 import '../../providers/waiter_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../providers/table_provider.dart';
 import '../../providers/location_provider.dart';
+import '../../models/product.dart';
 import '../../models/table.dart';
 import '../../models/order.dart';
 import '../../models/waiter.dart';
@@ -234,7 +232,9 @@ class _PosScreenState extends State<PosScreen> {
     final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: isDark ? theme.colorScheme.surface : Colors.blue.shade50,
+      color: isDark
+          ? theme.colorScheme.surface
+          : theme.colorScheme.primaryContainer.withOpacity(0.3),
       child: Row(
         children: [
           ElevatedButton.icon(
@@ -264,6 +264,13 @@ class _PosScreenState extends State<PosScreen> {
             onPressed: () => _showChangeTableDialog(context),
             icon: const Icon(Icons.swap_horiz, color: Colors.blue),
             tooltip: AppStrings.changeTable,
+            iconSize: 20,
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            onPressed: () => _showMergeTableDialog(context),
+            icon: const Icon(Icons.merge_type, color: Colors.blue),
+            tooltip: 'Stollarni birlashtirish',
             iconSize: 20,
           ),
           SizedBox(width: isCompact ? 12 : 24),
@@ -336,7 +343,9 @@ class _PosScreenState extends State<PosScreen> {
     final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
-      color: isDark ? theme.colorScheme.surface : Colors.orange.shade50,
+      color: isDark
+          ? theme.colorScheme.surface
+          : Colors.orange.withOpacity(0.1),
       child: Row(
         children: [
           ElevatedButton.icon(
@@ -372,6 +381,8 @@ class _PosScreenState extends State<PosScreen> {
     bool isCompact,
   ) {
     if (cartProvider.activeOpenedAt == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Row(
       children: [
         SizedBox(width: isCompact ? 12 : 24),
@@ -391,14 +402,16 @@ class _PosScreenState extends State<PosScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.orange.shade100,
+              color: isDark
+                  ? Colors.orange.withOpacity(0.2)
+                  : Colors.orange.withOpacity(0.1),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               "Daq: ${DateTime.now().difference(cartProvider.activeOpenedAt!).inMinutes}",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.orange.shade900,
+                color: isDark ? Colors.orange : Colors.orange.shade900,
                 fontSize: isCompact ? 11 : 12,
               ),
             ),
@@ -505,7 +518,9 @@ class _PosScreenState extends State<PosScreen> {
           selectedColor: catColor ?? AppTheme.primaryColor,
           backgroundColor:
               catColor?.withOpacity(1) ??
-              (isDark ? theme.colorScheme.surface : Colors.grey.shade100),
+              (isDark
+                  ? theme.colorScheme.surface
+                  : theme.dividerColor.withOpacity(0.1)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         );
       },
@@ -623,7 +638,6 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _buildSortButton(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     return PopupMenuButton<ProductSortMode>(
       initialValue: _currentSort,
       onSelected: (ProductSortMode result) {
@@ -637,9 +651,7 @@ class _PosScreenState extends State<PosScreen> {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isDark ? Colors.white12 : Colors.grey.shade300,
-          ),
+          border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -695,6 +707,7 @@ class _PosScreenState extends State<PosScreen> {
     showDialog(
       context: context,
       builder: (context) {
+        final theme = Theme.of(context);
         final size = MediaQuery.of(context).size;
 
         return Dialog(
@@ -766,7 +779,7 @@ class _PosScreenState extends State<PosScreen> {
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
                           decoration: BoxDecoration(
-                            color: catColor ?? Colors.grey.shade100,
+                            color: catColor ?? theme.colorScheme.surface,
                             borderRadius: BorderRadius.circular(12),
                             border: isSelected
                                 ? Border.all(
@@ -776,7 +789,7 @@ class _PosScreenState extends State<PosScreen> {
                                 : null,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
+                                color: theme.shadowColor.withOpacity(0.05),
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
                               ),
@@ -792,7 +805,7 @@ class _PosScreenState extends State<PosScreen> {
                               fontWeight: FontWeight.bold,
                               color: catColor != null
                                   ? (isDark ? Colors.white : Colors.black)
-                                  : Colors.black,
+                                  : theme.colorScheme.onSurface,
                             ),
                           ),
                         ),
@@ -906,9 +919,314 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
+  void _showMergeTableDialog(BuildContext context) {
+    final tableProvider = context.read<TableProvider>();
+    final cartProvider = context.read<CartProvider>();
+    final connectivity = context.read<ConnectivityProvider>();
+
+    int selectedTabIndex = 0;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final theme = Theme.of(context);
+          return Dialog(
+            backgroundColor: theme.colorScheme.surface,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 24,
+            ),
+            child: Container(
+              width: 900,
+              height: 600,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  // Header
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.merge_type,
+                        color: Colors.blue,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Stollarni birlashtirish',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(
+                          Icons.close,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Quyidagi stollardan birini tanlang. Uning buyurtmasi ushbu stolga qo\'shiladi.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Location Tabs
+                  Consumer<LocationProvider>(
+                    builder: (context, locProv, child) {
+                      final locations = locProv.locations;
+                      if (locations.isEmpty) {
+                        return const Center(
+                          child: Text('Lokatsiyalar topilmadi'),
+                        );
+                      }
+
+                      return Column(
+                        children: [
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: locations.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final location = entry.value;
+                                final isSelected = index == selectedTabIndex;
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() => selectedTabIndex = index);
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 12,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? AppTheme.primaryColor
+                                            : theme.dividerColor.withOpacity(
+                                                0.1,
+                                              ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        location.name,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+
+                          // Tab Content - Table Grid
+                          SizedBox(
+                            height: 420,
+                            child: FutureBuilder<List<TableModel>>(
+                              future: tableProvider.getTablesForLocation(
+                                locations[selectedTabIndex].id,
+                              ),
+                              builder: (context, tableSnapshot) {
+                                if (tableSnapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
+
+                                if (!tableSnapshot.hasData ||
+                                    tableSnapshot.data!.isEmpty) {
+                                  return const Center(
+                                    child: Text('Stollar yo\'q'),
+                                  );
+                                }
+
+                                final tables = tableSnapshot.data!;
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 16),
+                                  child: GridView.builder(
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: 6,
+                                          crossAxisSpacing: 12,
+                                          mainAxisSpacing: 12,
+                                        ),
+                                    itemCount: tables.length,
+                                    itemBuilder: (context, index) {
+                                      final table = tables[index];
+                                      if (table.id == widget.table?.id) {
+                                        return const SizedBox.shrink();
+                                      }
+
+                                      return InkWell(
+                                        onTap: () async {
+                                          final bool
+                                          confirmed = await showDialog(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              title: const Text('Tasdiqlash'),
+                                              content: Text(
+                                                '${table.name} stoli buyurtmasi ushbu stolga birlashtirilsinmi?',
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                        context,
+                                                        false,
+                                                      ),
+                                                  child: const Text('Yo\'q'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(
+                                                        context,
+                                                        true,
+                                                      ),
+                                                  child: const Text(
+                                                    'Ha, birlashtirish',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+
+                                          if (confirmed && context.mounted) {
+                                            final success = await cartProvider
+                                                .mergeTable(
+                                                  table.id!,
+                                                  widget.table!.id!,
+                                                  connectivity,
+                                                );
+
+                                            if (context.mounted) {
+                                              if (success) {
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Stollar muvaffaqiyatli birlashtirildi',
+                                                    ),
+                                                    backgroundColor:
+                                                        Colors.green,
+                                                  ),
+                                                );
+                                                Navigator.pop(context);
+                                              } else {
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Xatolik yuz berdi',
+                                                    ),
+                                                    backgroundColor: Colors.red,
+                                                  ),
+                                                );
+                                              }
+                                            }
+                                          }
+                                        },
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            color: theme.colorScheme.surface,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: theme.shadowColor
+                                                    .withOpacity(0.1),
+                                                blurRadius: 4,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.table_bar,
+                                                size: 28,
+                                                color: table.status == 1
+                                                    ? Colors.red
+                                                    : Colors.green,
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                table.name,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                              Text(
+                                                table.status == 1
+                                                    ? 'Band'
+                                                    : 'Bo\'sh',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: table.status == 1
+                                                      ? Colors.red
+                                                      : Colors.green,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _showChangeTableDialog(BuildContext context) {
     final tableProvider = context.read<TableProvider>();
-    final locationProvider = context.read<LocationProvider>();
     final cartProvider = context.read<CartProvider>();
 
     if (cartProvider.items.isEmpty) {
@@ -926,227 +1244,244 @@ class _PosScreenState extends State<PosScreen> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => Dialog(
-          backgroundColor: Colors.white,
-          insetPadding: EdgeInsets.zero,
-          child: Container(
-            width: 900,
-            height: 600,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                // Header
-                Row(
-                  children: [
-                    const Icon(Icons.swap_horiz, color: Colors.black, size: 24),
-                    const SizedBox(width: 12),
-                    Text(
-                      AppStrings.changeTable,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
+        builder: (context, setState) {
+          final theme = Theme.of(context);
+          return Dialog(
+            backgroundColor: theme.colorScheme.surface,
+            insetPadding: EdgeInsets.zero,
+            child: Container(
+              width: 900,
+              height: 600,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  // Header
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.swap_horiz,
+                        color: theme.colorScheme.onSurface,
+                        size: 24,
                       ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, color: Colors.black),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                      const SizedBox(width: 12),
+                      Text(
+                        AppStrings.changeTable,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(
+                          Icons.close,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
-                // Location Tabs
-                Consumer<LocationProvider>(
-                  builder: (context, locationProvider, child) {
-                    final locations = locationProvider.locations;
+                  // Location Tabs
+                  Consumer<LocationProvider>(
+                    builder: (context, locationProvider, child) {
+                      final locations = locationProvider.locations;
 
-                    if (locations.isEmpty) {
-                      return const Center(
-                        child: Text('Lokatsiyalar topilmadi'),
-                      );
-                    }
+                      if (locations.isEmpty) {
+                        return const Center(
+                          child: Text('Lokatsiyalar topilmadi'),
+                        );
+                      }
 
-                    return Column(
-                      children: [
-                        // Tab Bar - category style
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: locations.asMap().entries.map((entry) {
-                              final index = entry.key;
-                              final location = entry.value;
-                              final isSelected = index == selectedTabIndex;
+                      return Column(
+                        children: [
+                          // Tab Bar - category style
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: locations.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final location = entry.value;
+                                final isSelected = index == selectedTabIndex;
 
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      selectedTabIndex = index;
-                                    });
-                                  },
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? AppTheme.primaryColor
-                                          : Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: isSelected
-                                          ? Border.all(
-                                              color: AppTheme.primaryColor,
-                                              width: 2,
-                                            )
-                                          : null,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.05),
-                                          blurRadius: 4,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      location.name ??
-                                          'Lokatsiya ${location.id}',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        selectedTabIndex = index;
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 12,
+                                      ),
+                                      decoration: BoxDecoration(
                                         color: isSelected
-                                            ? Colors.white
-                                            : Colors.black,
+                                            ? AppTheme.primaryColor
+                                            : theme.dividerColor.withOpacity(
+                                                0.1,
+                                              ),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: isSelected
+                                            ? Border.all(
+                                                color: AppTheme.primaryColor,
+                                                width: 2,
+                                              )
+                                            : null,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: theme.shadowColor
+                                                .withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        location.name,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : theme.colorScheme.onSurface,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-
-                        // Tab Content
-                        SizedBox(
-                          height: 450,
-                          child: FutureBuilder<List<TableModel>>(
-                            future: tableProvider.getTablesForLocation(
-                              locations[selectedTabIndex].id,
+                                );
+                              }).toList(),
                             ),
-                            builder: (context, tableSnapshot) {
-                              if (tableSnapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              }
-
-                              if (!tableSnapshot.hasData ||
-                                  tableSnapshot.data!.isEmpty) {
-                                return const Center(
-                                  child: Text('Bu lokatsiyada stollar yo\'q'),
-                                );
-                              }
-
-                              final tables = tableSnapshot.data!
-                                  .where(
-                                    (table) =>
-                                        table.id != widget.table?.id &&
-                                        table.status != 1,
-                                  )
-                                  .toList();
-
-                              return Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: GridView.builder(
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 6,
-                                        crossAxisSpacing: 12,
-                                        mainAxisSpacing: 12,
-                                        childAspectRatio: 1.0,
-                                      ),
-                                  itemCount: tables.length,
-                                  itemBuilder: (context, index) {
-                                    final table = tables[index];
-                                    return InkWell(
-                                      onTap: () =>
-                                          _moveOrderToTable(context, table),
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          color: Colors.white,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(
-                                                0.1,
-                                              ),
-                                              blurRadius: 4,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.table_bar,
-                                              size: 28,
-                                              color: Colors.grey[600],
-                                            ),
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              table.name ?? 'Stol ${table.id}',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
-                                                color: Colors.black87,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            Text(
-                                              table.status == 1
-                                                  ? 'Band'
-                                                  : 'Bo\'sh',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: table.status == 1
-                                                    ? Colors.red
-                                                    : Colors.green,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              );
-                            },
                           ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ],
+
+                          // Tab Content
+                          SizedBox(
+                            height: 450,
+                            child: FutureBuilder<List<TableModel>>(
+                              future: tableProvider.getTablesForLocation(
+                                locations[selectedTabIndex].id,
+                              ),
+                              builder: (context, tableSnapshot) {
+                                if (tableSnapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
+
+                                if (!tableSnapshot.hasData ||
+                                    tableSnapshot.data!.isEmpty) {
+                                  return const Center(
+                                    child: Text('Bu lokatsiyada stollar yo\'q'),
+                                  );
+                                }
+
+                                final tables = tableSnapshot.data!
+                                    .where(
+                                      (table) =>
+                                          table.id != widget.table?.id &&
+                                          table.status != 1,
+                                    )
+                                    .toList();
+
+                                return Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: GridView.builder(
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: 6,
+                                          crossAxisSpacing: 12,
+                                          mainAxisSpacing: 12,
+                                          childAspectRatio: 1.0,
+                                        ),
+                                    itemCount: tables.length,
+                                    itemBuilder: (context, index) {
+                                      final table = tables[index];
+                                      return InkWell(
+                                        onTap: () =>
+                                            _moveOrderToTable(context, table),
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            color: theme.colorScheme.surface,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: theme.shadowColor
+                                                    .withOpacity(0.1),
+                                                blurRadius: 4,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.table_bar,
+                                                size: 28,
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withOpacity(0.4),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                table.name ??
+                                                    'Stol ${table.id}',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurface,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                              Text(
+                                                table.status == 1
+                                                    ? 'Band'
+                                                    : 'Bo\'sh',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: table.status == 1
+                                                      ? Colors.red
+                                                      : Colors.green,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -1157,7 +1492,7 @@ class _PosScreenState extends State<PosScreen> {
 
     try {
       // Move order to new table
-      await cartProvider.moveToTable(newTable.id!, newTable.locationId!);
+      await cartProvider.moveToTable(newTable.id!, newTable.locationId);
 
       // Update table statuses
       await tableProvider.updateTableStatus(

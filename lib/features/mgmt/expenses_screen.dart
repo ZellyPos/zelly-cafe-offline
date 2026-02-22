@@ -227,7 +227,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<int>(
-                value: selectedCatId,
+                initialValue: selectedCatId,
                 decoration: InputDecoration(labelText: AppStrings.expenseType),
                 items: provider.categories
                     .map(

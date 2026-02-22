@@ -40,11 +40,19 @@ class ReportFilterBar extends StatelessWidget {
               )
               .name;
 
+    final theme = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: theme.brightness == Brightness.light
+                ? const Color(0xFFE2E8F0)
+                : theme.colorScheme.onSurface.withOpacity(0.1),
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,17 +60,17 @@ class ReportFilterBar extends StatelessWidget {
           if (MediaQuery.of(context).size.width > 600) ...[
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.filter_alt_outlined,
-                  color: Color(0xFF64748B),
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
                   size: 16,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     "Filtr: $startDateStr - $endDateStr • $typeText • $locationText • $waiterText",
-                    style: const TextStyle(
-                      color: Color(0xFF64748B),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -127,6 +135,7 @@ class ReportFilterBar extends StatelessWidget {
                   orderType: val,
                   clearOrderType: val == null,
                 ),
+                context: context,
               ),
 
               // Location Dropdown
@@ -146,6 +155,7 @@ class ReportFilterBar extends StatelessWidget {
                   locationId: val,
                   clearLocation: val == null,
                 ),
+                context: context,
               ),
 
               // Waiter Dropdown
@@ -165,6 +175,7 @@ class ReportFilterBar extends StatelessWidget {
                   waiterId: val,
                   clearWaiter: val == null,
                 ),
+                context: context,
               ),
             ],
           ),
@@ -179,36 +190,46 @@ class ReportFilterBar extends StatelessWidget {
     required String value,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: theme.brightness == Brightness.light
+              ? const Color(0xFFF8FAFC)
+              : theme.colorScheme.onSurface.withOpacity(0.05),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(
+            color: theme.brightness == Brightness.light
+                ? const Color(0xFFE2E8F0)
+                : theme.colorScheme.onSurface.withOpacity(0.1),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               "$label: ",
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+                fontSize: 12,
+              ),
             ),
             Text(
               value,
-              style: const TextStyle(
-                color: Color(0xFF1E293B),
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(
+            Icon(
               Icons.calendar_month,
               size: 14,
-              color: Color(0xFF64748B),
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
             ),
           ],
         ),
@@ -221,35 +242,47 @@ class ReportFilterBar extends StatelessWidget {
     required T value,
     required List<DropdownMenuItem<T>> items,
     required ValueChanged<T> onChanged,
+    required BuildContext context,
   }) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: theme.brightness == Brightness.light
+            ? const Color(0xFFF8FAFC)
+            : theme.colorScheme.onSurface.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: theme.brightness == Brightness.light
+              ? const Color(0xFFE2E8F0)
+              : theme.colorScheme.onSurface.withOpacity(0.1),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             "$label: ",
-            style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              fontSize: 12,
+            ),
           ),
           DropdownButtonHideUnderline(
             child: DropdownButton<T>(
               value: value,
               items: items,
               onChanged: (val) => val != null ? onChanged(val) : null,
-              style: const TextStyle(
-                color: Color(0xFF1E293B),
+              dropdownColor: theme.colorScheme.surface,
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
-              icon: const Icon(
+              icon: Icon(
                 Icons.keyboard_arrow_down,
                 size: 16,
-                color: Color(0xFF64748B),
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
               ),
             ),
           ),

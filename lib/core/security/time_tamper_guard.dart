@@ -28,7 +28,14 @@ class TimeTamperGuard {
       uptime = 0;
     }
 
-    final logs = await db.query('security_logs');
+    List<Map<String, dynamic>> logs = [];
+    try {
+      logs = await db.query('security_logs');
+    } catch (e) {
+      print('Security logs table not found or query error: $e');
+      // If table doesn't exist, we might be in middle of migration or error state
+    }
+
     final Map<String, String> data = {
       for (var row in logs) row['key'] as String: row['value'] as String,
     };

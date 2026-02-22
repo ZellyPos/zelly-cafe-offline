@@ -12,13 +12,15 @@ class CashiersMgmtScreen extends StatelessWidget {
     final userProvider = context.watch<UserProvider>();
     final cashiers = userProvider.cashiers;
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Kassirlar Boshqaruvi'),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF0F172A),
+        backgroundColor: theme.colorScheme.surface,
+        foregroundColor: theme.colorScheme.onSurface,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -27,8 +29,8 @@ class CashiersMgmtScreen extends StatelessWidget {
               icon: const Icon(Icons.add, size: 20),
               label: const Text("Yangi Kassir"),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -40,7 +42,7 @@ class CashiersMgmtScreen extends StatelessWidget {
       body: userProvider.isLoading
           ? const Center(child: CircularProgressIndicator())
           : cashiers.isEmpty
-          ? _buildEmptyState()
+          ? _buildEmptyState(context)
           : GridView.builder(
               padding: const EdgeInsets.all(24),
               gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -62,25 +64,32 @@ class CashiersMgmtScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
+    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.people_alt_outlined, size: 80, color: Colors.grey[300]),
+          Icon(
+            Icons.people_alt_outlined,
+            size: 80,
+            color: theme.colorScheme.onSurface.withOpacity(0.1),
+          ),
           const SizedBox(height: 16),
           Text(
             "Kassirlar topilmadi",
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             "Tizimga yangi kassir qo'shish uchun yuqoridagi tugmani bosing",
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.4),
+            ),
           ),
         ],
       ),
@@ -88,14 +97,15 @@ class CashiersMgmtScreen extends StatelessWidget {
   }
 
   Widget _buildCashierCard(BuildContext context, AppUser cashier) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: theme.shadowColor.withOpacity(0.04),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -110,12 +120,12 @@ class CashiersMgmtScreen extends StatelessWidget {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.05),
+                  color: theme.colorScheme.onSurface.withOpacity(0.05),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.person_outline,
-                  color: Colors.black,
+                  color: theme.colorScheme.onSurface,
                   size: 28,
                 ),
               ),
@@ -126,18 +136,18 @@ class CashiersMgmtScreen extends StatelessWidget {
                   children: [
                     Text(
                       cashier.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
+                        color: theme.colorScheme.onSurface,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
                       "PIN: ${cashier.pin}",
-                      style: const TextStyle(
-                        color: Color(0xFF64748B),
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
                         fontSize: 13,
                       ),
                     ),
@@ -152,7 +162,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                     connectivity: context.read<ConnectivityProvider>(),
                   );
                 },
-                activeColor: Colors.black,
+                activeColor: theme.colorScheme.primary,
               ),
             ],
           ),
@@ -165,6 +175,8 @@ class CashiersMgmtScreen extends StatelessWidget {
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: const Text("Tahrirlash"),
                   style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.primary,
+                    side: BorderSide(color: theme.colorScheme.primary),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -191,110 +203,143 @@ class CashiersMgmtScreen extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(cashier == null ? "Yangi Kassir" : "Tahrirlash"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: "Ism",
-                hintText: "Masalan: Azizbek",
+      builder: (context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          backgroundColor: theme.colorScheme.surface,
+          title: Text(
+            cashier == null ? "Yangi Kassir" : "Tahrirlash",
+            style: TextStyle(color: theme.colorScheme.onSurface),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                style: TextStyle(color: theme.colorScheme.onSurface),
+                decoration: InputDecoration(
+                  labelText: "Ism",
+                  labelStyle: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                  hintText: "Masalan: Azizbek",
+                  hintStyle: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.4),
+                  ),
+                ),
               ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinController,
+                style: TextStyle(color: theme.colorScheme.onSurface),
+                decoration: InputDecoration(
+                  labelText: "PIN kod",
+                  labelStyle: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                  hintText: "Masalan: 5555",
+                  hintStyle: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.4),
+                  ),
+                ),
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Bekor qilish"),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinController,
-              decoration: const InputDecoration(
-                labelText: "PIN kod",
-                hintText: "Masalan: 5555",
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.isEmpty || pinController.text.isEmpty) {
+                  return;
+                }
+
+                final provider = context.read<UserProvider>();
+                if (cashier == null) {
+                  await provider.addUser(
+                    AppUser(
+                      name: nameController.text,
+                      pin: pinController.text,
+                      role: 'cashier',
+                    ),
+                    connectivity: context.read<ConnectivityProvider>(),
+                  );
+                } else {
+                  await provider.updateUser(
+                    cashier.copyWith(
+                      name: nameController.text,
+                      pin: pinController.text,
+                    ),
+                    connectivity: context.read<ConnectivityProvider>(),
+                  );
+                }
+
+                if (context.mounted) Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
               ),
-              keyboardType: TextInputType.number,
-              maxLength: 4,
+              child: const Text("Saqlash"),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Bekor qilish"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.isEmpty || pinController.text.isEmpty) {
-                return;
-              }
-
-              final provider = context.read<UserProvider>();
-              if (cashier == null) {
-                await provider.addUser(
-                  AppUser(
-                    name: nameController.text,
-                    pin: pinController.text,
-                    role: 'cashier',
-                  ),
-                  connectivity: context.read<ConnectivityProvider>(),
-                );
-              } else {
-                await provider.updateUser(
-                  cashier.copyWith(
-                    name: nameController.text,
-                    pin: pinController.text,
-                  ),
-                  connectivity: context.read<ConnectivityProvider>(),
-                );
-              }
-
-              if (context.mounted) Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text("Saqlash"),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   void _confirmDelete(BuildContext context, AppUser cashier) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("O'chirishni tasdiqlang"),
-        content: Text("${cashier.name}ni tizimdan o'chirib tashlamoqchimisiz?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Yo'q"),
+      builder: (context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          backgroundColor: theme.colorScheme.surface,
+          title: Text(
+            "O'chirishni tasdiqlang",
+            style: TextStyle(color: theme.colorScheme.onSurface),
           ),
-          TextButton(
-            onPressed: () async {
-              final success = await context.read<UserProvider>().deleteUser(
-                cashier.id!,
-                connectivity: context.read<ConnectivityProvider>(),
-              );
-              if (context.mounted) {
-                Navigator.pop(context);
-                if (!success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("O'chirib bo'lmadi!"),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text(
-              "Ha, o'chirilsin",
-              style: TextStyle(color: Colors.red),
+          content: Text(
+            "${cashier.name}ni tizimdan o'chirib tashlamoqchimisiz?",
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.8),
             ),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Yo'q"),
+            ),
+            TextButton(
+              onPressed: () async {
+                final success = await context.read<UserProvider>().deleteUser(
+                  cashier.id!,
+                  connectivity: context.read<ConnectivityProvider>(),
+                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  if (!success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("O'chirib bo'lmadi!"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text(
+                "Ha, o'chirilsin",
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

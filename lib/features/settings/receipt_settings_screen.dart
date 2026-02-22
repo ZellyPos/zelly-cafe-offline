@@ -3,10 +3,9 @@ import 'package:provider/provider.dart';
 import '../../providers/receipt_settings_provider.dart';
 import '../../providers/printer_provider.dart';
 import '../../models/receipt_settings.dart';
-import '../../core/theme.dart';
 
 class ReceiptSettingsScreen extends StatefulWidget {
-  const ReceiptSettingsScreen({Key? key}) : super(key: key);
+  const ReceiptSettingsScreen({super.key});
 
   @override
   State<ReceiptSettingsScreen> createState() => _ReceiptSettingsScreenState();
@@ -44,9 +43,10 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<ReceiptSettingsProvider>();
     final settings = provider.settings;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Column(
         children: [
           Expanded(
@@ -221,21 +221,25 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
   }
 
   Widget _buildHeader() {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Chek sozlamalari',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1E293B),
+            color: theme.colorScheme.onSurface,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Mijozlarga beriladigan chek dizaynini va tarkibini tahrirlang',
-          style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            fontSize: 14,
+          ),
         ),
         const SizedBox(height: 16),
         const Divider(),
@@ -248,20 +252,24 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
     required String hint,
     required Widget child,
   }) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1E293B),
+            color: theme.colorScheme.onSurface,
           ),
         ),
         Text(
           hint,
-          style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+          style: TextStyle(
+            fontSize: 13,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
         ),
         const SizedBox(height: 16),
         child,
@@ -270,11 +278,16 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
   }
 
   Widget _buildCard(List<Widget> children) {
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: theme.brightness == Brightness.light
+              ? const Color(0xFFE2E8F0)
+              : theme.colorScheme.onSurface.withOpacity(0.1),
+        ),
       ),
       child: Column(children: children),
     );
@@ -304,10 +317,12 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF64748B),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.6),
                   ),
                 ),
                 TextField(
@@ -349,9 +364,11 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
                 ),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF64748B),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.6),
                   ),
                 ),
               ],
@@ -380,10 +397,13 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
     ReceiptSettings settings,
     ReceiptSettingsProvider provider,
   ) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
+        color: theme.brightness == Brightness.light
+            ? const Color(0xFFF1F5F9)
+            : theme.colorScheme.onSurface.withOpacity(0.08),
         borderRadius: BorderRadius.circular(8),
       ),
       child: DropdownButton<int>(
@@ -417,6 +437,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
     ReceiptSettingsProvider provider,
     ReceiptSettings settings,
   ) {
+    final theme = Theme.of(context);
     return SizedBox(
       width: 60,
       child: TextField(
@@ -425,12 +446,15 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
         textAlign: TextAlign.center,
         onChanged: (v) {
           final n = int.tryParse(v);
-          if (n != null)
+          if (n != null) {
             provider.updateSettings(settings.copyWith(feedLines: n));
+          }
         },
         decoration: InputDecoration(
           filled: true,
-          fillColor: const Color(0xFFF1F5F9),
+          fillColor: theme.brightness == Brightness.light
+              ? const Color(0xFFF1F5F9)
+              : theme.colorScheme.onSurface.withOpacity(0.08),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide.none,
@@ -442,18 +466,21 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
   }
 
   Widget _buildPreviewSection(ReceiptSettings settings) {
+    final theme = Theme.of(context);
     return Container(
       width: 380,
       height: double.infinity,
-      color: const Color(0xFFF1F5F9),
+      color: theme.brightness == Brightness.light
+          ? const Color(0xFFF1F5F9)
+          : theme.colorScheme.onSurface.withOpacity(0.05),
       padding: const EdgeInsets.all(32),
       child: Column(
         children: [
-          const Text(
+          Text(
             'KORINISH (PREVIEW)',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: Color(0xFF64748B),
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
               letterSpacing: 1,
             ),
           ),
@@ -617,14 +644,17 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
   }
 
   Widget _buildStickyBar(ReceiptSettingsProvider provider) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.1))),
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.onSurface.withOpacity(0.08)),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: theme.shadowColor.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
@@ -650,7 +680,8 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
             label: const Text('Saqlash'),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-              backgroundColor: AppTheme.primaryColor,
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: theme.colorScheme.onPrimary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

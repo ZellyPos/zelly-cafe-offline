@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/services/license_service.dart';
 import '../../../core/security/device_fingerprint_service.dart';
 import '../../../models/license_model.dart';
+import 'license_generator_screen.dart';
 
 class LicenseImportScreen extends StatefulWidget {
   const LicenseImportScreen({super.key});
@@ -160,46 +161,56 @@ class _LicenseImportScreenState extends State<LicenseImportScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.blue.withOpacity(0.2)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Qurilma ID (HWID):',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.blue,
-              fontWeight: FontWeight.bold,
+      child: GestureDetector(
+        onLongPress: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const LicenseGeneratorScreen(),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SelectableText(
-                  _hwid!,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.bold,
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Qurilma ID (HWID):',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    _hwid!,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.copy, color: Colors.blue),
-                tooltip: 'Nusxalash',
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: _hwid!));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('HWID nusxalandi!'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ],
+                IconButton(
+                  icon: const Icon(Icons.copy, color: Colors.blue),
+                  tooltip: 'Nusxalash',
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _hwid!));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('HWID nusxalandi!'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

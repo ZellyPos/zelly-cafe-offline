@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/connectivity_provider.dart';
-import '../../core/theme.dart';
 
 class ConnectionSettingsScreen extends StatefulWidget {
   const ConnectionSettingsScreen({super.key});
@@ -26,14 +25,15 @@ class _ConnectionSettingsScreenState extends State<ConnectionSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final connectivity = context.watch<ConnectivityProvider>();
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Ulanish sozlamalari'),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
+        backgroundColor: theme.colorScheme.surface,
+        foregroundColor: theme.colorScheme.onSurface,
       ),
       body: Center(
         child: ConstrainedBox(
@@ -57,14 +57,18 @@ class _ConnectionSettingsScreenState extends State<ConnectionSettingsScreen> {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
+                        color: Color(
+                          0xFF1E293B,
+                        ), // This color is not changed in the instruction
                       ),
                     ),
                     const SizedBox(height: 24),
 
                     Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
+                        color: theme.brightness == Brightness.light
+                            ? const Color(0xFFF8FAFC)
+                            : theme.colorScheme.onSurface.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -103,7 +107,9 @@ class _ConnectionSettingsScreenState extends State<ConnectionSettingsScreen> {
                         decoration: InputDecoration(
                           hintText: 'http://192.168.1.XX:8080',
                           filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
+                          fillColor: theme.brightness == Brightness.light
+                              ? const Color(0xFFF8FAFC)
+                              : theme.colorScheme.onSurface.withOpacity(0.08),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
@@ -123,7 +129,9 @@ class _ConnectionSettingsScreenState extends State<ConnectionSettingsScreen> {
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
                           filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
+                          fillColor: theme.brightness == Brightness.light
+                              ? const Color(0xFFF8FAFC)
+                              : theme.colorScheme.onSurface.withOpacity(0.08),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
@@ -138,27 +146,27 @@ class _ConnectionSettingsScreenState extends State<ConnectionSettingsScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
+                          color: theme.colorScheme.primary.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.blue.withOpacity(0.3),
+                            color: theme.colorScheme.primary.withOpacity(0.2),
                           ),
                         ),
                         child: Column(
                           children: [
-                            const Text(
+                            Text(
                               'Ulanish uchun IP:',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.blue,
+                                color: theme.colorScheme.primary,
                               ),
                             ),
                             Text(
                               '${connectivity.serverIp ?? "Qidirilmoqda..."}:${connectivity.port}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blue,
+                                color: theme.colorScheme.primary,
                               ),
                             ),
                           ],
@@ -216,7 +224,8 @@ class _ConnectionSettingsScreenState extends State<ConnectionSettingsScreen> {
                               Navigator.pop(context);
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.secondaryColor,
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: theme.colorScheme.onPrimary,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -245,13 +254,14 @@ class _ConnectionSettingsScreenState extends State<ConnectionSettingsScreen> {
     IconData icon,
     ConnectivityProvider connectivity,
   ) {
+    final theme = Theme.of(context);
     final isSelected = connectivity.mode == mode;
 
     return ListTile(
       onTap: () => connectivity.setMode(mode),
       leading: Icon(
         icon,
-        color: isSelected ? AppTheme.secondaryColor : Colors.grey,
+        color: isSelected ? theme.colorScheme.primary : Colors.grey,
       ),
       title: Text(
         title,
@@ -261,7 +271,7 @@ class _ConnectionSettingsScreenState extends State<ConnectionSettingsScreen> {
       ),
       subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
       trailing: isSelected
-          ? const Icon(Icons.check_circle, color: AppTheme.secondaryColor)
+          ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
           : null,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );

@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../providers/printer_provider.dart';
 import '../../providers/category_provider.dart';
 import '../../models/printer_settings.dart';
-import '../../core/theme.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
   const PrinterSettingsScreen({super.key});
@@ -27,12 +26,14 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<PrinterProvider>();
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Printerlar boshqaruvi'),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
+        backgroundColor: theme.colorScheme.surface,
+        foregroundColor: theme.colorScheme.onSurface,
         elevation: 0,
         actions: [
           Padding(
@@ -42,8 +43,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
               icon: const Icon(Icons.add),
               label: const Text('Printer qo\'shish'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -102,15 +103,20 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
         .map((c) => c.name)
         .join(', ');
 
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: theme.brightness == Brightness.light
+              ? const Color(0xFFE2E8F0)
+              : theme.colorScheme.onSurface.withOpacity(0.1),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: theme.shadowColor.withOpacity(0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -121,14 +127,14 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
+              color: theme.colorScheme.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
               printer.type == PrinterType.network
                   ? Icons.lan_outlined
                   : Icons.usb_outlined,
-              color: AppTheme.primaryColor,
+              color: theme.colorScheme.primary,
               size: 28,
             ),
           ),
@@ -139,18 +145,18 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
               children: [
                 Text(
                   printer.displayName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 Text(
                   printer.type == PrinterType.network
                       ? 'IP: ${printer.ipAddress}:${printer.port}'
                       : 'USB: ${printer.printerName}',
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
                     fontSize: 14,
                   ),
                 ),
@@ -158,8 +164,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Kategoriyalar: $assignedCats',
-                    style: const TextStyle(
-                      color: AppTheme.primaryColor,
+                    style: TextStyle(
+                      color: theme.colorScheme.primary,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -190,17 +196,21 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   }
 
   Widget _buildInfoSection() {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(24),
-      color: Colors.white,
-      child: const Row(
+      color: theme.colorScheme.surface,
+      child: Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.blue),
-          SizedBox(width: 12),
+          const Icon(Icons.info_outline, color: Colors.blue),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               'Printerlarni kategoriyalar bo‘yicha ajatsangiz, buyurtmalar avtomatik ravishda tegishli departamentlarga (oshxona, bar va h.k.) yuboriladi.',
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                fontSize: 13,
+              ),
             ),
           ),
         ],
@@ -228,11 +238,16 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final theme = Theme.of(context);
           final categories = context.read<CategoryProvider>().categories;
           final provider = context.watch<PrinterProvider>();
 
           return AlertDialog(
-            title: Text(isEdit ? 'Printerni tahrirlash' : 'Yangi printer'),
+            backgroundColor: theme.colorScheme.surface,
+            title: Text(
+              isEdit ? 'Printerni tahrirlash' : 'Yangi printer',
+              style: TextStyle(color: theme.colorScheme.onSurface),
+            ),
             content: SizedBox(
               width: 500,
               child: SingleChildScrollView(
@@ -242,8 +257,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   children: [
                     TextField(
                       controller: nameController,
-                      decoration: const InputDecoration(
+                      style: TextStyle(color: theme.colorScheme.onSurface),
+                      decoration: InputDecoration(
                         labelText: 'Printer nomi',
+                        labelStyle: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -272,9 +291,20 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                             flex: 3,
                             child: TextField(
                               controller: ipController,
-                              decoration: const InputDecoration(
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                              ),
+                              decoration: InputDecoration(
                                 labelText: 'IP manzil',
+                                labelStyle: TextStyle(
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
+                                ),
                                 hintText: '192.168.1.100',
+                                hintStyle: TextStyle(
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.4),
+                                ),
                               ),
                             ),
                           ),
@@ -284,21 +314,38 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                             child: TextField(
                               controller: portController,
                               keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                              ),
+                              decoration: InputDecoration(
                                 labelText: 'Port',
+                                labelStyle: TextStyle(
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
+                                ),
                               ),
                             ),
                           ),
                         ],
                       ),
                     ] else ...[
-                      const Text(
+                      Text(
                         'Printer tanlang:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       provider.windowsPrinters.isEmpty
-                          ? const Text('Printerlar topilmadi')
+                          ? Text(
+                              'Printerlar topilmadi',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.5,
+                                ),
+                              ),
+                            )
                           : Wrap(
                               spacing: 8,
                               children: provider.windowsPrinters.map((name) {
@@ -319,9 +366,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       ),
                     ],
                     const SizedBox(height: 24),
-                    const Text(
+                    Text(
                       'Kategoriyalarni biriktirish:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Wrap(
@@ -367,8 +417,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   if (context.mounted) Navigator.pop(context);
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
                 ),
                 child: const Text('Saqlash'),
               ),
@@ -385,6 +435,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     PrinterType selected,
     Function(PrinterType) onSelect,
   ) {
+    final theme = Theme.of(context);
     final isSel = type == selected;
     return Expanded(
       child: InkWell(
@@ -393,11 +444,15 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSel
-                ? AppTheme.primaryColor.withOpacity(0.1)
-                : Colors.white,
+                ? theme.colorScheme.primary.withOpacity(0.1)
+                : theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isSel ? AppTheme.primaryColor : Colors.grey[300]!,
+              color: isSel
+                  ? theme.colorScheme.primary
+                  : theme.brightness == Brightness.light
+                  ? Colors.grey[300]!
+                  : theme.colorScheme.onSurface.withOpacity(0.1),
             ),
           ),
           child: Center(
@@ -405,7 +460,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
               label,
               style: TextStyle(
                 fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                color: isSel ? AppTheme.primaryColor : Colors.black,
+                color: isSel
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface,
               ),
             ),
           ),
@@ -431,25 +488,35 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   void _deletePrinter(BuildContext context, PrinterSettings printer) async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Printerni o\'chirish'),
-        content: Text(
-          'Rostdan ham "${printer.displayName}" printerni o\'chirib tashlamoqchimisiz?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Yo\'q'),
+      builder: (context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          backgroundColor: theme.colorScheme.surface,
+          title: Text(
+            'Printerni o\'chirish',
+            style: TextStyle(color: theme.colorScheme.onSurface),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Ha, o\'chirish',
-              style: TextStyle(color: Colors.red),
+          content: Text(
+            'Rostdan ham "${printer.displayName}" printerni o\'chirib tashlamoqchimisiz?',
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.8),
             ),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Yo\'q'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'Ha, o\'chirish',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirm == true && mounted) {

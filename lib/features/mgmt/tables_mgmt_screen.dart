@@ -5,7 +5,6 @@ import '../../providers/location_provider.dart';
 import '../../models/table.dart';
 import '../../models/location.dart';
 import '../../core/app_strings.dart';
-import '../../core/theme.dart';
 import '../../providers/connectivity_provider.dart';
 
 class TablesMgmtScreen extends StatefulWidget {
@@ -33,17 +32,19 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
       return matchesSearch && matchesLocation;
     }).toList();
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           AppStrings.tableMgmt,
-          style: const TextStyle(
-            color: Color(0xFF1E293B),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.surface,
         elevation: 0,
         centerTitle: false,
         actions: [
@@ -55,8 +56,8 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                 icon: const Icon(Icons.add),
                 label: Text(AppStrings.addTable),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 16,
@@ -75,18 +76,26 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
           // Filter Bar
           Container(
             padding: const EdgeInsets.all(24),
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             child: Row(
               children: [
                 Expanded(
                   flex: 2,
                   child: TextField(
-                    onChanged: (val) => setState(() => searchQuery = val),
+                    style: TextStyle(color: theme.colorScheme.onSurface),
                     decoration: InputDecoration(
                       hintText: "Stol nomi bo'yicha qidirish...",
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      hintStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      ),
                       filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
+                      fillColor: theme.brightness == Brightness.light
+                          ? const Color(0xFFF1F5F9)
+                          : theme.colorScheme.onSurface.withOpacity(0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -98,10 +107,14 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<int?>(
-                    value: filterLocationId,
+                    initialValue: filterLocationId,
+                    dropdownColor: theme.colorScheme.surface,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
                     decoration: InputDecoration(
                       filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
+                      fillColor: theme.brightness == Brightness.light
+                          ? const Color(0xFFF1F5F9)
+                          : theme.colorScheme.onSurface.withOpacity(0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -159,15 +172,23 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
   }
 
   Widget _buildEmptyState() {
+    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.table_bar_outlined, size: 64, color: Colors.grey.shade300),
+          Icon(
+            Icons.table_bar_outlined,
+            size: 64,
+            color: theme.colorScheme.onSurface.withOpacity(0.1),
+          ),
           const SizedBox(height: 16),
           Text(
             "Stollar topilmadi",
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 18),
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              fontSize: 18,
+            ),
           ),
         ],
       ),
@@ -192,18 +213,24 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
       pricingColor = Colors.teal;
     }
 
+    final theme = Theme.of(context);
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: theme.shadowColor.withOpacity(0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: theme.brightness == Brightness.light
+              ? const Color(0xFFE2E8F0)
+              : theme.colorScheme.onSurface.withOpacity(0.1),
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -226,7 +253,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                               ? 15
                               : 16,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1E293B),
+                          color: theme.colorScheme.onSurface,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -262,7 +289,10 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                 ),
                 Text(
                   location.name,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    fontSize: 12,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const Spacer(),
@@ -354,160 +384,188 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            table == null ? AppStrings.addTable : AppStrings.editTable,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: AppStrings.tableName,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+        builder: (context, setDialogState) {
+          final theme = Theme.of(context);
+          return AlertDialog(
+            backgroundColor: theme.colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text(
+              table == null ? AppStrings.addTable : AppStrings.editTable,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.tableName,
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  value: selectedLocationId,
-                  decoration: InputDecoration(
-                    labelText: AppStrings.selectLocation,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedLocationId,
+                    dropdownColor: theme.colorScheme.surface,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.selectLocation,
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
+                    items: locationProvider.locations
+                        .map(
+                          (l) => DropdownMenuItem(
+                            value: l.id,
+                            child: Text(l.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (val) =>
+                        setDialogState(() => selectedLocationId = val),
+                    validator: (val) => val == null ? "Joyni tanlang" : null,
                   ),
-                  items: locationProvider.locations
-                      .map(
-                        (l) =>
-                            DropdownMenuItem(value: l.id, child: Text(l.name)),
-                      )
-                      .toList(),
-                  onChanged: (val) =>
-                      setDialogState(() => selectedLocationId = val),
-                  validator: (val) => val == null ? "Joyni tanlang" : null,
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  value: pricingType,
-                  decoration: InputDecoration(
-                    labelText: "Narxlash turi",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: pricingType,
+                    dropdownColor: theme.colorScheme.surface,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
+                    decoration: InputDecoration(
+                      labelText: "Narxlash turi",
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 0,
+                        child: Text("Normal (Xona narxisiz)"),
+                      ),
+                      const DropdownMenuItem(value: 1, child: Text("Soatli")),
+                      const DropdownMenuItem(
+                        value: 2,
+                        child: Text("Fiksal (Fixed)"),
+                      ),
+                      const DropdownMenuItem(
+                        value: 3,
+                        child: Text("Xizmat foizi"),
+                      ),
+                    ],
+                    onChanged: (val) =>
+                        setDialogState(() => pricingType = val!),
                   ),
-                  items: [
-                    const DropdownMenuItem(
-                      value: 0,
-                      child: Text("Normal (Xona narxisiz)"),
-                    ),
-                    const DropdownMenuItem(value: 1, child: Text("Soatli")),
-                    const DropdownMenuItem(
-                      value: 2,
-                      child: Text("Fiksal (Fixed)"),
-                    ),
-                    const DropdownMenuItem(
-                      value: 3,
-                      child: Text("Xizmat foizi"),
+                  if (pricingType == 1) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: hourlyRateController,
+                      decoration: InputDecoration(
+                        labelText: "Soatbay narx",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      keyboardType: TextInputType.number,
                     ),
                   ],
-                  onChanged: (val) => setDialogState(() => pricingType = val!),
-                ),
-                if (pricingType == 1) ...[
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: hourlyRateController,
-                    decoration: InputDecoration(
-                      labelText: "Soatbay narx",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  if (pricingType == 2) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: fixedAmountController,
+                      decoration: InputDecoration(
+                        labelText: "Fiksal narx",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
+                      keyboardType: TextInputType.number,
                     ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
-                if (pricingType == 2) ...[
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: fixedAmountController,
-                    decoration: InputDecoration(
-                      labelText: "Fiksal narx",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  ],
+                  if (pricingType == 3) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: servicePercentageController,
+                      decoration: InputDecoration(
+                        labelText: "Xizmat foizi (%)",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
+                      keyboardType: TextInputType.number,
                     ),
-                    keyboardType: TextInputType.number,
-                  ),
+                  ],
                 ],
-                if (pricingType == 3) ...[
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: servicePercentageController,
-                    decoration: InputDecoration(
-                      labelText: "Xizmat foizi (%)",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                AppStrings.cancel,
-                style: const TextStyle(color: Colors.grey),
               ),
             ),
-            ElevatedButton(
-              onPressed: () {
-                if (selectedLocationId == null || nameController.text.isEmpty)
-                  return;
-                final newTable = TableModel(
-                  id: table?.id,
-                  name: nameController.text,
-                  locationId: selectedLocationId!,
-                  status: table?.status ?? 0,
-                  pricingType: pricingType,
-                  hourlyRate: double.tryParse(hourlyRateController.text) ?? 0,
-                  fixedAmount: double.tryParse(fixedAmountController.text) ?? 0,
-                  servicePercentage:
-                      double.tryParse(servicePercentageController.text) ?? 0,
-                );
-                if (table == null) {
-                  context.read<TableProvider>().addTable(
-                    newTable,
-                    connectivity: context.read<ConnectivityProvider>(),
-                  );
-                } else {
-                  context.read<TableProvider>().updateTable(
-                    newTable,
-                    connectivity: context.read<ConnectivityProvider>(),
-                  );
-                }
-                Navigator.pop(context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  AppStrings.cancel,
+                  style: const TextStyle(color: Colors.grey),
                 ),
               ),
-              child: Text(AppStrings.save),
-            ),
-          ],
-        ),
+              ElevatedButton(
+                onPressed: () {
+                  if (selectedLocationId == null ||
+                      nameController.text.isEmpty) {
+                    return;
+                  }
+                  final newTable = TableModel(
+                    id: table?.id,
+                    name: nameController.text,
+                    locationId: selectedLocationId!,
+                    status: table?.status ?? 0,
+                    pricingType: pricingType,
+                    hourlyRate: double.tryParse(hourlyRateController.text) ?? 0,
+                    fixedAmount:
+                        double.tryParse(fixedAmountController.text) ?? 0,
+                    servicePercentage:
+                        double.tryParse(servicePercentageController.text) ?? 0,
+                  );
+                  if (table == null) {
+                    context.read<TableProvider>().addTable(
+                      newTable,
+                      connectivity: context.read<ConnectivityProvider>(),
+                    );
+                  } else {
+                    context.read<TableProvider>().updateTable(
+                      newTable,
+                      connectivity: context.read<ConnectivityProvider>(),
+                    );
+                  }
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(AppStrings.save),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

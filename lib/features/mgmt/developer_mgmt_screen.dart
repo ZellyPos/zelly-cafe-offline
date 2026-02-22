@@ -224,7 +224,7 @@ class _TableDetailScreenState extends State<TableDetailScreen> {
                       cells: [
                         ...row.values
                             .map((value) => DataCell(Text(value.toString())))
-                            .toList(),
+                            ,
                         DataCell(
                           Row(
                             children: [

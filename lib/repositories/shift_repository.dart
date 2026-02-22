@@ -79,9 +79,9 @@ class ShiftRepository {
     for (var row in salesData) {
       final type = row['payment_type'].toString().toLowerCase();
       final sum = (row['total_sum'] as num?)?.toDouble() ?? 0.0;
-      if (type.contains('naqd') || type.contains('cash'))
+      if (type.contains('naqd') || type.contains('cash')) {
         cash += sum;
-      else if (type.contains('karta') || type.contains('card'))
+      } else if (type.contains('karta') || type.contains('card'))
         card += sum;
       else if (type.contains('nasiya') || type.contains('debt'))
         debt += sum;
@@ -102,9 +102,9 @@ class ShiftRepository {
     for (var row in movementData) {
       final type = row['type'].toString();
       final sum = (row['total_sum'] as num?)?.toDouble() ?? 0.0;
-      if (type == 'IN')
+      if (type == 'IN') {
         inSum += sum;
-      else if (type == 'OUT')
+      } else if (type == 'OUT')
         outSum += sum;
     }
 

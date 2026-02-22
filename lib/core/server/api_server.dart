@@ -50,10 +50,11 @@ class ApiServer {
       final payload = jsonDecode(await request.readAsString());
       final pin = payload['pin'] as String?;
 
-      if (pin == null || pin.isEmpty)
+      if (pin == null || pin.isEmpty) {
         return Response.badRequest(
           body: jsonEncode({'error': 'PIN kodi kiritilmadi'}),
         );
+      }
 
       final db = await DatabaseHelper.instance.database;
 
@@ -529,11 +530,13 @@ class ApiServer {
         for (var item in items) {
           final double price = (item['price'] as num).toDouble();
           final int qty = (item['qty'] as num).toInt();
+          final String? productName = item['product_name'] as String?;
           total += price * qty;
 
           await txn.insert('order_items', {
             'order_id': id,
             'product_id': item['product_id'],
+            'product_name': productName,
             'qty': qty,
             'price': price,
           });
@@ -690,13 +693,13 @@ class ApiServer {
 <body>
     <div class="header">
         <h1>ZELLY POS</h1>
-        <p style="color: #64748b; margin: 5px 0;">Bugungi hisobot (${now})</p>
+        <p style="color: #64748b; margin: 5px 0;">Bugungi hisobot ($now)</p>
     </div>
 
     <div class="total-card">
         <div class="metric-label" style="color: rgba(255,255,255,0.7)">Umumiy tushum</div>
         <div class="total-value">${PriceFormatter.format(total)} so'm</div>
-        <div style="font-size: 14px;">${count} ta buyurtma</div>
+        <div style="font-size: 14px;">$count ta buyurtma</div>
     </div>
 
     <div class="metric-grid">

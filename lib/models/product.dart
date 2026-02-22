@@ -9,6 +9,7 @@ class Product {
   final List<BundleItem>? bundleItems;
   final int sortOrder;
   final double? quantity;
+  final bool noServiceCharge;
 
   Product({
     this.id,
@@ -23,6 +24,7 @@ class Product {
     this.quantity,
     this.trackType = 0, // 0=none, 1=retail, 2=recipe
     this.allowNegativeStock = false,
+    this.noServiceCharge = false,
   });
 
   final int trackType;
@@ -41,6 +43,7 @@ class Product {
       'quantity': quantity,
       'track_type': trackType,
       'allow_negative_stock': allowNegativeStock ? 1 : 0,
+      'no_service_charge': noServiceCharge ? 1 : 0,
     };
   }
 
@@ -63,6 +66,7 @@ class Product {
           : null,
       trackType: map['track_type'] ?? 0,
       allowNegativeStock: map['allow_negative_stock'] == 1,
+      noServiceCharge: map['no_service_charge'] == 1,
     );
   }
 
@@ -79,6 +83,7 @@ class Product {
     double? quantity,
     int? trackType,
     bool? allowNegativeStock,
+    bool? noServiceCharge,
   }) {
     return Product(
       id: id ?? this.id,
@@ -93,6 +98,7 @@ class Product {
       quantity: quantity ?? this.quantity,
       trackType: trackType ?? this.trackType,
       allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
+      noServiceCharge: noServiceCharge ?? this.noServiceCharge,
     );
   }
 }

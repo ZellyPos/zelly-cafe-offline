@@ -13,7 +13,6 @@ import 'location_provider.dart';
 import 'waiter_provider.dart';
 import 'connectivity_provider.dart';
 import '../core/services/audit_service.dart';
-import '../core/services/security_service.dart';
 
 class CartItem {
   final Product product;
@@ -46,6 +45,16 @@ class CartProvider extends ChangeNotifier {
     var total = 0.0;
     _items.forEach((key, cartItem) {
       total += cartItem.total;
+    });
+    return total;
+  }
+
+  double get totalForServiceCharge {
+    var total = 0.0;
+    _items.forEach((key, cartItem) {
+      if (!cartItem.product.noServiceCharge) {
+        total += cartItem.total;
+      }
     });
     return total;
   }
@@ -122,51 +131,65 @@ class CartProvider extends ChangeNotifier {
         }
       } else {
         final db = await DatabaseHelper.instance.database;
-        final orderRes = await db.query(
-          'orders',
-          where: 'table_id = ? AND status = 0',
+
+        // 1. First find which order is active for THIS table
+        final tableRes = await db.query(
+          'tables',
+          columns: ['active_order_id'],
+          where: 'id = ?',
           whereArgs: [tableId],
         );
+        final String? activeId = tableRes.isNotEmpty
+            ? tableRes.first['active_order_id'] as String?
+            : null;
 
-        if (orderRes.isNotEmpty) {
-          final orderMap = orderRes.first;
-          _activeOrderId = orderMap['id'] as String;
-          _activeWaiterId = orderMap['waiter_id'] as int?;
-
-          if (_activeWaiterId == null) {
-            _activeWaiterId = await DatabaseHelper.instance
-                .getDefaultWaiterId();
-            if (_activeWaiterId != null) {
-              await _syncOrderHeader();
-            }
-          }
-
-          _activeOpenedAt = orderMap['opened_at'] != null
-              ? DateTime.parse(orderMap['opened_at'] as String)
-              : null;
-
-          final itemsRes = await db.rawQuery(
-            '''
-            SELECT oi.*, p.name as product_name, p.price as product_price, p.category as product_category, p.quantity as product_quantity
-            FROM order_items oi
-            JOIN products p ON oi.product_id = p.id
-            WHERE oi.order_id = ?
-          ''',
-            [_activeOrderId],
+        if (activeId != null) {
+          final orderRes = await db.query(
+            'orders',
+            where: 'id = ? AND status = 0',
+            whereArgs: [activeId],
           );
 
-          for (var row in itemsRes) {
-            final product = Product(
-              id: row['product_id'] as int,
-              name: row['product_name'] as String,
-              price: (row['product_price'] as num).toDouble(),
-              category: row['product_category'] as String,
-              quantity: (row['product_quantity'] as num?)?.toDouble(),
+          if (orderRes.isNotEmpty) {
+            final orderMap = orderRes.first;
+            _activeOrderId = orderMap['id'] as String;
+            _activeWaiterId = orderMap['waiter_id'] as int?;
+
+            if (_activeWaiterId == null) {
+              _activeWaiterId = await DatabaseHelper.instance
+                  .getDefaultWaiterId();
+              if (_activeWaiterId != null) {
+                await _syncOrderHeader();
+              }
+            }
+
+            _activeOpenedAt = orderMap['opened_at'] != null
+                ? DateTime.parse(orderMap['opened_at'] as String)
+                : null;
+
+            final itemsRes = await db.rawQuery(
+              '''
+              SELECT oi.*, p.name as product_name, p.price as product_price, p.category as product_category, p.quantity as product_quantity
+              FROM order_items oi
+              JOIN products p ON oi.product_id = p.id
+              WHERE oi.order_id = ?
+            ''',
+              [_activeOrderId],
             );
-            _items[product.id!] = CartItem(
-              product: product,
-              quantity: row['qty'] as int,
-            );
+
+            for (var row in itemsRes) {
+              final product = Product(
+                id: row['product_id'] as int,
+                name: row['product_name'] as String,
+                price: (row['product_price'] as num).toDouble(),
+                category: row['product_category'] as String,
+                quantity: (row['product_quantity'] as num?)?.toDouble(),
+              );
+              _items[product.id!] = CartItem(
+                product: product,
+                quantity: row['qty'] as int,
+              );
+            }
           }
         }
       }
@@ -175,14 +198,15 @@ class CartProvider extends ChangeNotifier {
   }
 
   Future<void> _ensureOrderExists([ConnectivityProvider? connectivity]) async {
-    if (_activeTableId == null) return;
+    final tableId = _activeTableId;
+    if (tableId == null) return;
     if (_activeOrderId != null) return;
 
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
       final response = await http.post(
         Uri.parse('${connectivity.clientBaseUrl}/orders/open'),
         body: jsonEncode({
-          'table_id': _activeTableId,
+          'table_id': tableId,
           'waiter_id': connectivity.currentUser?['id'],
           'order_type': 0,
         }),
@@ -200,21 +224,20 @@ class CartProvider extends ChangeNotifier {
     }
 
     final db = await DatabaseHelper.instance.database;
-    _activeOrderId = const Uuid().v4();
+    final newOrderId = const Uuid().v4();
+    _activeOrderId = newOrderId;
     _activeOpenedAt = DateTime.now();
 
-    if (_activeWaiterId == null) {
-      _activeWaiterId = await DatabaseHelper.instance.getDefaultWaiterId();
-    }
+    _activeWaiterId ??= await DatabaseHelper.instance.getDefaultWaiterId();
 
     await db.insert('orders', {
-      'id': _activeOrderId,
+      'id': newOrderId,
       'total': 0.0,
       'payment_type': 'Pending',
       'created_at': _activeOpenedAt!.toIso8601String(),
       'opened_at': _activeOpenedAt!.toIso8601String(),
       'order_type': 0,
-      'table_id': _activeTableId,
+      'table_id': tableId,
       'location_id': _activeLocationId,
       'waiter_id': _activeWaiterId,
       'status': 0,
@@ -222,14 +245,15 @@ class CartProvider extends ChangeNotifier {
 
     await db.update(
       'tables',
-      {'status': 1},
+      {'status': 1, 'active_order_id': newOrderId},
       where: 'id = ?',
-      whereArgs: [_activeTableId],
+      whereArgs: [tableId],
     );
   }
 
   Future<void> _syncOrderHeader([BuildContext? context]) async {
-    if (_activeOrderId == null) return;
+    final orderId = _activeOrderId;
+    if (orderId == null) return;
     final db = await DatabaseHelper.instance.database;
 
     double roomTotal = 0;
@@ -250,7 +274,7 @@ class CartProvider extends ChangeNotifier {
         'grand_total': totalAmount + roomTotal + serviceTotal,
       },
       where: 'id = ?',
-      whereArgs: [_activeOrderId],
+      whereArgs: [orderId],
     );
   }
 
@@ -269,6 +293,7 @@ class CartProvider extends ChangeNotifier {
           .map(
             (item) => {
               'product_id': item.product.id,
+              'product_name': item.product.name,
               'qty': item.quantity,
               'price': item.product.price,
             },
@@ -298,6 +323,7 @@ class CartProvider extends ChangeNotifier {
         await txn.insert('order_items', {
           'order_id': _activeOrderId,
           'product_id': item.product.id,
+          'product_name': item.product.name,
           'qty': item.quantity,
           'price': item.product.price,
         });
@@ -417,32 +443,48 @@ class CartProvider extends ChangeNotifier {
     if (_items.isEmpty) return false;
 
     final orderId = _activeOrderId ?? const Uuid().v4();
+    final currentTableId = _activeTableId; // Capture locally
     final List<OrderItem> orderItems = [];
 
     try {
       final db = await DatabaseHelper.instance.database;
       await db.transaction((txn) async {
         double roomCharge = 0;
+        double totalRoomCharge = 0;
         DateTime now = DateTime.now();
 
-        if (_activeTableId != null) {
-          final table = context.read<TableProvider>().tables.firstWhere(
-            (t) => t.id == _activeTableId,
-          );
+        // 1. Find all tables linked to this order to sum their charges
+        final allLinkedTablesRes = await txn.query(
+          'tables',
+          where: currentTableId != null
+              ? 'active_order_id = ? OR id = ?'
+              : 'active_order_id = ?',
+          whereArgs: currentTableId != null
+              ? [orderId, currentTableId]
+              : [orderId],
+        );
 
-          if (table.pricingType == 1) {
+        for (var tableMap in allLinkedTablesRes) {
+          final int pricingType = tableMap['pricing_type'] as int? ?? 0;
+          final double hourlyRate = (tableMap['hourly_rate'] as num? ?? 0)
+              .toDouble();
+          final double fixedAmount = (tableMap['fixed_amount'] as num? ?? 0)
+              .toDouble();
+          final double servicePercentage =
+              (tableMap['service_percentage'] as num? ?? 0).toDouble();
+
+          if (pricingType == 1) {
             final openedAt = _activeOpenedAt ?? now;
             final duration = now.difference(openedAt);
-            final minutes = duration.inMinutes;
-
-            final hours = minutes / 60.0;
-            roomCharge = hours * table.hourlyRate;
-          } else if (table.pricingType == 2) {
-            roomCharge = table.fixedAmount;
-          } else if (table.pricingType == 3) {
-            roomCharge = (totalAmount * table.servicePercentage / 100);
+            final hours = duration.inMinutes / 60.0;
+            totalRoomCharge += hours * hourlyRate;
+          } else if (pricingType == 2) {
+            totalRoomCharge += fixedAmount;
+          } else if (pricingType == 3) {
+            totalRoomCharge += (totalAmount * servicePercentage / 100);
           }
         }
+        roomCharge = totalRoomCharge;
 
         final double serviceFee = calculateWaiterServiceFee(context);
         final double foodTotal = totalAmount;
@@ -530,9 +572,9 @@ class CartProvider extends ChangeNotifier {
         if (tableId != null || _activeTableId != null) {
           await txn.update(
             'tables',
-            {'status': 0},
-            where: 'id = ?',
-            whereArgs: [tableId ?? _activeTableId],
+            {'status': 0, 'active_order_id': null},
+            where: 'active_order_id = ?',
+            whereArgs: [orderId],
           );
         }
       });
@@ -614,22 +656,38 @@ class CartProvider extends ChangeNotifier {
   }
 
   Future<double> calculateRoomChargeForUI(BuildContext context) async {
-    if (_activeTableId == null) return 0;
+    final orderId = _activeOrderId;
+    if (orderId == null) return 0;
     try {
-      final table = context.read<TableProvider>().tables.firstWhere(
-        (t) => t.id == _activeTableId,
+      final db = await DatabaseHelper.instance.database;
+      final linkedTables = await db.query(
+        'tables',
+        where: 'active_order_id = ?',
+        whereArgs: [orderId],
       );
-      if (table.pricingType == 1) {
-        final openedAt = _activeOpenedAt ?? DateTime.now();
-        final duration = DateTime.now().difference(openedAt);
-        final minutes = duration.inMinutes;
-        final hours = minutes / 60.0;
-        return hours * table.hourlyRate;
-      } else if (table.pricingType == 2) {
-        return table.fixedAmount;
-      } else if (table.pricingType == 3) {
-        return (totalAmount * table.servicePercentage / 100);
+
+      double totalCharge = 0;
+      final now = DateTime.now();
+
+      for (var tableMap in linkedTables) {
+        final pricingType = tableMap['pricing_type'] as int? ?? 0;
+        final hourlyRate = (tableMap['hourly_rate'] as num? ?? 0).toDouble();
+        final fixedAmount = (tableMap['fixed_amount'] as num? ?? 0).toDouble();
+        final servicePercentage = (tableMap['service_percentage'] as num? ?? 0)
+            .toDouble();
+
+        if (pricingType == 1) {
+          final openedAt = _activeOpenedAt ?? now;
+          final duration = now.difference(openedAt);
+          final hours = duration.inMinutes / 60.0;
+          totalCharge += hours * hourlyRate;
+        } else if (pricingType == 2) {
+          totalCharge += fixedAmount;
+        } else if (pricingType == 3) {
+          totalCharge += (totalForServiceCharge * servicePercentage / 100);
+        }
       }
+      return totalCharge;
     } catch (e) {
       debugPrint("Error calculating room charge: $e");
     }
@@ -649,7 +707,7 @@ class CartProvider extends ChangeNotifier {
 
       if (waiter.type == 1) {
         // percentage
-        return (totalAmount * waiter.value / 100).roundToDouble();
+        return (totalForServiceCharge * waiter.value / 100).roundToDouble();
       } else {
         // fixed
         return waiter.value;
@@ -698,15 +756,13 @@ class CartProvider extends ChangeNotifier {
             whereArgs: [_activeOrderId],
           );
 
-          // Reset table status to available
-          if (_activeTableId != null) {
-            await txn.update(
-              'tables',
-              {'status': 0},
-              where: 'id = ?',
-              whereArgs: [_activeTableId],
-            );
-          }
+          // Reset tables linked to this order
+          await txn.update(
+            'tables',
+            {'status': 0, 'active_order_id': null},
+            where: 'active_order_id = ?',
+            whereArgs: [_activeOrderId],
+          );
         });
       }
 
@@ -767,20 +823,22 @@ class CartProvider extends ChangeNotifier {
             whereArgs: [_activeOrderId],
           );
 
-          // Update old table status to available
+          // OLD TABLE: handle multi-table cleanup
+          // If this was the ONLY table for this order, we'd clear it.
+          // But to be safe and simple for "Move", we clear current table and set new one.
           if (_activeTableId != null) {
             await txn.update(
               'tables',
-              {'status': 0},
+              {'status': 0, 'active_order_id': null},
               where: 'id = ?',
               whereArgs: [_activeTableId],
             );
           }
 
-          // Update new table status to occupied
+          // NEW TABLE: occupy
           await txn.update(
             'tables',
-            {'status': 1},
+            {'status': 1, 'active_order_id': _activeOrderId},
             where: 'id = ?',
             whereArgs: [newTableId],
           );
@@ -809,6 +867,121 @@ class CartProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint("Move order error: $e");
+      return false;
+    }
+  }
+
+  Future<bool> mergeTable(
+    int sourceTableId,
+    int targetTableId, [
+    ConnectivityProvider? connectivity,
+  ]) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      // 1. Get source and target table info
+      final sourceTableRes = await db.query(
+        'tables',
+        where: 'id = ?',
+        whereArgs: [sourceTableId],
+      );
+      final targetTableRes = await db.query(
+        'tables',
+        where: 'id = ?',
+        whereArgs: [targetTableId],
+      );
+
+      if (sourceTableRes.isEmpty || targetTableRes.isEmpty) return false;
+
+      final String? sourceOrderId =
+          sourceTableRes.first['active_order_id'] as String?;
+      final String? targetOrderId =
+          targetTableRes.first['active_order_id'] as String?;
+
+      if (sourceOrderId == null && targetOrderId == null) {
+        return false; // Both empty? Nothing to merge.
+      }
+
+      await db.transaction((txn) async {
+        String finalOrderId;
+
+        if (targetOrderId != null) {
+          finalOrderId = targetOrderId;
+          if (sourceOrderId != null && sourceOrderId != targetOrderId) {
+            // TRANSFER Items from source to target
+            final sourceItems = await txn.query(
+              'order_items',
+              where: 'order_id = ?',
+              whereArgs: [sourceOrderId],
+            );
+            for (var item in sourceItems) {
+              // Check if same product exists in target
+              final existing = await txn.query(
+                'order_items',
+                where: 'order_id = ? AND product_id = ?',
+                whereArgs: [finalOrderId, item['product_id']],
+              );
+
+              if (existing.isNotEmpty) {
+                await txn.rawUpdate(
+                  'UPDATE order_items SET qty = qty + ? WHERE id = ?',
+                  [item['qty'], existing.first['id']],
+                );
+              } else {
+                await txn.insert('order_items', {
+                  'order_id': finalOrderId,
+                  'product_id': item['product_id'],
+                  'qty': item['qty'],
+                  'price': item['price'],
+                  'bundle_items_json': item['bundle_items_json'],
+                });
+              }
+            }
+            // Delete source order
+            await txn.delete(
+              'order_items',
+              where: 'order_id = ?',
+              whereArgs: [sourceOrderId],
+            );
+            await txn.delete(
+              'orders',
+              where: 'id = ?',
+              whereArgs: [sourceOrderId],
+            );
+          }
+        } else {
+          // target is empty, source has order. Just link target to source order.
+          finalOrderId = sourceOrderId!;
+        }
+
+        // Link both tables to the same order ID
+        await txn.update(
+          'tables',
+          {'status': 1, 'active_order_id': finalOrderId},
+          where: 'id = ? OR id = ?',
+          whereArgs: [sourceTableId, targetTableId],
+        );
+
+        // Audit log
+        AuditService.instance.logAction(
+          action: 'merge_table',
+          entity: 'order',
+          entityId: finalOrderId,
+          after: {
+            'source_table_id': sourceTableId,
+            'target_table_id': targetTableId,
+          },
+        );
+      });
+
+      // If we are currently on specialized table, reload its order
+      if (_activeTableId == sourceTableId || _activeTableId == targetTableId) {
+        await loadTableOrder(_activeTableId, _activeLocationId, connectivity);
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint("Merge table error: $e");
       return false;
     }
   }

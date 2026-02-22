@@ -16,15 +16,17 @@ class GeneralReportScreen extends StatelessWidget {
     final reportProvider = context.watch<ReportProvider>();
     final printerProvider = context.watch<PrinterProvider>();
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           "Umumiy Hisobot (Z-Hisobot)",
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
+        backgroundColor: theme.colorScheme.surface,
+        foregroundColor: theme.colorScheme.onSurface,
         elevation: 0,
         actions: [
           Padding(
@@ -154,7 +156,7 @@ class GeneralReportScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Financial Summary
-                      _buildSectionTitle("Moliyaviy Xulosa"),
+                      _buildSectionTitle(context, "Moliyaviy Xulosa"),
                       const SizedBox(height: 20),
                       Wrap(
                         spacing: 16,
@@ -204,6 +206,7 @@ class GeneralReportScreen extends StatelessWidget {
                           ? Column(
                               children: [
                                 _buildBreakdownList(
+                                  context,
                                   "Xodimlar Savdosi",
                                   waiters,
                                   'name',
@@ -211,6 +214,7 @@ class GeneralReportScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 32),
                                 _buildBreakdownList(
+                                  context,
                                   "Kategoriyalar",
                                   categories,
                                   'category',
@@ -224,6 +228,7 @@ class GeneralReportScreen extends StatelessWidget {
                                 // Waiter Breakdown
                                 Expanded(
                                   child: _buildBreakdownList(
+                                    context,
                                     "Xodimlar Savdosi",
                                     waiters,
                                     'name',
@@ -234,6 +239,7 @@ class GeneralReportScreen extends StatelessWidget {
                                 // Category Breakdown
                                 Expanded(
                                   child: _buildBreakdownList(
+                                    context,
                                     "Kategoriyalar",
                                     categories,
                                     'category',
@@ -253,13 +259,14 @@ class GeneralReportScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    final theme = Theme.of(context);
     return Text(
       title,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.bold,
-        color: Color(0xFF0F172A),
+        color: theme.colorScheme.onSurface,
       ),
     );
   }
@@ -271,6 +278,7 @@ class GeneralReportScreen extends StatelessWidget {
     IconData icon,
     Color color,
   ) {
+    final theme = Theme.of(context);
     return Container(
       constraints: BoxConstraints(
         minWidth: MediaQuery.of(context).size.width <= 1100 ? 240 : 300,
@@ -280,10 +288,10 @@ class GeneralReportScreen extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10),
+          BoxShadow(color: theme.shadowColor.withOpacity(0.03), blurRadius: 10),
         ],
       ),
       child: Row(
@@ -304,15 +312,18 @@ class GeneralReportScreen extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
             ],
@@ -323,11 +334,12 @@ class GeneralReportScreen extends StatelessWidget {
   }
 
   Widget _buildMiniCard(BuildContext context, String text, Color color) {
+    final theme = Theme.of(context);
     return Container(
       width: MediaQuery.of(context).size.width <= 1100 ? 220 : 280,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
@@ -344,15 +356,17 @@ class GeneralReportScreen extends StatelessWidget {
   }
 
   Widget _buildBreakdownList(
+    BuildContext context,
     String title,
     List items,
     String keyLabel,
     String keyValue,
   ) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle(title),
+        _buildSectionTitle(context, title),
         const SizedBox(height: 16),
         ...items.map(
           (item) => Padding(
@@ -360,9 +374,13 @@ class GeneralReportScreen extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+                border: Border.all(
+                  color: theme.brightness == Brightness.light
+                      ? const Color(0xFFE2E8F0)
+                      : theme.colorScheme.onSurface.withOpacity(0.1),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -370,9 +388,9 @@ class GeneralReportScreen extends StatelessWidget {
                   Expanded(
                     child: Text(
                       item[keyLabel]?.toString() ?? '',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w500,
-                        color: Color(0xFF1E293B),
+                        color: theme.colorScheme.onSurface,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

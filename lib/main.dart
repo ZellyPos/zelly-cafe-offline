@@ -48,73 +48,166 @@ import 'features/mgmt/cashiers_mgmt_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Window management setup
-  await windowManager.ensureInitialized();
-  WindowOptions windowOptions = const WindowOptions(
-    size: Size(1280, 800),
-    center: true,
-    backgroundColor: Colors.transparent,
-    skipTaskbar: false,
-    titleBarStyle: TitleBarStyle.normal,
-    title: 'ZELLY',
-  );
-  await windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.show();
-    await windowManager.focus();
-    await windowManager.setFullScreen(true);
-  });
+  try {
+    // 1. Window management setup
+    await windowManager.ensureInitialized();
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(1280, 800),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.normal,
+      title: 'ZELLY',
+    );
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      // Don't show immediately if we want to avoid white flashes
+      await windowManager.setBackgroundColor(Colors.black);
+      await windowManager.show();
+      await windowManager.focus();
+      await windowManager.setFullScreen(true);
+    });
 
-  // Initialize Database
-  await DatabaseHelper.instance.database;
+    // 2. Initialize Core Services (Database, License)
+    // If these fail, we catch and show error screen
+    await DatabaseHelper.instance.database;
+    await LicenseService.instance.init();
 
-  // Initialize License
-  final initialLicenseStatus = await LicenseService.instance.init();
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) => ProductProvider()..loadProducts(),
+          ),
+          ChangeNotifierProvider(create: (_) => CartProvider()),
+          ChangeNotifierProvider(
+            create: (_) => CategoryProvider()..loadCategories(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => PrinterProvider()..loadSettings(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => LocationProvider()..loadLocations(),
+          ),
+          ChangeNotifierProvider(create: (_) => TableProvider()..loadTables()),
+          ChangeNotifierProvider(
+            create: (_) => WaiterProvider()..loadWaiters(),
+          ),
+          ChangeNotifierProvider(create: (_) => ReportProvider()),
+          ChangeNotifierProvider(
+            create: (_) => ReceiptSettingsProvider()..loadSettings(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => AppSettingsProvider()..loadSettings(),
+          ),
+          ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+          ChangeNotifierProvider(create: (_) => DeveloperProvider()),
+          ChangeNotifierProvider(create: (_) => UserProvider()..loadUsers()),
+          ChangeNotifierProvider(
+            create: (_) => ExpenseProvider()
+              ..loadCategories()
+              ..loadExpenses(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => CustomerProvider()..loadCustomers(),
+          ),
+          ChangeNotifierProvider(create: (_) => AiProvider()),
+          ChangeNotifierProvider(
+            create: (_) => InventoryProvider()..loadIngredients(),
+          ),
+          ChangeNotifierProvider.value(value: LicenseService.instance),
+        ],
+        child: const TezzroApp(),
+      ),
+    );
+  } catch (e, stack) {
+    debugPrint('FATAL STARTUP ERROR: $e');
+    debugPrint(stack.toString());
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => ProductProvider()..loadProducts(),
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark(),
+        home: BootstrapErrorApp(error: e.toString()),
+      ),
+    );
+  }
+}
+
+class BootstrapErrorApp extends StatelessWidget {
+  final String error;
+  const BootstrapErrorApp({super.key, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1A1A1A),
+      body: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600),
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2D2D2D),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: Colors.redAccent,
+                size: 64,
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Tizimni ishga tushirishda xatolik',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Ilovani ishga tushirishda texnik muammo yuzaga keldi. Iltimos, administratorga murojaat qiling.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SelectableText(
+                  error,
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () => exit(0),
+                icon: const Icon(Icons.close),
+                label: const Text('Ilovani yopish'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        ChangeNotifierProvider(create: (_) => CartProvider()),
-        ChangeNotifierProvider(
-          create: (_) => CategoryProvider()..loadCategories(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => PrinterProvider()..loadSettings(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => LocationProvider()..loadLocations(),
-        ),
-        ChangeNotifierProvider(create: (_) => TableProvider()..loadTables()),
-        ChangeNotifierProvider(create: (_) => WaiterProvider()..loadWaiters()),
-        ChangeNotifierProvider(create: (_) => ReportProvider()),
-        ChangeNotifierProvider(
-          create: (_) => ReceiptSettingsProvider()..loadSettings(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => AppSettingsProvider()..loadSettings(),
-        ),
-        ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-        ChangeNotifierProvider(create: (_) => DeveloperProvider()),
-        ChangeNotifierProvider(create: (_) => UserProvider()..loadUsers()),
-        ChangeNotifierProvider(
-          create: (_) => ExpenseProvider()
-            ..loadCategories()
-            ..loadExpenses(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => CustomerProvider()..loadCustomers(),
-        ),
-        ChangeNotifierProvider(create: (_) => AiProvider()),
-        ChangeNotifierProvider(
-          create: (_) => InventoryProvider()..loadIngredients(),
-        ),
-        ChangeNotifierProvider.value(value: LicenseService.instance),
-      ],
-      child: const TezzroApp(),
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class TezzroApp extends StatelessWidget {
@@ -130,13 +223,15 @@ class TezzroApp extends StatelessWidget {
       splitScreenMode: true,
       builder: (context, child) {
         final licenseService = context.watch<LicenseService>();
+        final appSettings = context.watch<AppSettingsProvider>();
         final status = licenseService.currentStatus;
 
         return MaterialApp(
           title: 'ZELLY',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
-          themeMode: ThemeMode.light,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: appSettings.themeMode,
           home: _getHome(status),
         );
       },
@@ -606,8 +701,9 @@ class _MainLayoutState extends State<MainLayout> {
     final user = connectivity.currentUser;
     final role = user?['role'] ?? 'admin';
 
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    // Sidebar always stays dark regardless of app theme (premium dark sidebar)
+    const sidebarBg = Color(0xFF0F172A); // deep slate-900 — always dark
+    const sidebarFg = Colors.white; // always white text/icons
 
     return Scaffold(
       body: Row(
@@ -616,10 +712,10 @@ class _MainLayoutState extends State<MainLayout> {
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             width: _isExpanded ? 250 : 70,
-            color: isDark ? theme.colorScheme.surface : const Color(0xFF1E293B),
+            color: sidebarBg,
             child: Column(
               children: [
-                _buildSidebarHeader(),
+                _buildSidebarHeader(sidebarFg),
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.symmetric(vertical: 20),
@@ -629,6 +725,7 @@ class _MainLayoutState extends State<MainLayout> {
                         0,
                         Icons.grid_view_outlined,
                         AppStrings.tablesNav,
+                        sidebarFg,
                       ),
 
                       // Admin - sees everything
@@ -637,102 +734,118 @@ class _MainLayoutState extends State<MainLayout> {
                           1,
                           Icons.inventory_2_outlined,
                           AppStrings.productsNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           2,
                           Icons.category_outlined,
                           AppStrings.categoriesNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           3,
                           Icons.layers_outlined,
                           AppStrings.locationsNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           4,
                           Icons.table_bar_outlined,
                           AppStrings.tablesSettingsNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           5,
                           Icons.people_outline,
                           AppStrings.waitersNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           13,
                           Icons.person_add_alt_1_outlined,
                           AppStrings.cashiersNav,
+                          sidebarFg,
                         ),
-                        const Divider(
-                          color: Colors.white10,
+                        Divider(
+                          color: sidebarFg.withOpacity(0.1),
                           height: 32,
                           indent: 20,
                           endIndent: 20,
                         ),
-                        _buildSectionHeader(AppStrings.finance),
+                        _buildSectionHeader(AppStrings.finance, sidebarFg),
                         _buildSidebarItem(
                           14,
                           Icons.payments_outlined,
                           AppStrings.expensesNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           15,
                           Icons.groups_outlined,
                           AppStrings.customersNav,
+                          sidebarFg,
                         ),
-                        const Divider(
-                          color: Colors.white10,
+                        Divider(
+                          color: sidebarFg.withOpacity(0.1),
                           height: 32,
                           indent: 20,
                           endIndent: 20,
                         ),
-                        _buildSectionHeader(AppStrings.stats),
+                        _buildSectionHeader(AppStrings.stats, sidebarFg),
                         _buildSidebarItem(
                           6,
                           Icons.bar_chart_rounded,
                           AppStrings.reportsNav,
+                          sidebarFg,
                         ),
-                        const Divider(
-                          color: Colors.white10,
+                        Divider(
+                          color: sidebarFg.withOpacity(0.1),
                           height: 32,
                           indent: 20,
                           endIndent: 20,
                         ),
-                        _buildSectionHeader('Sozlamalar'),
+                        _buildSectionHeader('Sozlamalar', sidebarFg),
                         _buildSidebarItem(
                           7,
                           Icons.print_outlined,
                           AppStrings.printerNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           8,
                           Icons.receipt_long_outlined,
                           AppStrings.receiptNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           9,
                           Icons.lock_outline,
                           AppStrings.pinNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           10,
                           Icons.branding_watermark_outlined,
                           AppStrings.brandNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           11,
                           Icons.settings_ethernet_outlined,
                           AppStrings.connectionNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           12,
                           Icons.send_outlined,
                           AppStrings.telegramNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           16,
                           Icons.warehouse_outlined,
                           'Ombor',
+                          sidebarFg,
                         ),
                       ],
 
@@ -742,28 +855,32 @@ class _MainLayoutState extends State<MainLayout> {
                           1,
                           Icons.inventory_2_outlined,
                           AppStrings.productsNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           2,
                           Icons.category_outlined,
                           AppStrings.categoriesNav,
+                          sidebarFg,
                         ),
-                        const Divider(
-                          color: Colors.white10,
+                        Divider(
+                          color: sidebarFg.withOpacity(0.1),
                           height: 32,
                           indent: 20,
                           endIndent: 20,
                         ),
-                        _buildSectionHeader('Sozlamalar'),
+                        _buildSectionHeader('Sozlamalar', sidebarFg),
                         _buildSidebarItem(
                           7,
                           Icons.print_outlined,
                           AppStrings.printerNav,
+                          sidebarFg,
                         ),
                         _buildSidebarItem(
                           8,
                           Icons.receipt_long_outlined,
                           AppStrings.receiptNav,
+                          sidebarFg,
                         ),
                       ],
 
@@ -771,7 +888,7 @@ class _MainLayoutState extends State<MainLayout> {
                     ],
                   ),
                 ),
-                _buildSidebarBottom(user, role),
+                _buildSidebarBottom(user, role, sidebarFg),
               ],
             ),
           ),
@@ -787,7 +904,8 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  Widget _buildSidebarHeader() {
+  Widget _buildSidebarHeader(Color color) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 80,
       padding: EdgeInsets.symmetric(horizontal: _isExpanded ? 20 : 0),
@@ -798,91 +916,110 @@ class _MainLayoutState extends State<MainLayout> {
         children: [
           if (_isExpanded) ...[
             const SizedBox(width: 12),
-            GestureDetector(
-              onLongPress: () async {
-                final passwordController = TextEditingController();
-                final correct = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Developer Access'),
-                    content: TextField(
-                      controller: passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Parolni kiriting',
-                        hintText: 'Password',
+            Expanded(
+              child: GestureDetector(
+                onLongPress: () async {
+                  final passwordController = TextEditingController();
+                  final correct = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Developer Access'),
+                      content: TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Parolni kiriting',
+                          hintText: 'Password',
+                        ),
                       ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Bekor qilish'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          if (passwordController.text == 'DEVELOPER2026') {
-                            Navigator.pop(context, true);
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Parol noto\'g\'ri!'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                        child: const Text('Kirish'),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (correct == true && mounted) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const DeveloperMgmtScreen(),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Bekor qilish'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            if (passwordController.text == 'DEVELOPER2026') {
+                              Navigator.pop(context, true);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Parol noto\'g\'ri!'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Kirish'),
+                        ),
+                      ],
                     ),
                   );
-                }
-              },
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'ZELLY',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      letterSpacing: 1,
+
+                  if (correct == true && mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const DeveloperMgmtScreen(),
+                      ),
+                    );
+                  }
+                },
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ZELLY',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        letterSpacing: 1,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'POS tizimi',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 11,
+                    Text(
+                      'POS tizimi',
+                      style: TextStyle(
+                        color: color.withOpacity(0.5),
+                        fontSize: 11,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
+          // Theme toggle — always visible
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: Icon(
+              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              color: color.withOpacity(0.6),
+              size: 20,
+            ),
+            tooltip: isDark ? 'Light mode' : 'Dark mode',
+            onPressed: () {
+              context.read<AppSettingsProvider>().setThemeMode(
+                isDark ? ThemeMode.light : ThemeMode.dark,
+              );
+            },
+          ),
+          if (_isExpanded) const SizedBox(width: 8),
         ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, Color color) {
     if (!_isExpanded) return const SizedBox(height: 16);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
-          color: Colors.white.withOpacity(0.3),
+          color: color.withOpacity(0.3),
           fontSize: 10,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.5,
@@ -891,7 +1028,12 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  Widget _buildSidebarItem(int index, IconData icon, String label) {
+  Widget _buildSidebarItem(
+    int index,
+    IconData icon,
+    String label,
+    Color color,
+  ) {
     final bool active = _selectedIndex == index;
 
     return Padding(
@@ -901,14 +1043,12 @@ class _MainLayoutState extends State<MainLayout> {
         child: InkWell(
           onTap: () => setState(() => _selectedIndex = index),
           borderRadius: BorderRadius.circular(12),
-          hoverColor: Colors.white.withOpacity(0.05),
+          hoverColor: color.withOpacity(0.05),
           child: Container(
             height: 48,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              color: active
-                  ? Colors.white.withOpacity(0.1)
-                  : Colors.transparent,
+              color: active ? color.withOpacity(0.1) : Colors.transparent,
             ),
             child: Row(
               mainAxisAlignment: _isExpanded
@@ -928,7 +1068,9 @@ class _MainLayoutState extends State<MainLayout> {
                 SizedBox(width: _isExpanded ? 16 : 0),
                 Icon(
                   icon,
-                  color: active ? AppTheme.secondaryColor : Colors.white60,
+                  color: active
+                      ? AppTheme.secondaryColor
+                      : color.withOpacity(0.6),
                   size: 22,
                 ),
                 if (_isExpanded) ...[
@@ -937,7 +1079,7 @@ class _MainLayoutState extends State<MainLayout> {
                     child: Text(
                       label,
                       style: TextStyle(
-                        color: active ? Colors.white : Colors.white60,
+                        color: active ? color : color.withOpacity(0.6),
                         fontSize: 14,
                         fontWeight: active ? FontWeight.bold : FontWeight.w500,
                       ),
@@ -955,10 +1097,14 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  Widget _buildSidebarBottom(Map<String, dynamic>? user, String role) {
+  Widget _buildSidebarBottom(
+    Map<String, dynamic>? user,
+    String role,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(color: Colors.black12),
+      decoration: BoxDecoration(color: color.withOpacity(0.05)),
       child: Column(
         children: [
           if (_isExpanded)
@@ -966,15 +1112,19 @@ class _MainLayoutState extends State<MainLayout> {
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: color.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 16,
-                    backgroundColor: Colors.white10,
-                    child: Icon(Icons.person, size: 20, color: Colors.white60),
+                    backgroundColor: color.withOpacity(0.1),
+                    child: Icon(
+                      Icons.person,
+                      size: 20,
+                      color: color.withOpacity(0.6),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -983,16 +1133,16 @@ class _MainLayoutState extends State<MainLayout> {
                       children: [
                         Text(
                           user?['name'] ?? 'Admin',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: color,
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         Text(
                           role == 'admin' ? 'Admin' : 'Kassir',
-                          style: const TextStyle(
-                            color: Colors.white30,
+                          style: TextStyle(
+                            color: color.withOpacity(0.3),
                             fontSize: 11,
                           ),
                         ),
@@ -1000,10 +1150,10 @@ class _MainLayoutState extends State<MainLayout> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.logout,
                       size: 18,
-                      color: Colors.white30,
+                      color: color.withOpacity(0.3),
                     ),
                     onPressed: () {
                       context.read<ConnectivityProvider>().setCurrentUser(null);
@@ -1029,15 +1179,15 @@ class _MainLayoutState extends State<MainLayout> {
                   _isExpanded
                       ? Icons.keyboard_double_arrow_left
                       : Icons.keyboard_double_arrow_right,
-                  color: Colors.white30,
+                  color: color.withOpacity(0.3),
                   size: 20,
                 ),
                 onPressed: () => setState(() => _isExpanded = !_isExpanded),
               ),
               if (_isExpanded)
-                const Text(
+                Text(
                   'v1.0.2',
-                  style: TextStyle(color: Colors.white12, fontSize: 10),
+                  style: TextStyle(color: color.withOpacity(0.1), fontSize: 10),
                 ),
             ],
           ),

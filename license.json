@@ -1,16 +1,16 @@
 {
     "payload": {
-        "company": "Hayatulloh",
-        "device_id": "8260da6e3217b5546a3ba614775dd28feeffc74008583090977743042ae6500e",
-        "expiry": "2027-01-01T00:00:00",
+        "company": "MELLY",
+        "device_id": "3f4ca9b0a6e63fe4b9c2bfc96716f11b2d99a04a70f4558e16491ecb00b1d1f9",
+        "expiry": "2028-01-01T00:00:00",
         "features": {
             "ai_analytics": true,
             "inventory_mgmt": true,
             "multi_printer": true
         },
-        "issued_at": "2026-02-15T18:57:31",
+        "issued_at": "2026-02-20T01:18:02",
         "plan": "PREMIUM",
         "product": "Zelly POS"
     },
-    "signature": "Ch63qRcato6GEkgUbc0esfeXq3uML8U1xC3eWsfEzcVf8Tq/LUt4Ky46xQns/yJfQ7fCYCpbmzL0KsXZff+Bmus+nEd2D7MaiQ6TIuxDgYPw3CRWyrHVJKd3J9HHw8h4t5ym1cNAC2PPsB7IgVKpJogDfEIFQQVoNa1eAgPleRPN+bt0SpcQ/nHqYNOC4RGkPgf2LGKdTaHaltgDV/EwA7DDC2eYxeIdyXZDoeo0XKzmMSfYcDQ3hTGzZR2SdlyzcLeeMx5Fh+6CN1vS0M5egeVfiuNK5UNW0uiWk0qeiqTJahOWoW7fpj9eVaBKvJMGrIYU7HqZ2v8DkApeU8x1Rw=="
+    "signature": "jh+HcwjPFJYVp67HUH+Spip2ATMqun7zomz49trSd3DDVfbiJhyohaVXK+OPYwxwr6+IvRXzO0DFjUYsVsr4+ccwVNdq4EiSUsBJLpD9oaqwK8lfd10QV9851odYVXBy7V3GRdDuc1mfXhodMcvtvQACGN/uF6aUv+ortSXXyMYAN1WKtM+Whe6G9PplPTRx2wG5QiZGpC53v8MOwBJKa43aPgucVLbSQMMOspHrObbA3mQ4BogwRRI5dWQHvSeF0qJnNeALy6l38uNnf+whp8BZjUUoN6SeHq+llbI1jKh1F3kp54x5IR1IR4vQP1tnNFtvcFdd/esd/zI7qXBzuQ=="
 }

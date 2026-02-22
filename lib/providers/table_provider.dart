@@ -38,7 +38,7 @@ class TableProvider extends ChangeNotifier {
              o.total as order_total, 
              w.name as waiter_name
       FROM tables t
-      LEFT JOIN orders o ON t.id = o.table_id AND o.status = 0
+      LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
       LEFT JOIN waiters w ON o.waiter_id = w.id
     ''');
       }
@@ -142,6 +142,44 @@ class TableProvider extends ChangeNotifier {
     await loadTables(connectivity: connectivity);
   }
 
+  Future<void> updateTableLayout(
+    int id,
+    double x,
+    double y,
+    double width,
+    double height, {
+    ConnectivityProvider? connectivity,
+  }) async {
+    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+      await connectivity.postRemoteData('/tables', {
+        'id': id,
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+      });
+    } else {
+      await DatabaseHelper.instance.update(
+        'tables',
+        {'x': x, 'y': y, 'width': width, 'height': height},
+        'id = ?',
+        [id],
+      );
+    }
+
+    // Locally update the table in the list to avoid full reload
+    final index = _tables.indexWhere((t) => t.id == id);
+    if (index != -1) {
+      _tables[index] = _tables[index].copyWith(
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+      );
+      notifyListeners();
+    }
+  }
+
   Future<List<TableModel>> getTablesForLocation(int? locationId) async {
     try {
       final db = await DatabaseHelper.instance.database;
@@ -153,18 +191,18 @@ class TableProvider extends ChangeNotifier {
                o.total as order_total, 
                w.name as waiter_name
         FROM tables t
-        LEFT JOIN orders o ON t.id = o.table_id AND o.status = 0
+        LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
         LEFT JOIN waiters w ON o.waiter_id = w.id
       ''';
-      
+
       List<dynamic> whereArgs = [];
       if (locationId != null) {
         query += ' WHERE t.location_id = ?';
         whereArgs.add(locationId);
       }
-      
+
       final data = await db.rawQuery(query, whereArgs);
-      
+
       return data.map((item) {
         ActiveOrderInfo? activeOrder;
         if (item['order_id'] != null) {

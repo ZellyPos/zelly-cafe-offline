@@ -10,12 +10,14 @@ class AppSettingsProvider extends ChangeNotifier {
   String _restaurantName = 'ZELLY';
   String? _telegramBotToken;
   String? _telegramChatId;
+  ThemeMode _themeMode = ThemeMode.light;
 
   String get loginPin => _loginPin;
   String? get brandImagePath => _brandImagePath;
   String get restaurantName => _restaurantName;
   String? get telegramBotToken => _telegramBotToken;
   String? get telegramChatId => _telegramChatId;
+  ThemeMode get themeMode => _themeMode;
 
   Future<void> loadSettings() async {
     final db = DatabaseHelper.instance;
@@ -64,6 +66,32 @@ class AppSettingsProvider extends ChangeNotifier {
       _telegramChatId = chatRes.first['value'];
     }
 
+    final themeRes = await db.queryByColumn('settings', 'key', 'theme_mode');
+    if (themeRes.isNotEmpty) {
+      final value = themeRes.first['value'];
+      _themeMode = ThemeMode.values.firstWhere(
+        (e) => e.name == value,
+        orElse: () => ThemeMode.light,
+      );
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    final db = DatabaseHelper.instance;
+    final existing = await db.queryByColumn('settings', 'key', 'theme_mode');
+    if (existing.isNotEmpty) {
+      await db.update(
+        'settings',
+        {'value': mode.name},
+        'key = ?',
+        ['theme_mode'],
+      );
+    } else {
+      await db.insert('settings', {'key': 'theme_mode', 'value': mode.name});
+    }
+    _themeMode = mode;
     notifyListeners();
   }
 

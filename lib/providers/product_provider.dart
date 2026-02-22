@@ -7,7 +7,7 @@ import '../core/services/audit_service.dart';
 class ProductProvider extends ChangeNotifier {
   List<Product> _products = [];
   bool _isLoading = false;
-  Map<int, int> _salesCountCache = {}; // Cache for sales counts
+  final Map<int, int> _salesCountCache = {}; // Cache for sales counts
 
   List<Product> get products => _products;
   bool get isLoading => _isLoading;

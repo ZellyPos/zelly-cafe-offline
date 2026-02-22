@@ -34,11 +34,11 @@ class DeviceFingerprintService {
         HKEY_LOCAL_MACHINE,
         lpSubKey,
         0,
-        REG_SAM_FLAGS.KEY_READ | REG_SAM_FLAGS.KEY_WOW64_64KEY,
+        KEY_READ | KEY_WOW64_64KEY,
         phkResult,
       );
 
-      if (status != WIN32_ERROR.ERROR_SUCCESS) {
+      if (status != ERROR_SUCCESS) {
         return null;
       }
 
@@ -57,7 +57,7 @@ class DeviceFingerprintService {
           lpcbData,
         );
 
-        if (queryStatus == WIN32_ERROR.ERROR_SUCCESS) {
+        if (queryStatus == ERROR_SUCCESS) {
           return lpData.cast<Utf16>().toDartString();
         }
       } finally {

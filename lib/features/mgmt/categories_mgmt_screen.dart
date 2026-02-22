@@ -26,17 +26,19 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
         .where((c) => c.name.toLowerCase().contains(searchQuery.toLowerCase()))
         .toList();
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           AppStrings.categoryMgmt,
-          style: const TextStyle(
-            color: Color(0xFF1E293B),
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.surface,
         elevation: 0,
         centerTitle: false,
         actions: [
@@ -45,7 +47,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
             child: Center(
               child: IconButton(
                 onPressed: () => _showReorderDialog(context),
-                icon: const Icon(Icons.reorder, color: AppTheme.primaryColor),
+                icon: Icon(Icons.reorder, color: theme.colorScheme.primary),
                 tooltip: AppStrings.changeOrder,
               ),
             ),
@@ -58,8 +60,8 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                 icon: const Icon(Icons.add),
                 label: Text(AppStrings.addCategory),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 16,
@@ -78,14 +80,23 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
           // Search Bar
           Container(
             padding: const EdgeInsets.all(24),
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             child: TextField(
               onChanged: (val) => setState(() => searchQuery = val),
+              style: TextStyle(color: theme.colorScheme.onSurface),
               decoration: InputDecoration(
                 hintText: AppStrings.searchCategoryHint,
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                hintStyle: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                ),
                 filled: true,
-                fillColor: const Color(0xFFF1F5F9),
+                fillColor: theme.brightness == Brightness.light
+                    ? const Color(0xFFF1F5F9)
+                    : theme.colorScheme.onSurface.withOpacity(0.05),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -129,17 +140,25 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
   }
 
   Widget _buildEmptyState() {
+    final theme = Theme.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.category_outlined, size: 64, color: Colors.grey.shade300),
+          Icon(
+            Icons.category_outlined,
+            size: 64,
+            color: theme.colorScheme.onSurface.withOpacity(0.1),
+          ),
           const SizedBox(height: 16),
           Text(
             searchQuery.isEmpty
                 ? "Kategoriyalar mavjud emas"
                 : "Hech narsa topilmadi",
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 18),
+            style: TextStyle(
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              fontSize: 18,
+            ),
           ),
         ],
       ),
@@ -151,13 +170,16 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
     Category category,
     int productCount,
   ) {
-    Color cardColor = Colors.white;
-    if (category.color != null) {
+    final theme = Theme.of(context);
+    Color cardColor = theme.colorScheme.surface;
+    if (category.color != null && category.color != '#FFFFFF') {
       try {
         cardColor = Color(int.parse(category.color!.replaceFirst('#', '0xFF')));
       } catch (e) {
-        cardColor = Colors.white;
+        cardColor = theme.colorScheme.surface;
       }
+    } else if (theme.brightness == Brightness.dark) {
+      cardColor = theme.colorScheme.surface;
     }
 
     return Container(
@@ -166,12 +188,16 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: theme.shadowColor.withOpacity(0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: theme.brightness == Brightness.light
+              ? const Color(0xFFE2E8F0)
+              : theme.colorScheme.onSurface.withOpacity(0.1),
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -195,7 +221,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                               : 16,
                           fontWeight: FontWeight.bold,
                           color: cardColor.computeLuminance() > 0.5
-                              ? const Color(0xFF1E293B)
+                              ? theme.colorScheme.onSurface
                               : Colors.white,
                         ),
                         maxLines: 1,
@@ -366,7 +392,9 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final theme = Theme.of(context);
           return AlertDialog(
+            backgroundColor: theme.colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -374,7 +402,10 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               category == null
                   ? AppStrings.addCategory
                   : AppStrings.editCategory,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
             content: SizedBox(
               width: 400,
@@ -385,8 +416,12 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                   TextField(
                     controller: nameController,
                     autofocus: true,
+                    style: TextStyle(color: theme.colorScheme.onSurface),
                     decoration: InputDecoration(
                       labelText: AppStrings.categoryName,
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -395,7 +430,10 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                   const SizedBox(height: 16),
                   Text(
                     AppStrings.categoryColor,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -415,12 +453,14 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: theme.colorScheme.surface,
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: isSelected
                                       ? AppTheme.primaryColor
-                                      : Colors.grey.shade300,
+                                      : theme.colorScheme.onSurface.withOpacity(
+                                          0.1,
+                                        ),
                                   width: isSelected ? 2 : 1,
                                 ),
                               ),
@@ -429,7 +469,9 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                                 size: 20,
                                 color: isSelected
                                     ? AppTheme.primaryColor
-                                    : Colors.grey,
+                                    : theme.colorScheme.onSurface.withOpacity(
+                                        0.4,
+                                      ),
                               ),
                             ),
                           );
@@ -504,7 +546,8 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                   Navigator.pop(context);
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -524,9 +567,14 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
       builder: (context) {
         return Consumer<CategoryProvider>(
           builder: (context, provider, _) {
+            final theme = Theme.of(context);
             final categories = provider.categories;
             return AlertDialog(
-              title: Text(AppStrings.reorderCategories),
+              backgroundColor: theme.colorScheme.surface,
+              title: Text(
+                AppStrings.reorderCategories,
+                style: TextStyle(color: theme.colorScheme.onSurface),
+              ),
               content: SizedBox(
                 width: 400,
                 height: 500,
@@ -536,8 +584,14 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                     final cat = categories[index];
                     return ListTile(
                       key: ValueKey(cat.id),
-                      leading: const Icon(Icons.drag_handle),
-                      title: Text(cat.name),
+                      leading: Icon(
+                        Icons.drag_handle,
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      title: Text(
+                        cat.name,
+                        style: TextStyle(color: theme.colorScheme.onSurface),
+                      ),
                       tileColor: cat.color != null
                           ? Color(
                               int.parse(cat.color!.replaceFirst('#', '0xFF')),
@@ -557,7 +611,10 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(AppStrings.close),
+                  child: Text(
+                    AppStrings.close,
+                    style: TextStyle(color: theme.colorScheme.primary),
+                  ),
                 ),
               ],
             );

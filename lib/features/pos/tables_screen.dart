@@ -9,6 +9,8 @@ import '../../core/theme.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../core/app_strings.dart';
 import 'pos_screen.dart';
+import 'widgets/floor_plan_viewer.dart';
+import 'widgets/floor_plan_editor.dart';
 
 class TablesScreen extends StatefulWidget {
   const TablesScreen({super.key});
@@ -20,6 +22,8 @@ class TablesScreen extends StatefulWidget {
 class _TablesScreenState extends State<TablesScreen> {
   int? _selectedLocationId;
   Timer? _refreshTimer;
+  bool _isFloorPlanView = false;
+  bool _isDesignMode = false;
 
   @override
   void initState() {
@@ -87,6 +91,16 @@ class _TablesScreenState extends State<TablesScreen> {
 
     final tables = filteredTables.toList();
 
+    // Map of activeOrderId -> List of Tables in that order (Joined tables)
+    final joinGroups = <String, List<TableModel>>{};
+    for (var t in tableProvider.tables) {
+      if (t.activeOrderId != null) {
+        joinGroups.putIfAbsent(t.activeOrderId!, () => []).add(t);
+      }
+    }
+    // Only keep groups with > 1 table
+    joinGroups.removeWhere((key, value) => value.length < 2);
+
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -99,7 +113,13 @@ class _TablesScreenState extends State<TablesScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(child: _buildLocationTabs(context, locationProvider)),
-                const SizedBox(width: 24),
+                const SizedBox(width: 16),
+                _buildViewToggle(context),
+                const SizedBox(width: 16),
+                if (role == 'admin') ...[
+                  _buildDesignToggle(context),
+                  const SizedBox(width: 16),
+                ],
                 _buildSaboyButton(context),
               ],
             ),
@@ -107,6 +127,18 @@ class _TablesScreenState extends State<TablesScreen> {
             Expanded(
               child: tableProvider.isLoading && tableProvider.tables.isEmpty
                   ? const Center(child: CircularProgressIndicator())
+                  : _isFloorPlanView
+                  ? (_isDesignMode
+                        ? FloorPlanEditor(
+                            tables: tables,
+                            locationId: _selectedLocationId!,
+                          )
+                        : FloorPlanViewer(
+                            tables: tables,
+                            joinGroups: joinGroups,
+                            onTableTap: (table) =>
+                                _handleTableTap(context, table),
+                          ))
                   : GridView.builder(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount:
@@ -124,7 +156,10 @@ class _TablesScreenState extends State<TablesScreen> {
                       itemCount: tables.length,
                       itemBuilder: (context, index) {
                         final table = tables[index];
-                        return _buildTableCard(context, table);
+                        final joinedWith = table.activeOrderId != null
+                            ? joinGroups[table.activeOrderId!]
+                            : null;
+                        return _buildTableCard(context, table, joinedWith);
                       },
                     ),
             ),
@@ -139,7 +174,6 @@ class _TablesScreenState extends State<TablesScreen> {
     LocationProvider locationProvider,
   ) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     return SizedBox(
       height: 60,
       child: ListView.builder(
@@ -155,13 +189,11 @@ class _TablesScreenState extends State<TablesScreen> {
               selected: isSelected,
               onSelected: (val) => setState(() => _selectedLocationId = loc.id),
               selectedColor: AppTheme.primaryColor,
-              backgroundColor: isDark
-                  ? theme.colorScheme.surface
-                  : Colors.white,
+              backgroundColor: theme.colorScheme.surface,
               labelStyle: TextStyle(
                 color: isSelected
                     ? Colors.white
-                    : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                    : theme.colorScheme.onSurface.withOpacity(0.6),
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
                 inherit: true,
@@ -205,11 +237,15 @@ class _TablesScreenState extends State<TablesScreen> {
     );
   }
 
-  Widget _buildTableCard(BuildContext context, TableModel table) {
+  Widget _buildTableCard(
+    BuildContext context,
+    TableModel table, [
+    List<TableModel>? joinedWith,
+  ]) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final isOccupied = table.status == 1;
     final info = table.activeOrder;
+    final bool isJoined = joinedWith != null && joinedWith.length > 1;
 
     return Container(
       decoration: BoxDecoration(
@@ -217,13 +253,17 @@ class _TablesScreenState extends State<TablesScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isOccupied
-              ? Colors.red.withOpacity(0.3)
-              : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
-          width: 2,
+              ? (isJoined
+                    ? Colors.blue.withOpacity(0.5)
+                    : Colors.red.withOpacity(0.3))
+              : theme.dividerColor.withOpacity(0.3),
+          width: isJoined ? 3 : 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: isJoined
+                ? Colors.blue.withOpacity(0.05)
+                : theme.shadowColor.withOpacity(0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -255,9 +295,27 @@ class _TablesScreenState extends State<TablesScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    _buildStatusBadge(isOccupied),
+                    if (isJoined)
+                      _buildJoinBadge()
+                    else
+                      _buildStatusBadge(isOccupied),
                   ],
                 ),
+                if (isJoined)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      "Birlashgan: ${joinedWith.where((t) => t.id != table.id).map((t) => t.name).join(', ')}",
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.blue.shade700,
+                        fontWeight: FontWeight.w500,
+                        inherit: true,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 if (isOccupied && info != null) ...[
                   _buildIconText(
@@ -299,7 +357,7 @@ class _TablesScreenState extends State<TablesScreen> {
                         Text(
                           AppStrings.tableEmpty,
                           style: TextStyle(
-                            color: Color(0xFF94A3B8),
+                            color: theme.colorScheme.onSurface.withOpacity(0.4),
                             fontSize: 12,
                             inherit: true,
                           ),
@@ -325,9 +383,8 @@ class _TablesScreenState extends State<TablesScreen> {
     Color? color,
   }) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final effectiveColor =
-        color ?? (isDark ? Colors.white60 : const Color(0xFF64748B));
+        color ?? theme.colorScheme.onSurface.withOpacity(0.6);
     return Row(
       children: [
         Icon(icon, size: 16, color: effectiveColor),
@@ -365,6 +422,88 @@ class _TablesScreenState extends State<TablesScreen> {
           fontSize: 12,
           inherit: true,
         ),
+      ),
+    );
+  }
+
+  Widget _buildJoinBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.link, size: 12, color: Colors.blue.shade700),
+          const SizedBox(width: 4),
+          Text(
+            "Birlashgan",
+            style: TextStyle(
+              color: Colors.blue.shade700,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              inherit: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildViewToggle(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.shadowColor.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: () => setState(() => _isFloorPlanView = !_isFloorPlanView),
+        icon: Icon(
+          _isFloorPlanView ? Icons.grid_view : Icons.map_outlined,
+          color: AppTheme.primaryColor,
+        ),
+        tooltip: _isFloorPlanView
+            ? 'Grid ko\'rinishi'
+            : 'Floor Plan ko\'rinishi',
+      ),
+    );
+  }
+
+  Widget _buildDesignToggle(BuildContext context) {
+    if (!_isFloorPlanView) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: _isDesignMode ? Colors.orange : theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.shadowColor.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: () => setState(() => _isDesignMode = !_isDesignMode),
+        icon: Icon(
+          _isDesignMode ? Icons.check : Icons.design_services,
+          color: _isDesignMode ? Colors.white : Colors.orange,
+        ),
+        tooltip: _isDesignMode ? 'Saqlash' : 'Dizayn rejimi',
       ),
     );
   }

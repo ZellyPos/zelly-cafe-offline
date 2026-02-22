@@ -313,4 +313,6 @@ class AppStrings {
   static String get categoryColor => Translations.get('category_color', _lang);
   static String get reorderCategories =>
       Translations.get('reorder_categories', _lang);
+  static String get noServiceCharge =>
+      Translations.get('no_service_charge', _lang);
 }

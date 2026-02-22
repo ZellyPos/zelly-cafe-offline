@@ -34,8 +34,9 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
   }
 
   double get _paidAmount {
-    if (_paymentType == 'Card' || _paymentType == 'Terminal')
+    if (_paymentType == 'Card' || _paymentType == 'Terminal') {
       return widget.total;
+    }
     return double.tryParse(_paidAmountStr) ?? 0.0;
   }
 
@@ -43,8 +44,9 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
       _paidAmount > widget.total ? _paidAmount - widget.total : 0.0;
 
   void _onNumpadPressed(String value) {
-    if (_paymentType == 'Card' || _paymentType == 'Terminal')
+    if (_paymentType == 'Card' || _paymentType == 'Terminal') {
       return; // Disable editing for Non-Cash
+    }
 
     setState(() {
       if (value == 'C') {
@@ -209,7 +211,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                         onChanged: (val) =>
                             setState(() => _shouldPrintReceipt = val),
                         contentPadding: EdgeInsets.zero,
-                        activeColor: Colors.green,
+                        activeThumbColor: Colors.green,
                       ),
                     ],
                   ),

@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:print_usb/print_usb.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
@@ -163,8 +162,9 @@ class PrintingService {
     List<int> bytes,
   ) async {
     if (settings.type == PrinterType.network) {
-      if (settings.ipAddress == null || settings.ipAddress!.isEmpty)
+      if (settings.ipAddress == null || settings.ipAddress!.isEmpty) {
         return false;
+      }
       try {
         final socket = await Socket.connect(
           settings.ipAddress!,
@@ -446,8 +446,9 @@ class PrintingService {
       }
     }
     if (current.isNotEmpty) lines.add(current);
-    if (lines.isEmpty)
+    if (lines.isEmpty) {
       lines.add(text.substring(0, text.length > width ? width : text.length));
+    }
     return lines;
   }
 

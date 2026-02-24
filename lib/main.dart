@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'core/database_helper.dart';
 import 'core/services/license_service.dart';
+import 'core/update_service.dart';
 import 'models/license_model.dart';
 import 'features/license/screens/license_import_screen.dart';
 import 'core/app_strings.dart';
@@ -241,13 +242,47 @@ class TezzroApp extends StatelessWidget {
   Widget _getHome(LicenseStatus status) {
     // Agar litsenziya faol bo'lsa yoki imtiyozli davrda bo'lsa - Login sahifasiga
     if (status.isValid) {
-      return const LoginScreen();
+      return const UpdateCheckWrapper(child: LoginScreen());
     }
 
     // Agar litsenziya muddati tugagan bo'lsa, lekin import sahifasiga kirish ruxsat berilgan bo'lsa
     // Bu yerda foydalanuvchi hisobotlarni ko'rishi ham mumkin (talab bo'yicha),
     // lekin biz to'g'ridan-to'g'ri aktivatsiya o'rniga litsenziya oynasini ko'rsatamiz.
-    return const LicenseImportScreen();
+    return const UpdateCheckWrapper(child: LicenseImportScreen());
+  }
+}
+
+class UpdateCheckWrapper extends StatefulWidget {
+  final Widget child;
+  
+  const UpdateCheckWrapper({super.key, required this.child});
+
+  @override
+  State<UpdateCheckWrapper> createState() => _UpdateCheckWrapperState();
+}
+
+class _UpdateCheckWrapperState extends State<UpdateCheckWrapper> {
+  @override
+  void initState() {
+    super.initState();
+    _checkForUpdates();
+  }
+
+  Future<void> _checkForUpdates() async {
+    // Backgroundda tekshirish
+    Future.delayed(const Duration(seconds: 2), () async {
+      if (mounted) {
+        final updateInfo = await UpdateService.checkForUpdates();
+        if (updateInfo != null) {
+          UpdateService.showUpdateDialog(context, updateInfo);
+        }
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }
 

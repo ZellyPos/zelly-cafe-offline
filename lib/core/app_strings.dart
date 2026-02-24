@@ -61,6 +61,11 @@ class AppStrings {
       Translations.get('product_quantity', _lang);
   static String get insufficientStock =>
       Translations.get('insufficient_stock', _lang);
+  static String get productUnit => Translations.get('product_unit', _lang);
+  static String get unitPortion => Translations.get('unit_portion', _lang);
+  static String get unitDona => Translations.get('unit_dona', _lang);
+  static String get unitKg => Translations.get('unit_kg', _lang);
+  static String get unitSet => Translations.get('unit_set', _lang);
 
   // Categories
   static String get categoryMgmt => Translations.get('category_mgmt', _lang);
@@ -315,4 +320,14 @@ class AppStrings {
       Translations.get('reorder_categories', _lang);
   static String get noServiceCharge =>
       Translations.get('no_service_charge', _lang);
+
+  // Permissions
+  static String get permissions => Translations.get('permissions', _lang);
+  static String get permDeleteItem =>
+      Translations.get('perm_delete_item', _lang);
+  static String get permPrintReceipt =>
+      Translations.get('perm_print_receipt', _lang);
+  static String get permEditPrice => Translations.get('perm_edit_price', _lang);
+  static String get permChangeTable =>
+      Translations.get('perm_change_table', _lang);
 }

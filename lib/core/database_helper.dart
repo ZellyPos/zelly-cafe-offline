@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 31,
+      version: 37,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -711,6 +711,71 @@ class DatabaseHelper {
         print('Error upgrading database to v31: $e');
       }
     }
+
+    if (oldVersion < 32) {
+      try {
+        await db.execute('ALTER TABLE products ADD COLUMN unit TEXT');
+      } catch (e) {
+        print('Error upgrading database to v32: $e');
+      }
+    }
+
+    if (oldVersion < 33) {
+      try {
+        // Check if column exists first to avoid error if migration partially ran
+        final tableInfo = await db.rawQuery('PRAGMA table_info(order_items)');
+        final hasUnit = tableInfo.any((column) => column['name'] == 'unit');
+
+        if (!hasUnit) {
+          await db.execute('ALTER TABLE order_items ADD COLUMN unit TEXT');
+        }
+      } catch (e) {
+        print('Error upgrading database to v33: $e');
+      }
+    }
+
+    if (oldVersion < 34) {
+      // Version 34 was already released/used but might have missing columns logic
+      // based on the previous code. However, the user specifically has 34 in
+      // _initDB, and waiters table creation in _createDB has permissions.
+      // We bump to 35 to ensure the column is added if it's missing.
+    }
+
+    if (oldVersion < 35) {
+      try {
+        await db.execute('ALTER TABLE waiters ADD COLUMN permissions TEXT');
+      } catch (e) {
+        print('Error upgrading database to v35: $e');
+      }
+    }
+
+    if (oldVersion < 36) {
+      try {
+        await db.execute(
+          'ALTER TABLE order_items ADD COLUMN printed_qty REAL DEFAULT 0',
+        );
+      } catch (e) {
+        print('Error upgrading database to v36: $e');
+      }
+    }
+
+    if (oldVersion < 37) {
+      // Failsafe: Ensure printed_qty exists in case onCreate or v36 upgrade failed
+      try {
+        final tableInfo = await db.rawQuery('PRAGMA table_info(order_items)');
+        final hasPrintedQty = tableInfo.any(
+          (column) => column['name'] == 'printed_qty',
+        );
+
+        if (!hasPrintedQty) {
+          await db.execute(
+            'ALTER TABLE order_items ADD COLUMN printed_qty REAL DEFAULT 0',
+          );
+        }
+      } catch (e) {
+        print('Error upgrading database to v37: $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -737,8 +802,11 @@ CREATE TABLE IF NOT EXISTS products (
   is_active $integerType DEFAULT 1,
   image_path TEXT,
   is_set $integerType DEFAULT 0,
+  track_type INTEGER NOT NULL DEFAULT 0,
+  allow_negative_stock INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER DEFAULT 0,
   quantity REAL,
+  unit TEXT,
   no_service_charge INTEGER DEFAULT 0
 )
 ''');
@@ -772,7 +840,8 @@ CREATE TABLE IF NOT EXISTS orders (
   food_total REAL NOT NULL DEFAULT 0,
   room_total REAL NOT NULL DEFAULT 0,
   service_total REAL NOT NULL DEFAULT 0,
-  grand_total REAL NOT NULL DEFAULT 0
+  grand_total REAL NOT NULL DEFAULT 0,
+  shift_id INTEGER
 )
 ''');
 
@@ -782,9 +851,11 @@ CREATE TABLE IF NOT EXISTS order_items (
   order_id $textType,
   product_id $integerType,
   product_name TEXT,
-  qty $integerType,
+  qty $realType,
+  unit TEXT,
   price $realType,
   bundle_items_json TEXT,
+  printed_qty REAL DEFAULT 0,
   FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
 )
 ''');
@@ -829,7 +900,8 @@ CREATE TABLE IF NOT EXISTS waiters (
   type $integerType,
   value $realType,
   pin_code TEXT UNIQUE,
-  is_active $integerType DEFAULT 1
+  is_active $integerType DEFAULT 1,
+  permissions TEXT
 )
 ''');
 
@@ -941,7 +1013,8 @@ CREATE TABLE IF NOT EXISTS users (
         type TEXT,
         ip_address TEXT,
         port INTEGER,
-        printer_name TEXT
+        printer_name TEXT,
+        category_ids TEXT
       )
     ''');
 

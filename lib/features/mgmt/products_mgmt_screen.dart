@@ -319,7 +319,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          "${product.quantity!.toStringAsFixed(0)} ta",
+                          "${product.quantity!.toStringAsFixed(product.unit == 'kg' ? 2 : 0)} ${_getUnitLabel(product.unit)}",
                           style: const TextStyle(
                             color: Colors.orange,
                             fontSize: 10,
@@ -511,6 +511,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
         ? List.from(product!.bundleItems!)
         : null;
     bool noServiceCharge = product?.noServiceCharge ?? false;
+    String? selectedUnit = product?.unit ?? 'portion';
 
     showDialog(
       context: context,
@@ -695,6 +696,38 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                             }).toList(),
                             onChanged: (val) =>
                                 setDialogState(() => selectedCategory = val),
+                          ),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            initialValue: selectedUnit,
+                            decoration: InputDecoration(
+                              labelText: AppStrings.productUnit,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: 'portion',
+                                child: Text(AppStrings.unitPortion),
+                              ),
+                              DropdownMenuItem(
+                                value: 'dona',
+                                child: Text(AppStrings.unitDona),
+                              ),
+                              DropdownMenuItem(
+                                value: 'kg',
+                                child: Text(AppStrings.unitKg),
+                              ),
+                              DropdownMenuItem(
+                                value: 'set',
+                                child: Text(AppStrings.unitSet),
+                              ),
+                            ],
+                            onChanged: (val) =>
+                                setDialogState(() => selectedUnit = val),
                           ),
                           const SizedBox(height: 16),
                           TextField(
@@ -918,6 +951,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     trackType: product?.trackType ?? 0,
                     allowNegativeStock: product?.allowNegativeStock ?? false,
                     noServiceCharge: noServiceCharge,
+                    unit: selectedUnit,
                   );
 
                   if (product == null) {
@@ -1086,5 +1120,20 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
         );
       },
     );
+  }
+
+  String _getUnitLabel(String? unit) {
+    switch (unit) {
+      case 'portion':
+        return AppStrings.unitPortion;
+      case 'dona':
+        return AppStrings.unitDona;
+      case 'kg':
+        return AppStrings.unitKg;
+      case 'set':
+        return AppStrings.unitSet;
+      default:
+        return AppStrings.unitDona;
+    }
   }
 }

@@ -404,13 +404,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         limit: 5,
       ),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text("Xatolik: ${snapshot.error}"));
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final data = snapshot.data!;
-        if (data.isEmpty)
+        if (data.isEmpty) {
           return const Center(child: Text("Ma'lumotlar mavjud emas"));
+        }
 
         return BarChart(
           BarChartData(
@@ -485,13 +488,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         end: _end,
       ),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text("Xatolik: ${snapshot.error}"));
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final data = snapshot.data!;
-        if (data.isEmpty)
+        if (data.isEmpty) {
           return const Center(child: Text("Ma'lumotlar mavjud emas"));
+        }
 
         return BarChart(
           BarChartData(
@@ -552,13 +558,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         end: _end,
       ),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text("Xatolik: ${snapshot.error}"));
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final data = snapshot.data!;
-        if (data.isEmpty)
+        if (data.isEmpty) {
           return const Center(child: Text("Ma'lumotlar mavjud emas"));
+        }
 
         final List<Color> colors = [
           Colors.blue,

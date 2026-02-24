@@ -3,9 +3,11 @@ class OrderItem {
   final String orderId;
   final int productId;
   final String productName; // Joined or cached
-  final int qty;
+  final double qty;
+  final String? unit;
   final double price;
   final String? bundleItemsJson;
+  final double printedQty;
 
   OrderItem({
     this.id,
@@ -13,8 +15,10 @@ class OrderItem {
     required this.productId,
     this.productName = '',
     required this.qty,
+    this.unit,
     required this.price,
     this.bundleItemsJson,
+    this.printedQty = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -23,8 +27,10 @@ class OrderItem {
       'order_id': orderId,
       'product_id': productId,
       'qty': qty,
+      'unit': unit,
       'price': price,
       'bundle_items_json': bundleItemsJson,
+      'printed_qty': printedQty,
     };
   }
 
@@ -37,9 +43,11 @@ class OrderItem {
       orderId: map['order_id'],
       productId: map['product_id'],
       productName: productName,
-      qty: map['qty'],
-      price: map['price'],
+      qty: (map['qty'] as num).toDouble(),
+      unit: map['unit'],
+      price: (map['price'] as num).toDouble(),
       bundleItemsJson: map['bundle_items_json'],
+      printedQty: (map['printed_qty'] as num? ?? 0).toDouble(),
     );
   }
 }

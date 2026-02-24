@@ -261,7 +261,14 @@ class _PosScreenState extends State<PosScreen> {
           ),
           const SizedBox(width: 8),
           IconButton(
-            onPressed: () => _showChangeTableDialog(context),
+            onPressed: () async {
+              if (await context.read<CartProvider>().checkPermission(
+                context,
+                'change_table',
+              )) {
+                _showChangeTableDialog(context);
+              }
+            },
             icon: const Icon(Icons.swap_horiz, color: Colors.blue),
             tooltip: AppStrings.changeTable,
             iconSize: 20,
@@ -825,7 +832,7 @@ class _PosScreenState extends State<PosScreen> {
     BuildContext context,
     Product product,
   ) async {
-    final result = await showDialog<int>(
+    final result = await showDialog<double>(
       context: context,
       builder: (context) => QuantityDialog(product: product),
     );
@@ -869,14 +876,22 @@ class _PosScreenState extends State<PosScreen> {
           productId: cartItem.product.id ?? 0,
           productName: cartItem.product.name,
           qty: cartItem.quantity,
+          unit: cartItem.product.unit,
           price: cartItem.product.price,
         );
       }).toList();
 
+      // Calculate additional charges
+      final double charge = await cartProvider.calculateRoomChargeForUI(
+        context,
+      );
+      final double serviceFee = cartProvider.calculateWaiterServiceFee(context);
+      final double grandTotal = cartProvider.totalAmount + charge + serviceFee;
+
       // Create a temporary order for receipt printing
       final order = Order(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        total: cartProvider.totalAmount,
+        total: grandTotal,
         paymentType: 'pending',
         createdAt: DateTime.now(),
         items: orderItems,
@@ -887,7 +902,9 @@ class _PosScreenState extends State<PosScreen> {
         status: 0, // Open order
         tableName: widget.table?.name,
         foodTotal: cartProvider.totalAmount,
-        grandTotal: cartProvider.totalAmount,
+        roomTotal: charge,
+        serviceTotal: serviceFee,
+        grandTotal: grandTotal,
       );
 
       // Print the receipt

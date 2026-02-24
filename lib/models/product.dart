@@ -9,6 +9,7 @@ class Product {
   final List<BundleItem>? bundleItems;
   final int sortOrder;
   final double? quantity;
+  final String? unit;
   final bool noServiceCharge;
 
   Product({
@@ -22,6 +23,7 @@ class Product {
     this.bundleItems,
     this.sortOrder = 0,
     this.quantity,
+    this.unit,
     this.trackType = 0, // 0=none, 1=retail, 2=recipe
     this.allowNegativeStock = false,
     this.noServiceCharge = false,
@@ -41,6 +43,7 @@ class Product {
       'is_set': isSet ? 1 : 0,
       'sort_order': sortOrder,
       'quantity': quantity,
+      'unit': unit,
       'track_type': trackType,
       'allow_negative_stock': allowNegativeStock ? 1 : 0,
       'no_service_charge': noServiceCharge ? 1 : 0,
@@ -52,19 +55,24 @@ class Product {
     List<BundleItem>? bundleItems,
   }) {
     return Product(
-      id: map['id'],
-      name: map['name'],
-      price: (map['price'] as num).toDouble(),
-      category: map['category'],
+      id: map['id'] != null ? (map['id'] as num).toInt() : null,
+      name: map['name'] ?? '',
+      price: (map['price'] as num?)?.toDouble() ?? 0.0,
+      category: map['category'] ?? '',
       isActive: map['is_active'] == 1,
       imagePath: map['image_path'],
       isSet: map['is_set'] == 1,
       bundleItems: bundleItems,
-      sortOrder: map['sort_order'] ?? 0,
+      sortOrder: map['sort_order'] != null
+          ? (map['sort_order'] as num).toInt()
+          : 0,
       quantity: map['quantity'] != null
           ? (map['quantity'] as num).toDouble()
           : null,
-      trackType: map['track_type'] ?? 0,
+      unit: map['unit'],
+      trackType: map['track_type'] != null
+          ? (map['track_type'] as num).toInt()
+          : 0,
       allowNegativeStock: map['allow_negative_stock'] == 1,
       noServiceCharge: map['no_service_charge'] == 1,
     );
@@ -81,6 +89,7 @@ class Product {
     List<BundleItem>? bundleItems,
     int? sortOrder,
     double? quantity,
+    String? unit,
     int? trackType,
     bool? allowNegativeStock,
     bool? noServiceCharge,
@@ -96,6 +105,7 @@ class Product {
       bundleItems: bundleItems ?? this.bundleItems,
       sortOrder: sortOrder ?? this.sortOrder,
       quantity: quantity ?? this.quantity,
+      unit: unit ?? this.unit,
       trackType: trackType ?? this.trackType,
       allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
       noServiceCharge: noServiceCharge ?? this.noServiceCharge,
@@ -129,9 +139,9 @@ class BundleItem {
 
   factory BundleItem.fromMap(Map<String, dynamic> map) {
     return BundleItem(
-      id: map['id'],
-      bundleId: map['bundle_id'],
-      productId: map['product_id'],
+      id: map['id'] != null ? (map['id'] as num).toInt() : null,
+      bundleId: (map['bundle_id'] as num).toInt(),
+      productId: (map['product_id'] as num).toInt(),
       quantity: (map['quantity'] as num).toDouble(),
       productName: map['product_name'] as String?,
     );

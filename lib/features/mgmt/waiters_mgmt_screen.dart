@@ -429,166 +429,382 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     int selectedType = waiter?.type ?? 0;
     int isActive = waiter?.isActive ?? 1;
     bool isKassa = waiter?.name == "Kassa";
+    List<String> selectedPermissions = List.from(waiter?.permissions ?? []);
+
+    final List<Map<String, String>> availablePermissions = [
+      {'id': 'delete_item', 'label': AppStrings.permDeleteItem},
+      {'id': 'print_receipt', 'label': AppStrings.permPrintReceipt},
+      {'id': 'edit_price', 'label': AppStrings.permEditPrice},
+      {'id': 'change_table', 'label': AppStrings.permChangeTable},
+    ];
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           final theme = Theme.of(context);
-          return AlertDialog(
-            backgroundColor: theme.colorScheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Text(
-              waiter == null ? AppStrings.addWaiter : AppStrings.editWaiter,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface,
+          final isDark = theme.brightness == Brightness.dark;
+
+          InputDecoration modernDecoration(
+            String label,
+            IconData icon, {
+            String? hint,
+          }) {
+            return InputDecoration(
+              labelText: label,
+              hintText: hint,
+              prefixIcon: Icon(
+                icon,
+                color: theme.colorScheme.primary.withOpacity(0.7),
               ),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  enabled: !isKassa,
-                  style: TextStyle(color: theme.colorScheme.onSurface),
-                  decoration: InputDecoration(
-                    labelText: AppStrings.waiterName,
-                    labelStyle: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+              filled: true,
+              fillColor: isDark
+                  ? Colors.white.withOpacity(0.05)
+                  : Colors.grey.shade50,
+              labelStyle: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              ),
+              hintStyle: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.4),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.primary,
+                  width: 2,
                 ),
-                if (!isKassa) ...[
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<int>(
-                    initialValue: selectedType,
-                    dropdownColor: theme.colorScheme.surface,
-                    style: TextStyle(color: theme.colorScheme.onSurface),
-                    decoration: InputDecoration(
-                      labelText: AppStrings.waiterType,
-                      labelStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    items: [
-                      DropdownMenuItem(value: 0, child: Text(AppStrings.fixed)),
-                      DropdownMenuItem(
-                        value: 1,
-                        child: Text(AppStrings.percentage),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      setDialogState(() => selectedType = val!);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: valueController,
-                    keyboardType: TextInputType.number,
-                    style: TextStyle(color: theme.colorScheme.onSurface),
-                    decoration: InputDecoration(
-                      labelText: selectedType == 0
-                          ? AppStrings.serviceFeeFixed
-                          : AppStrings.serviceFeePercentage,
-                      labelStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                      hintText: selectedType == 0
-                          ? AppStrings.exampleFixed
-                          : AppStrings.examplePercentage,
-                      hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.4),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: pinController,
-                    style: TextStyle(color: theme.colorScheme.onSurface),
-                    decoration: InputDecoration(
-                      labelText: AppStrings.pinCodeLabel,
-                      labelStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                      hintText: AppStrings.digitsOnlyHint,
-                      hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.4),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    title: Text(AppStrings.activeStaff),
-                    value: isActive == 1,
-                    onChanged: (val) =>
-                        setDialogState(() => isActive = val ? 1 : 0),
+              ),
+            );
+          }
+
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 500),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
                   ),
                 ],
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  AppStrings.cancel,
-                  style: const TextStyle(color: Colors.grey),
-                ),
               ),
-              ElevatedButton(
-                onPressed: () {
-                  if (nameController.text.isEmpty && !isKassa) return;
-                  final newWaiter = Waiter(
-                    id: waiter?.id,
-                    name: nameController.text,
-                    type: isKassa ? 0 : selectedType,
-                    value: isKassa
-                        ? 0.0
-                        : (double.tryParse(valueController.text) ?? 0.0),
-                    pinCode: isKassa
-                        ? null
-                        : pinController.text.isEmpty
-                        ? null
-                        : pinController.text,
-                    isActive: isActive,
-                  );
-                  if (waiter == null) {
-                    context.read<WaiterProvider>().addWaiter(
-                      newWaiter,
-                      connectivity: context.read<ConnectivityProvider>(),
-                    );
-                  } else {
-                    context.read<WaiterProvider>().updateWaiter(
-                      newWaiter,
-                      connectivity: context.read<ConnectivityProvider>(),
-                    );
-                  }
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  foregroundColor: theme.colorScheme.onPrimary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // --- Header ---
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            waiter == null ? Icons.person_add : Icons.edit_note,
+                            color: theme.colorScheme.onPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Text(
+                          waiter == null
+                              ? AppStrings.addWaiter
+                              : AppStrings.editWaiter,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                child: Text(AppStrings.save),
+
+                  // --- Content ---
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Base Info Section
+                          Text(
+                            "Asosiy ma'lumotlar",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: nameController,
+                            enabled: !isKassa,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                            ),
+                            decoration: modernDecoration(
+                              AppStrings.waiterName,
+                              Icons.person_outline,
+                            ),
+                          ),
+
+                          if (!isKassa) ...[
+                            const SizedBox(height: 16),
+                            DropdownButtonFormField<int>(
+                              value: selectedType,
+                              dropdownColor: theme.colorScheme.surface,
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                              ),
+                              decoration: modernDecoration(
+                                AppStrings.waiterType,
+                                Icons.category_outlined,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              items: [
+                                DropdownMenuItem(
+                                  value: 0,
+                                  child: Text(AppStrings.fixed),
+                                ),
+                                DropdownMenuItem(
+                                  value: 1,
+                                  child: Text(AppStrings.percentage),
+                                ),
+                              ],
+                              onChanged: (val) {
+                                setDialogState(() => selectedType = val!);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: valueController,
+                              keyboardType: TextInputType.number,
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                              ),
+                              decoration: modernDecoration(
+                                selectedType == 0
+                                    ? AppStrings.serviceFeeFixed
+                                    : AppStrings.serviceFeePercentage,
+                                Icons.payments_outlined,
+                                hint: selectedType == 0
+                                    ? AppStrings.exampleFixed
+                                    : AppStrings.examplePercentage,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: pinController,
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface,
+                              ),
+                              decoration: modernDecoration(
+                                AppStrings.pinCodeLabel,
+                                Icons.vibration_outlined,
+                                hint: AppStrings.digitsOnlyHint,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.05)
+                                    : Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: SwitchListTile(
+                                title: Text(
+                                  AppStrings.activeStaff,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                value: isActive == 1,
+                                onChanged: (val) => setDialogState(
+                                  () => isActive = val ? 1 : 0,
+                                ),
+                                contentPadding: EdgeInsets.zero,
+                                activeColor: theme.colorScheme.primary,
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+                            // Permissions Section
+                            Text(
+                              AppStrings.permissions.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.05)
+                                    : Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Column(
+                                children: availablePermissions.map((perm) {
+                                  final isSelected = selectedPermissions
+                                      .contains(perm['id']);
+                                  return CheckboxListTile(
+                                    title: Text(
+                                      perm['label']!,
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                    value: isSelected,
+                                    onChanged: (val) {
+                                      setDialogState(() {
+                                        if (val == true) {
+                                          selectedPermissions.add(perm['id']!);
+                                        } else {
+                                          selectedPermissions.remove(
+                                            perm['id'],
+                                          );
+                                        }
+                                      });
+                                    },
+                                    dense: true,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    activeColor: theme.colorScheme.primary,
+                                    checkboxShape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // --- Footer ---
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text(
+                              AppStrings.cancel,
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (nameController.text.isEmpty && !isKassa)
+                                return;
+                              final newWaiter = Waiter(
+                                id: waiter?.id,
+                                name: nameController.text,
+                                type: isKassa ? 0 : selectedType,
+                                value: isKassa
+                                    ? 0.0
+                                    : (double.tryParse(valueController.text) ??
+                                          0.0),
+                                pinCode: isKassa
+                                    ? null
+                                    : pinController.text.isEmpty
+                                    ? null
+                                    : pinController.text,
+                                isActive: isActive,
+                                permissions: selectedPermissions,
+                              );
+                              if (waiter == null) {
+                                context.read<WaiterProvider>().addWaiter(
+                                  newWaiter,
+                                  connectivity: context
+                                      .read<ConnectivityProvider>(),
+                                );
+                              } else {
+                                context.read<WaiterProvider>().updateWaiter(
+                                  newWaiter,
+                                  connectivity: context
+                                      .read<ConnectivityProvider>(),
+                                );
+                              }
+                              Navigator.pop(context);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: theme.colorScheme.onPrimary,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text(
+                              AppStrings.save,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           );
         },
       ),

@@ -16,9 +16,14 @@ import '../core/services/audit_service.dart';
 
 class CartItem {
   final Product product;
-  int quantity;
+  double quantity;
+  double printedQuantity;
 
-  CartItem({required this.product, this.quantity = 1});
+  CartItem({
+    required this.product,
+    this.quantity = 1.0,
+    this.printedQuantity = 0.0,
+  });
 
   double get total => product.price * quantity;
 }
@@ -37,9 +42,13 @@ class CartProvider extends ChangeNotifier {
   Map<int, CartItem> get items => _items;
   String? get lastPrintError => _lastPrintError;
   int? get activeTableId => _activeTableId;
-  String? get activeOrderId => _activeOrderId;
   int? get activeWaiterId => _activeWaiterId;
+  String? get activeOrderId => _activeOrderId;
   DateTime? get activeOpenedAt => _activeOpenedAt;
+
+  bool get hasUnconfirmedChanges {
+    return _items.values.any((item) => item.quantity > item.printedQuantity);
+  }
 
   double get totalAmount {
     var total = 0.0;
@@ -57,6 +66,59 @@ class CartProvider extends ChangeNotifier {
       }
     });
     return total;
+  }
+
+  bool hasPermission(BuildContext context, String permissionId) {
+    final connectivity = context.read<ConnectivityProvider>();
+    final role = connectivity.currentUser?['role'] ?? 'admin';
+
+    // Admin has all permissions
+    if (role == 'admin') return true;
+
+    if (role == 'waiter') {
+      // 1. If we have permissions in currentUser map (from API login), use them
+      final userPerms = connectivity.currentUser?['permissions'];
+      if (userPerms != null && userPerms is List) {
+        return userPerms.contains(permissionId);
+      }
+
+      // 2. Fallback to checking _activeWaiterId if currentUser perms are missing (local mode fallback)
+      if (_activeWaiterId == null) return false;
+
+      try {
+        final waiterProvider = context.read<WaiterProvider>();
+        final waiter = waiterProvider.waiters.firstWhere(
+          (w) => w.id == _activeWaiterId,
+        );
+        return waiter.permissions.contains(permissionId);
+      } catch (e) {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  Future<bool> checkPermission(
+    BuildContext context,
+    String permissionId,
+  ) async {
+    if (hasPermission(context, permissionId)) return true;
+
+    // If no permission, show error
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ushbu amal uchun ruxsatingiz yo\'q ($permissionId)'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+    return false;
+  }
+
+  void refresh() {
+    notifyListeners();
   }
 
   void setWaiter(int? waiterId, [BuildContext? context]) {
@@ -124,7 +186,7 @@ class CartProvider extends ChangeNotifier {
               );
               _items[product.id!] = CartItem(
                 product: product,
-                quantity: row['qty'] as int,
+                quantity: (row['qty'] as num).toDouble(),
               );
             }
           }
@@ -187,7 +249,8 @@ class CartProvider extends ChangeNotifier {
               );
               _items[product.id!] = CartItem(
                 product: product,
-                quantity: row['qty'] as int,
+                quantity: (row['qty'] as num).toDouble(),
+                printedQuantity: (row['printed_qty'] as num? ?? 0).toDouble(),
               );
             }
           }
@@ -195,6 +258,92 @@ class CartProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  Future<void> confirmTableOrder(
+    BuildContext context, [
+    ConnectivityProvider? connectivity,
+  ]) async {
+    if (_activeOrderId == null) return;
+    if (!hasUnconfirmedChanges) return;
+
+    final List<OrderItem> itemsToPrint = [];
+
+    for (var item in _items.values) {
+      if (item.quantity > item.printedQuantity) {
+        final double delta = item.quantity - item.printedQuantity;
+        itemsToPrint.add(
+          OrderItem(
+            orderId: _activeOrderId!,
+            productId: item.product.id!,
+            productName: item.product.name,
+            qty: delta,
+            unit: item.product.unit,
+            price: item.product.price,
+            printedQty: item.quantity,
+          ),
+        );
+      }
+    }
+
+    if (itemsToPrint.isEmpty) return;
+
+    final populatedOrder = Order(
+      id: _activeOrderId!,
+      total: totalAmount,
+      paymentType: 'Pending',
+      createdAt: DateTime.now(),
+      items: itemsToPrint,
+      orderType: 0,
+      tableId: _activeTableId,
+      waiterId: _activeWaiterId,
+      locationId: _activeLocationId,
+      tableName: _activeTableId != null
+          ? context
+                .read<TableProvider>()
+                .tables
+                .firstWhere((t) => t.id == _activeTableId)
+                .name
+          : null,
+      waiterName: _activeWaiterId != null
+          ? context
+                .read<WaiterProvider>()
+                .waiters
+                .firstWhere((w) => w.id == _activeWaiterId)
+                .name
+          : null,
+    );
+
+    try {
+      await PrintingService.printDividedOrder(order: populatedOrder);
+
+      // Update in-memory printedQuantity
+      for (var item in _items.values) {
+        item.printedQuantity = item.quantity;
+      }
+
+      // Update database printed_qty
+      await _syncItems(connectivity, context);
+      notifyListeners();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Buyurtma oshxonaga yuborildi'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Printer xatoligi: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _ensureOrderExists([ConnectivityProvider? connectivity]) async {
@@ -295,6 +444,7 @@ class CartProvider extends ChangeNotifier {
               'product_id': item.product.id,
               'product_name': item.product.name,
               'qty': item.quantity,
+              'unit': item.product.unit,
               'price': item.product.price,
             },
           )
@@ -325,7 +475,9 @@ class CartProvider extends ChangeNotifier {
           'product_id': item.product.id,
           'product_name': item.product.name,
           'qty': item.quantity,
+          'unit': item.product.unit,
           'price': item.product.price,
+          'printed_qty': item.printedQuantity,
         });
       }
 
@@ -347,9 +499,9 @@ class CartProvider extends ChangeNotifier {
     Product product, [
     ConnectivityProvider? connectivity,
     BuildContext? context,
-    int quantity = 1,
+    double quantity = 1.0,
   ]) {
-    int currentInCart = _items[product.id]?.quantity ?? 0;
+    double currentInCart = _items[product.id]?.quantity ?? 0.0;
     if (product.quantity != null &&
         (currentInCart + quantity) > product.quantity!) {
       if (context != null) {
@@ -393,7 +545,7 @@ class CartProvider extends ChangeNotifier {
 
   void updateQuantity(
     int productId,
-    int quantity, [
+    double quantity, [
     ConnectivityProvider? connectivity,
     BuildContext? context,
   ]) {
@@ -553,6 +705,7 @@ class CartProvider extends ChangeNotifier {
             orderId: orderId,
             productId: item.product.id!,
             qty: item.quantity,
+            unit: item.product.unit,
             price: item.product.price,
             productName: item.product.name,
             bundleItemsJson: bundleJson,
@@ -633,8 +786,6 @@ class CartProvider extends ChangeNotifier {
       if (shouldPrint) {
         try {
           await PrintingService.printReceipt(order: populatedOrder);
-          // NEW: Also print to department printers
-          await PrintingService.printDividedOrder(order: populatedOrder);
         } catch (printError) {
           _lastPrintError = 'Printer xatoligi: $printError';
           notifyListeners();

@@ -33,8 +33,8 @@ class CartPanelWidget extends StatelessWidget {
     return Container(
       width: isCompact ? 340 : 400,
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(left: BorderSide(color: Colors.grey.shade200)),
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(left: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Column(
         children: [
@@ -53,7 +53,7 @@ class CartPanelWidget extends StatelessWidget {
         final cartProvider = context.read<CartProvider>();
         return Container(
           padding: EdgeInsets.all(isCompact ? 12 : 20),
-          color: Colors.grey.shade50,
+          color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -62,14 +62,25 @@ class CartPanelWidget extends StatelessWidget {
                 style: TextStyle(
                   fontSize: isCompact ? 16 : 18,
                   fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () => cartProvider.clearCart(
-                  context.read<ConnectivityProvider>(),
-                  context,
+                icon: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error,
                 ),
+                onPressed: () async {
+                  if (await cartProvider.checkPermission(
+                    context,
+                    'delete_item',
+                  )) {
+                    cartProvider.clearCart(
+                      context.read<ConnectivityProvider>(),
+                      context,
+                    );
+                  }
+                },
               ),
             ],
           ),
@@ -93,15 +104,24 @@ class CartPanelWidget extends StatelessWidget {
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  color: Colors.red,
-                  child: const Icon(Icons.delete, color: Colors.white),
+                  color: Theme.of(context).colorScheme.error,
+                  child: Icon(Icons.delete, color: Colors.white),
                 ),
-                onDismissed: (_) {
-                  cartProvider.removeItem(
-                    item.product.id!,
-                    context.read<ConnectivityProvider>(),
+                onDismissed: (_) async {
+                  if (await cartProvider.checkPermission(
                     context,
-                  );
+                    'delete_item',
+                  )) {
+                    cartProvider.removeItem(
+                      item.product.id!,
+                      context.read<ConnectivityProvider>(),
+                      context,
+                    );
+                  } else {
+                    // Refresh UI to bring back the item if dismissed without permission
+                    // We can just call an empty update to trigger a rebuild
+                    cartProvider.refresh();
+                  }
                 },
                 child: _buildCartItem(context, item, cartProvider),
               );
@@ -119,11 +139,19 @@ class CartPanelWidget extends StatelessWidget {
   ) {
     return InkWell(
       onTap: () async {
-        final result = await showDialog<int>(
+        final result = await showDialog<double>(
           context: context,
           builder: (context) => QuantityDialog(product: item.product),
         );
         if (result != null && result >= 0) {
+          final oldQty = item.quantity;
+          if (result < oldQty) {
+            final permission = result == 0 ? 'delete_item' : 'reduce_item';
+            if (!await cartProvider.checkPermission(context, permission)) {
+              return;
+            }
+          }
+
           cartProvider.updateQuantity(
             item.product.id!,
             result,
@@ -152,6 +180,7 @@ class CartPanelWidget extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: isCompact ? 13 : 14,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -160,7 +189,9 @@ class CartPanelWidget extends StatelessWidget {
                   Text(
                     PriceFormatter.format(item.product.price),
                     style: TextStyle(
-                      color: Colors.grey.shade600,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.6),
                       fontSize: isCompact ? 11 : 12,
                     ),
                   ),
@@ -175,7 +206,7 @@ class CartPanelWidget extends StatelessWidget {
                 children: [
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     padding: const EdgeInsets.symmetric(
@@ -185,15 +216,26 @@ class CartPanelWidget extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildQtyBtn(
-                          Icons.remove,
-                          () => cartProvider.updateQuantity(
+                        _buildQtyBtn(context, Icons.remove, () async {
+                          final currentQty = item.quantity;
+                          final permission = currentQty <= 1
+                              ? 'delete_item'
+                              : 'reduce_item';
+
+                          if (!await cartProvider.checkPermission(
+                            context,
+                            permission,
+                          )) {
+                            return;
+                          }
+
+                          cartProvider.updateQuantity(
                             item.product.id!,
                             item.quantity - 1,
                             context.read<ConnectivityProvider>(),
                             context,
-                          ),
-                        ),
+                          );
+                        }),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
                           child: Text(
@@ -205,6 +247,7 @@ class CartPanelWidget extends StatelessWidget {
                           ),
                         ),
                         _buildQtyBtn(
+                          context,
                           Icons.add,
                           () => cartProvider.updateQuantity(
                             item.product.id!,
@@ -222,7 +265,7 @@ class CartPanelWidget extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: isCompact ? 13 : 14,
-                      color: AppTheme.primaryColor,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ],
@@ -234,13 +277,17 @@ class CartPanelWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildQtyBtn(IconData icon, VoidCallback onTap) {
+  Widget _buildQtyBtn(BuildContext context, IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Padding(
         padding: const EdgeInsets.all(4),
-        child: Icon(icon, size: isCompact ? 16 : 20, color: Colors.blue),
+        child: Icon(
+          icon,
+          size: isCompact ? 16 : 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
@@ -251,10 +298,10 @@ class CartPanelWidget extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Theme.of(context).shadowColor.withOpacity(0.05),
                 blurRadius: 10,
                 offset: const Offset(0, -4),
               ),
@@ -376,50 +423,81 @@ class CartPanelWidget extends StatelessWidget {
             ),
           ),
         if (!isEmpty)
-          Row(
-            children: [
-              SizedBox(
-                height: 60,
-                child: ElevatedButton.icon(
-                  onPressed: onPrintReceipt,
-                  icon: const Icon(Icons.print, size: 20),
-                  label: const Text(''),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade600,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: SizedBox(
+          cartProvider.hasUnconfirmedChanges
+              ? SizedBox(
+                  width: double.infinity,
                   height: 60,
-                  child: LicenseGate(
-                    child: ElevatedButton(
-                      onPressed: onShowPaymentDialog,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.secondaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                  child: ElevatedButton.icon(
+                    onPressed: () =>
+                        cartProvider.confirmTableOrder(context, connectivity),
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text(
+                      'TASDIQLASH',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      child: Text(
-                        isWaiter ? 'SAQLASH' : AppStrings.checkout,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
+                )
+              : Row(
+                  children: [
+                    SizedBox(
+                      height: 60,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          if (await cartProvider.checkPermission(
+                            context,
+                            'print_receipt',
+                          )) {
+                            onPrintReceipt();
+                          }
+                        },
+                        icon: const Icon(Icons.print, size: 20),
+                        label: const Text(''),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SizedBox(
+                        height: 60,
+                        child: LicenseGate(
+                          child: ElevatedButton(
+                            onPressed: onShowPaymentDialog,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.secondaryColor,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              isWaiter ? 'SAQLASH' : AppStrings.checkout,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
       ],
     );
   }

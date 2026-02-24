@@ -16,6 +16,7 @@ void main() {
     final dbHelper = DatabaseHelper.instance;
 
     test('End-to-end Inventory Flow', () async {
+      DatabaseHelper.databasePathOverride = inMemoryDatabasePath;
       // 1. Setup Ingredients
       final meatId = await invRepo.insertIngredient(
         Ingredient(name: 'Go\'sht', baseUnit: 'g', minStock: 1000),

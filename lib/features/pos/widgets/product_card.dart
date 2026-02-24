@@ -6,7 +6,6 @@ import '../../../models/category.dart';
 import '../../../providers/category_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/connectivity_provider.dart';
-import '../../../core/theme.dart';
 import '../../../core/utils/price_formatter.dart';
 
 class ProductCardWidget extends StatelessWidget {
@@ -54,7 +53,7 @@ class ProductCardWidget extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 2,
-        color: categoryColor ?? Colors.white,
+        color: categoryColor ?? Theme.of(context).colorScheme.surface,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -72,7 +71,7 @@ class ProductCardWidget extends StatelessWidget {
                       height: 1.1,
                       color: isDarkColor
                           ? Colors.white
-                          : const Color(0xFF1E293B),
+                          : Theme.of(context).colorScheme.onSurface,
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
@@ -86,7 +85,7 @@ class ProductCardWidget extends StatelessWidget {
                         style: TextStyle(
                           color: isDarkColor
                               ? Colors.white
-                              : AppTheme.secondaryColor,
+                              : Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -102,7 +101,9 @@ class ProductCardWidget extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: isDarkColor
                                     ? Colors.white24
-                                    : Colors.orange.withOpacity(0.1),
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.primary.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -111,17 +112,17 @@ class ProductCardWidget extends StatelessWidget {
                                   fontSize: 10,
                                   color: isDarkColor
                                       ? Colors.white
-                                      : Colors.orange.shade800,
+                                      : Theme.of(context).colorScheme.primary,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
                           if (product.isSet) ...[
                             const SizedBox(width: 4),
-                            const Icon(
+                            Icon(
                               Icons.auto_awesome,
                               size: 14,
-                              color: Colors.amber,
+                              color: Theme.of(context).colorScheme.secondary,
                             ),
                           ],
                         ],
@@ -141,7 +142,7 @@ class ProductCardWidget extends StatelessWidget {
     return SizedBox(
       height: isCompact ? 100 : 120,
       child: Container(
-        color: Colors.white.withOpacity(0.5),
+        color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
         child: Builder(
           builder: (context) {
             final connectivity = context.read<ConnectivityProvider>();
@@ -153,7 +154,8 @@ class ProductCardWidget extends StatelessWidget {
                   imageUrl,
                   fit: BoxFit.cover,
                   width: double.infinity,
-                  errorBuilder: (_, __, ___) => _buildPlaceholder(isDarkColor),
+                  errorBuilder: (_, __, ___) =>
+                      _buildPlaceholder(context, isDarkColor),
                 );
               } else if (File(imageUrl).existsSync()) {
                 return Image.file(
@@ -163,19 +165,21 @@ class ProductCardWidget extends StatelessWidget {
                 );
               }
             }
-            return _buildPlaceholder(isDarkColor);
+            return _buildPlaceholder(context, isDarkColor);
           },
         ),
       ),
     );
   }
 
-  Widget _buildPlaceholder(bool isDarkColor) {
+  Widget _buildPlaceholder(BuildContext context, bool isDarkColor) {
     return Center(
       child: Icon(
         Icons.fastfood,
         size: isCompact ? 32 : 40,
-        color: isDarkColor ? Colors.white70 : Colors.grey.shade400,
+        color: isDarkColor
+            ? Colors.white.withOpacity(0.7)
+            : Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
       ),
     );
   }

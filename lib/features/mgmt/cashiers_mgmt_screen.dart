@@ -162,7 +162,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                     connectivity: context.read<ConnectivityProvider>(),
                   );
                 },
-                activeColor: theme.colorScheme.primary,
+                activeThumbColor: theme.colorScheme.primary,
               ),
             ],
           ),

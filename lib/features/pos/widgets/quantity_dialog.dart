@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../models/product.dart';
 
@@ -15,25 +14,41 @@ class QuantityDialog extends StatefulWidget {
 class _QuantityDialogState extends State<QuantityDialog> {
   String _quantityStr = '1';
   bool _isFirstInput = true;
+  bool _hasDecimal = false;
 
   void _onNumpadPressed(String value) {
     setState(() {
       if (value == 'C') {
         _quantityStr = '0';
         _isFirstInput = true;
+        _hasDecimal = false;
       } else if (value == '⌫') {
         if (_quantityStr.length > 1) {
+          if (_quantityStr.endsWith('.')) {
+            _hasDecimal = false;
+          }
           _quantityStr = _quantityStr.substring(0, _quantityStr.length - 1);
         } else {
           _quantityStr = '0';
           _isFirstInput = true;
+          _hasDecimal = false;
+        }
+      } else if (value == '.') {
+        if (!_hasDecimal) {
+          if (_isFirstInput) {
+            _quantityStr = '0.';
+            _isFirstInput = false;
+          } else {
+            _quantityStr += '.';
+          }
+          _hasDecimal = true;
         }
       } else {
         if (_isFirstInput || _quantityStr == '0') {
           _quantityStr = value;
           _isFirstInput = false;
         } else {
-          if (_quantityStr.length < 5) {
+          if (_quantityStr.length < 7) {
             _quantityStr += value;
           }
         }
@@ -43,7 +58,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final int quantity = int.tryParse(_quantityStr) ?? 0;
+    final double quantity = double.tryParse(_quantityStr) ?? 0;
     final double total = widget.product.price * quantity;
 
     return Dialog(
@@ -56,7 +71,11 @@ class _QuantityDialogState extends State<QuantityDialog> {
           children: [
             Text(
               widget.product.name,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -64,29 +83,36 @@ class _QuantityDialogState extends State<QuantityDialog> {
             const SizedBox(height: 8),
             Text(
               PriceFormatter.format(widget.product.price),
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: 16,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+              ),
             ),
             const Divider(height: 32),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: Theme.of(context).dividerColor),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     "Soni:",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                   ),
                   Text(
                     _quantityStr,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryColor,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ],
@@ -96,16 +122,21 @@ class _QuantityDialogState extends State<QuantityDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   "Umumiy summa:",
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.6),
+                  ),
                 ),
                 Text(
                   PriceFormatter.format(total),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ],
@@ -117,27 +148,34 @@ class _QuantityDialogState extends State<QuantityDialog> {
                 children: [
                   Text(
                     "Mavjud qoldiq:",
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.6),
+                    ),
                   ),
                   Text(
-                    "${widget.product.quantity!.toStringAsFixed(0)} ta",
+                    widget.product.unit == 'kg'
+                        ? "${widget.product.quantity!.toStringAsFixed(2)} kg"
+                        : "${widget.product.quantity!.toStringAsFixed(0)} ta",
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       color: quantity > widget.product.quantity!
-                          ? Colors.red
-                          : Colors.green,
+                          ? Theme.of(context).colorScheme.error
+                          : Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ],
               ),
               if (quantity > widget.product.quantity!)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8.0),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
                   child: Text(
                     "Omborda mahsulot yetarli emas!",
                     style: TextStyle(
-                      color: Colors.red,
+                      color: Theme.of(context).colorScheme.error,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
@@ -164,16 +202,20 @@ class _QuantityDialogState extends State<QuantityDialog> {
                 _buildNumpadBtn('8'),
                 _buildNumpadBtn('9'),
                 _buildNumpadBtn(
-                  'C',
-                  color: Colors.orange.shade50,
-                  textColor: Colors.orange.shade800,
-                ),
-                _buildNumpadBtn('0'),
-                _buildNumpadBtn(
                   '⌫',
-                  color: Colors.blueGrey.shade50,
-                  textColor: Colors.blueGrey.shade800,
+                  color: Theme.of(context).colorScheme.error.withOpacity(0.1),
+                  textColor: Theme.of(context).colorScheme.error,
                 ),
+
+                // _buildNumpadBtn(
+                //   'C',
+                //   color: Theme.of(
+                //     context,
+                //   ).colorScheme.secondary.withOpacity(0.1),
+                //   textColor: Theme.of(context).colorScheme.secondary,
+                // ),
+                _buildNumpadBtn('0'),
+                _buildNumpadBtn('.'),
               ],
             ),
             const SizedBox(height: 32),
@@ -185,17 +227,20 @@ class _QuantityDialogState extends State<QuantityDialog> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.red, width: 2),
+                        side: BorderSide(
+                          color: Theme.of(context).colorScheme.error,
+                          width: 2,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
+                      child: Text(
                         "Bekor qilish",
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.red,
+                          color: Theme.of(context).colorScheme.error,
                         ),
                       ),
                     ),
@@ -213,7 +258,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
                           ? () => Navigator.pop(context, quantity)
                           : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.secondaryColor,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -240,7 +285,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
 
   Widget _buildNumpadBtn(String val, {Color? color, Color? textColor}) {
     return Material(
-      color: color ?? Colors.grey.shade100,
+      color: color ?? Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () => _onNumpadPressed(val),
@@ -251,7 +296,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: textColor ?? Colors.black87,
+              color: textColor ?? Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),

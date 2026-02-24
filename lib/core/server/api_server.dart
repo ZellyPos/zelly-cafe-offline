@@ -67,6 +67,9 @@ class ApiServer {
 
       if (waiters.isNotEmpty) {
         final waiter = waiters.first;
+        final permsStr = waiter['permissions']?.toString() ?? '';
+        final permsList = permsStr.isEmpty ? [] : permsStr.split(',');
+
         return Response.ok(
           jsonEncode({
             'token': 'waiter-token-${waiter['id']}',
@@ -74,6 +77,7 @@ class ApiServer {
               'id': waiter['id'],
               'name': waiter['name'],
               'role': 'waiter',
+              'permissions': permsList,
             },
           }),
         );
@@ -214,7 +218,13 @@ class ApiServer {
     // 4. Waiters
     _router.get('/waiters', (Request request) async {
       final data = await DatabaseHelper.instance.queryAll('waiters');
-      return Response.ok(jsonEncode(data));
+      final mapped = data.map((waiter) {
+        final newWaiter = Map<String, dynamic>.from(waiter);
+        final permsStr = newWaiter['permissions']?.toString() ?? '';
+        newWaiter['permissions'] = permsStr.isEmpty ? [] : permsStr.split(',');
+        return newWaiter;
+      }).toList();
+      return Response.ok(jsonEncode(mapped));
     });
 
     _router.post('/waiters', (Request request) async {
@@ -445,7 +455,7 @@ class ApiServer {
 
         await txn.update(
           'tables',
-          {'status': 1},
+          {'status': 1, 'active_order_id': orderId},
           where: 'id = ?',
           whereArgs: [tableId],
         );

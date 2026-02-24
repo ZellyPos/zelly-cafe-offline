@@ -106,35 +106,51 @@ class PrintingService {
       bytes += [27, 116, 17]; // ESC t 17 (CP866)
 
       // HEADER
-      bytes += generator.text(
-        _centerLine('*** OSHXONA CHEKI ***'),
-        styles: const PosStyles(bold: true, height: PosTextSize.size2),
-      );
-      bytes += generator.feed(1);
-
-      bytes += generator.text('Buyurtma: #${order.id.substring(0, 8)}');
-      bytes += generator.text(
-        'Sana: ${DateFormat('dd.MM.yyyy HH:mm').format(order.createdAt)}',
-      );
-      if (order.tableName != null) {
+      if (order.orderType == 1) {
         bytes += generator.text(
-          'STOL: ${order.tableName}',
+          _centerLine('*** SABOY ***'),
           styles: const PosStyles(
             bold: true,
             height: PosTextSize.size2,
             width: PosTextSize.size2,
           ),
         );
+      } else {
+        bytes += generator.text(
+          _centerLine('*** OSHXONA CHEKI ***'),
+          styles: const PosStyles(bold: true, height: PosTextSize.size2),
+        );
       }
-      if (order.waiterName != null) {
-        bytes += generator.text('Ofitsiant: ${order.waiterName}');
+      bytes += generator.feed(1);
+
+      bytes += generator.text('Buyurtma: #${order.id.substring(0, 8)}');
+      bytes += generator.text(
+        'Sana: ${DateFormat('dd.MM.yyyy HH:mm').format(order.createdAt)}',
+      );
+
+      if (order.orderType == 0) {
+        if (order.tableName != null) {
+          bytes += generator.text(
+            'STOL: ${order.tableName}',
+            styles: const PosStyles(
+              bold: true,
+              height: PosTextSize.size2,
+              width: PosTextSize.size2,
+            ),
+          );
+        }
+        if (order.waiterName != null) {
+          bytes += generator.text('Ofitsiant: ${order.waiterName}');
+        }
       }
       bytes += generator.hr();
 
       // ITEMS
+      double subtotal = 0;
       for (var item in items) {
+        subtotal += item.qty * item.price;
         bytes += generator.text(
-          '${item.qty} x ${item.productName}',
+          '${item.qty.toStringAsFixed(item.unit == 'kg' ? 2 : 0)} x ${item.productName}',
           styles: const PosStyles(bold: true, height: PosTextSize.size2),
         );
         if (item.bundleItemsJson != null) {
@@ -145,6 +161,24 @@ class PrintingService {
         }
         bytes += generator.feed(1);
       }
+
+      bytes += generator.hr();
+
+      // SUMMARY & PAYMENT
+      bytes += generator.text(
+        _format2Col('JAMI (Ushbu chek):', PriceFormatter.format(subtotal)),
+        styles: const PosStyles(bold: true),
+      );
+      if (order.total != subtotal) {
+        bytes += generator.text(
+          _format2Col('UMUMIY BUYURTMA:', PriceFormatter.format(order.total)),
+        );
+      }
+
+      String statusText = order.status == 1 ? 'TO\'LANGAN' : 'TO\'LANMAGAN';
+      bytes += generator.text(
+        _format2Col('To‘lov:', '${order.paymentType} ($statusText)'),
+      );
 
       bytes += generator.hr();
       bytes += generator.feed(3);
@@ -608,7 +642,7 @@ class PrintingService {
         bytes += generator.hr();
 
         for (var item in order.items) {
-          final qtyStr = item.qty.toString();
+          final qtyStr = item.qty.toStringAsFixed(item.unit == 'kg' ? 2 : 0);
           final totalStr = PriceFormatter.format(item.qty * item.price);
 
           if (rSettings.layoutType == 'table') {

@@ -36,12 +36,12 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     final expenseProvider = context.watch<ExpenseProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(AppStrings.expensesTitle),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
-        elevation: 0,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.surface,
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor ?? Theme.of(context).colorScheme.onSurface,
+        elevation: Theme.of(context).appBarTheme.elevation ?? 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -85,15 +85,15 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   Widget _buildFilterBar() {
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       child: Row(
         children: [
-          const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
+          Icon(Icons.calendar_today, size: 20, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
           const SizedBox(width: 8),
           Text(
             "${_startDate.day}.${_startDate.month}.${_startDate.year} - "
             "${_endDate.day}.${_endDate.month}.${_endDate.year}",
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
           ),
           const Spacer(),
           TextButton(
@@ -130,22 +130,22 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey.shade200),
+                  side: BorderSide(color: Theme.of(context).dividerColor),
                 ),
                 child: ListTile(
                   title: Text(
                     category.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
                   ),
                   subtitle: Text(
                     "${expense.note ?? ''}\n${expense.createdAt.hour.toString().padLeft(2, '0')}:${expense.createdAt.minute.toString().padLeft(2, '0')}",
-                    style: const TextStyle(fontSize: 12),
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
                   ),
                   trailing: Text(
                     PriceFormatter.format(expense.amount),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.red,
+                      color: Theme.of(context).colorScheme.error,
                       fontSize: 18,
                     ),
                   ),
@@ -157,20 +157,20 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         ),
         Container(
           padding: const EdgeInsets.all(24),
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 AppStrings.totalExpenses,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Theme.of(context).colorScheme.onSurface),
               ),
               Text(
                 PriceFormatter.format(total),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 24,
-                  color: Colors.red,
+                  color: Theme.of(context).colorScheme.error,
                 ),
               ),
             ],
@@ -212,7 +212,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppStrings.addExpenseTypeFirst),
-          backgroundColor: Colors.orange,
+          backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
       return;
@@ -301,7 +301,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               );
               Navigator.pop(context);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
             child: Text(AppStrings.delete),
           ),
         ],

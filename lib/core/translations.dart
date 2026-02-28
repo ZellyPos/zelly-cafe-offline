@@ -226,7 +226,7 @@ class Translations {
       'reorder_categories': 'Kategoriyalarni tartiblash',
       'no_service_charge': 'Foiz hisoblanmasin',
       'product_unit': 'O\'lchov birligi',
-      'unit_portion': 'Porsiya',
+      'unit_portion': 'Porisia',
       'unit_dona': 'Dona',
       'unit_kg': 'Kg',
       'unit_set': 'Set (To\'plam)',

@@ -1123,17 +1123,6 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
   }
 
   String _getUnitLabel(String? unit) {
-    switch (unit) {
-      case 'portion':
-        return AppStrings.unitPortion;
-      case 'dona':
-        return AppStrings.unitDona;
-      case 'kg':
-        return AppStrings.unitKg;
-      case 'set':
-        return AppStrings.unitSet;
-      default:
-        return AppStrings.unitDona;
-    }
+    return AppStrings.getUnitLabel(unit);
   }
 }

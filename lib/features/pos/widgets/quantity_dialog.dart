@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/utils/price_formatter.dart';
+import '../../../core/app_strings.dart';
 import '../../../models/product.dart';
 
 class QuantityDialog extends StatefulWidget {
@@ -100,7 +101,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "Soni:",
+                    "Soni (${AppStrings.getUnitLabel(widget.product.unit)}):",
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w500,

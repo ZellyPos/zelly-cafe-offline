@@ -72,6 +72,7 @@ class _PosScreenState extends State<PosScreen> {
         widget.table?.id,
         widget.table?.locationId,
         connectivity,
+        widget.orderType,
       );
 
       final waiterProvider = context.read<WaiterProvider>();
@@ -156,72 +157,82 @@ class _PosScreenState extends State<PosScreen> {
     final size = MediaQuery.of(context).size;
     final bool isCompact = size.width <= 1100 || size.height <= 800;
 
-    return Scaffold(
-      body: Row(
-        children: [
-          // Left Side: Products Grid
-          Expanded(
-            flex: 2,
-            child: Column(
-              children: [
-                // Context Header (Table/Waiter info)
-                if (widget.orderType == 0 && widget.table != null)
-                  _buildDineInHeader(context, isCompact)
-                else if (widget.orderType == 1)
-                  _buildSaboyHeader(context),
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (didPop) {
+          final cartProvider = context.read<CartProvider>();
+          final connectivity = context.read<ConnectivityProvider>();
+          cartProvider.discardUnconfirmedChanges(connectivity, context);
+        }
+      },
+      child: Scaffold(
+        body: Row(
+          children: [
+            // Left Side: Products Grid
+            Expanded(
+              flex: 2,
+              child: Column(
+                children: [
+                  // Context Header (Table/Waiter info)
+                  if (widget.orderType == 0 && widget.table != null)
+                    _buildDineInHeader(context, isCompact)
+                  else if (widget.orderType == 1)
+                    _buildSaboyHeader(context),
 
-                // Category Bar
-                _buildCategoryBar(
-                  context,
-                  categories,
-                  categoryProvider,
-                  isCompact,
-                ),
-
-                // Products Grid
-                Expanded(
-                  child: ProductGridWidget(
-                    pageController: _pageController,
-                    categories: categories,
-                    selectedCategory: selectedCategory,
-                    currentSort: _currentSort,
-                    isCompact: isCompact,
-                    onPageChanged: (index) {
-                      setState(() => selectedCategory = categories[index]);
-                      _scrollToCategory(index);
-                    },
-                    onShowQuantityDialog: _showQuantityDialog,
+                  // Category Bar
+                  _buildCategoryBar(
+                    context,
+                    categories,
+                    categoryProvider,
+                    isCompact,
                   ),
-                ),
-              ],
+
+                  // Products Grid
+                  Expanded(
+                    child: ProductGridWidget(
+                      pageController: _pageController,
+                      categories: categories,
+                      selectedCategory: selectedCategory,
+                      currentSort: _currentSort,
+                      isCompact: isCompact,
+                      onPageChanged: (index) {
+                        setState(() => selectedCategory = categories[index]);
+                        _scrollToCategory(index);
+                      },
+                      onShowQuantityDialog: _showQuantityDialog,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Right Side: Order Panel
-          CartPanelWidget(
-            orderType: widget.orderType,
-            table: widget.table,
-            isCompact: isCompact,
-            onShowPaymentDialog: () {
-              final role =
-                  context.read<ConnectivityProvider>().currentUser?['role'] ??
-                  'admin';
-              if (role == 'waiter') {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(AppStrings.orderSaved),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-                Navigator.pop(context);
-              } else {
-                _showPaymentDialog(context);
-              }
-            },
-            onPrintReceipt: () => _printCurrentOrderReceipt(context),
-            onCancelOrder: () => _showCancelOrderDialog(context),
-          ),
-        ],
+            // Right Side: Order Panel
+            CartPanelWidget(
+              orderType: widget.orderType,
+              table: widget.table,
+              isCompact: isCompact,
+              onShowPaymentDialog: () {
+                final role =
+                    context.read<ConnectivityProvider>().currentUser?['role'] ??
+                    'admin';
+                if (role == 'waiter') {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(AppStrings.orderSaved),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  Navigator.pop(context);
+                } else {
+                  _showPaymentDialog(context);
+                }
+              },
+              onPrintReceipt: () => _printCurrentOrderReceipt(context),
+              onCancelOrder: () => _showCancelOrderDialog(context),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -583,6 +594,10 @@ class _PosScreenState extends State<PosScreen> {
               backgroundColor: AppTheme.secondaryColor,
             ),
           );
+          // Auto-return to home screen
+          if (context.mounted && Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
         }
       }
     });

@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import '../core/database_helper.dart';
 import 'windows_printing_helper.dart';
+import 'app_strings.dart';
 
 class PrintingService {
   // Constant constraints for 80mm Font A
@@ -108,20 +109,32 @@ class PrintingService {
       // HEADER
       if (order.orderType == 1) {
         bytes += generator.text(
-          _centerLine('*** SABOY ***'),
+          _cleanText('SABOY'),
           styles: const PosStyles(
             bold: true,
             height: PosTextSize.size2,
             width: PosTextSize.size2,
+            align: PosAlign.left,
           ),
         );
       } else {
         bytes += generator.text(
-          _centerLine('*** OSHXONA CHEKI ***'),
-          styles: const PosStyles(bold: true, height: PosTextSize.size2),
+          _cleanText('OSHXONA CHEKI'),
+          styles: const PosStyles(
+            bold: true,
+            height: PosTextSize.size2,
+            align: PosAlign.left,
+          ),
         );
       }
       bytes += generator.feed(1);
+
+      if (order.dailyNumber != null) {
+        bytes += generator.text(
+          _cleanText('Buyurtma №: ${order.dailyNumber}'),
+          styles: const PosStyles(align: PosAlign.left, bold: true),
+        );
+      }
 
       bytes += generator.text('Buyurtma: #${order.id.substring(0, 8)}');
       bytes += generator.text(
@@ -146,12 +159,20 @@ class PrintingService {
       bytes += generator.hr();
 
       // ITEMS
-      double subtotal = 0;
       for (var item in items) {
-        subtotal += item.qty * item.price;
+        final double qtyToPrint = item.qty;
+        final bool isCancellation = qtyToPrint < 0;
+        final String qtyStr =
+            "${qtyToPrint.abs().toStringAsFixed(item.unit == 'kg' ? 2 : 0)} ${AppStrings.getUnitLabel(item.unit)}";
+        final String labelPrefix = isCancellation ? '[BEKOR QILINDI] ' : '';
+
         bytes += generator.text(
-          '${item.qty.toStringAsFixed(item.unit == 'kg' ? 2 : 0)} x ${item.productName}',
-          styles: const PosStyles(bold: true, height: PosTextSize.size2),
+          '$labelPrefix$qtyStr x ${item.productName}',
+          styles: PosStyles(
+            bold: true,
+            height: PosTextSize.size2,
+            reverse: isCancellation,
+          ),
         );
         if (item.bundleItemsJson != null) {
           final List<dynamic> components = jsonDecode(item.bundleItemsJson!);
@@ -164,23 +185,6 @@ class PrintingService {
 
       bytes += generator.hr();
 
-      // SUMMARY & PAYMENT
-      bytes += generator.text(
-        _format2Col('JAMI (Ushbu chek):', PriceFormatter.format(subtotal)),
-        styles: const PosStyles(bold: true),
-      );
-      if (order.total != subtotal) {
-        bytes += generator.text(
-          _format2Col('UMUMIY BUYURTMA:', PriceFormatter.format(order.total)),
-        );
-      }
-
-      String statusText = order.status == 1 ? 'TO\'LANGAN' : 'TO\'LANMAGAN';
-      bytes += generator.text(
-        _format2Col('To‘lov:', '${order.paymentType} ($statusText)'),
-      );
-
-      bytes += generator.hr();
       bytes += generator.feed(3);
       bytes += generator.cut();
 
@@ -565,6 +569,16 @@ class PrintingService {
         addInfoLine(rSettings.phoneNumber);
       }
 
+      if (order.dailyNumber != null) {
+        bytes += generator.text(
+          _padLine(
+            _cleanText('Buyurtma №: ${order.dailyNumber}'),
+            rSettings.horizontalMargin,
+          ),
+          styles: const PosStyles(align: PosAlign.left, bold: true),
+        );
+      }
+
       bytes += generator.feed(1);
 
       // Date & Time
@@ -623,8 +637,13 @@ class PrintingService {
         }
       } else {
         bytes += generator.text(
-          _centerLine(_cleanText('SABOY'), margin: rSettings.horizontalMargin),
-          styles: const PosStyles(align: PosAlign.left, bold: true),
+          _cleanText('SABOY'),
+          styles: const PosStyles(
+            align: PosAlign.left,
+            bold: true,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          ),
         );
       }
       bytes += generator.hr();
@@ -642,7 +661,8 @@ class PrintingService {
         bytes += generator.hr();
 
         for (var item in order.items) {
-          final qtyStr = item.qty.toStringAsFixed(item.unit == 'kg' ? 2 : 0);
+          final qtyStr =
+              "${item.qty.toStringAsFixed(item.unit == 'kg' ? 2 : 0)} ${AppStrings.getUnitLabel(item.unit)}";
           final totalStr = PriceFormatter.format(item.qty * item.price);
 
           if (rSettings.layoutType == 'table') {
@@ -1655,6 +1675,10 @@ class PrintingService {
         final orderNum = orderIdRaw.length > 8
             ? orderIdRaw.substring(0, 8).toUpperCase()
             : orderIdRaw.toUpperCase();
+        final dailyNumber = order['daily_number']?.toString();
+        final displayId = dailyNumber != null
+            ? "№$dailyNumber (#$orderNum)"
+            : "#$orderNum";
 
         final createdAtRaw = order['created_at']?.toString() ?? '';
         final dateTime = createdAtRaw.length >= 16
@@ -1662,7 +1686,7 @@ class PrintingService {
             : createdAtRaw;
 
         bytes += generator.text(
-          _padLine('#$orderNum', rSettings.horizontalMargin),
+          _padLine(_cleanText('$displayId'), rSettings.horizontalMargin),
           styles: const PosStyles(bold: true),
         );
         bytes += generator.text(

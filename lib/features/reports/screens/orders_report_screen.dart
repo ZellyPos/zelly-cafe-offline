@@ -220,6 +220,10 @@ class OrdersReportScreen extends StatelessWidget {
     final String id = idStr.length >= 8
         ? idStr.substring(0, 8).toUpperCase()
         : idStr.toUpperCase();
+    final String? dailyNumber = order['daily_number']?.toString();
+    final String displayId = dailyNumber != null
+        ? "№$dailyNumber (#$id)"
+        : "#$id";
 
     final String createdAtRaw = order['created_at']?.toString() ?? '';
     final String time = createdAtRaw.length >= 16
@@ -268,7 +272,7 @@ class OrdersReportScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "#$id • $time",
+                    "$displayId • $time",
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,

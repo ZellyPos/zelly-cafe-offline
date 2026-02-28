@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 37,
+      version: 38,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -87,10 +87,20 @@ class DatabaseHelper {
     if (res.isEmpty) {
       await db.insert('users', {
         'name': 'Kassir',
-        'pin': '5555',
+        'pin': '0808',
         'role': 'cashier',
         'is_active': 1,
       });
+    } else {
+      // If user exists but has old default pin, update it
+      if (res.first['pin'] == '5555') {
+        await db.update(
+          'users',
+          {'pin': '0808'},
+          where: 'name = ?',
+          whereArgs: ['Kassir'],
+        );
+      }
     }
   }
 
@@ -776,6 +786,14 @@ class DatabaseHelper {
         print('Error upgrading database to v37: $e');
       }
     }
+
+    if (oldVersion < 38) {
+      try {
+        await db.execute('ALTER TABLE orders ADD COLUMN daily_number INTEGER');
+      } catch (e) {
+        print('Error upgrading database to v38: $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -841,7 +859,8 @@ CREATE TABLE IF NOT EXISTS orders (
   room_total REAL NOT NULL DEFAULT 0,
   service_total REAL NOT NULL DEFAULT 0,
   grand_total REAL NOT NULL DEFAULT 0,
-  shift_id INTEGER
+  shift_id INTEGER,
+  daily_number INTEGER
 )
 ''');
 

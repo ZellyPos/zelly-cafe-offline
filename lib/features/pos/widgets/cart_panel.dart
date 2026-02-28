@@ -107,21 +107,33 @@ class CartPanelWidget extends StatelessWidget {
                   color: Theme.of(context).colorScheme.error,
                   child: Icon(Icons.delete, color: Colors.white),
                 ),
-                onDismissed: (_) async {
-                  if (await cartProvider.checkPermission(
+                confirmDismiss: (direction) async {
+                  bool hasPerm = await cartProvider.checkPermission(
                     context,
                     'delete_item',
-                  )) {
+                  );
+                  if (!hasPerm) return false;
+
+                  if (item.printedQuantity > 0) {
+                    // If it has been printed, it will only be marked as cancelled (qty = 0)
+                    // and must remain in the list. So we refuse the dismiss animation
+                    // and update the state manually.
                     cartProvider.removeItem(
                       item.product.id!,
                       context.read<ConnectivityProvider>(),
                       context,
                     );
-                  } else {
-                    // Refresh UI to bring back the item if dismissed without permission
-                    // We can just call an empty update to trigger a rebuild
-                    cartProvider.refresh();
+                    return false;
                   }
+
+                  return true;
+                },
+                onDismissed: (_) {
+                  cartProvider.removeItem(
+                    item.product.id!,
+                    context.read<ConnectivityProvider>(),
+                    context,
+                  );
                 },
                 child: _buildCartItem(context, item, cartProvider),
               );
@@ -180,11 +192,36 @@ class CartPanelWidget extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: isCompact ? 13 : 14,
-                      color: Theme.of(context).colorScheme.onSurface,
+                      color: item.quantity == 0
+                          ? Colors.red
+                          : Theme.of(context).colorScheme.onSurface,
+                      decoration: item.quantity == 0
+                          ? TextDecoration.lineThrough
+                          : null,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (item.quantity == 0)
+                    Container(
+                      margin: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'BEKOR QILINDI',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 2),
                   Text(
                     PriceFormatter.format(item.product.price),
@@ -239,22 +276,24 @@ class CartPanelWidget extends StatelessWidget {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
                           child: Text(
-                            '${item.quantity}',
+                            '${item.quantity} ${AppStrings.getUnitLabel(item.product.unit)}',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: isCompact ? 12 : 14,
+                              fontSize: isCompact ? 11 : 13,
                             ),
                           ),
                         ),
                         _buildQtyBtn(
                           context,
                           Icons.add,
-                          () => cartProvider.updateQuantity(
-                            item.product.id!,
-                            item.quantity + 1,
-                            context.read<ConnectivityProvider>(),
-                            context,
-                          ),
+                          item.quantity == 0
+                              ? null
+                              : () => cartProvider.updateQuantity(
+                                  item.product.id!,
+                                  item.quantity + 1,
+                                  context.read<ConnectivityProvider>(),
+                                  context,
+                                ),
                         ),
                       ],
                     ),
@@ -277,7 +316,11 @@ class CartPanelWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildQtyBtn(BuildContext context, IconData icon, VoidCallback onTap) {
+  Widget _buildQtyBtn(
+    BuildContext context,
+    IconData icon,
+    VoidCallback? onTap,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
@@ -286,7 +329,9 @@ class CartPanelWidget extends StatelessWidget {
         child: Icon(
           icon,
           size: isCompact ? 16 : 20,
-          color: Theme.of(context).colorScheme.primary,
+          color: onTap == null
+              ? Colors.grey
+              : Theme.of(context).colorScheme.primary,
         ),
       ),
     );

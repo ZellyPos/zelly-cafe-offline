@@ -254,7 +254,7 @@ class TezzroApp extends StatelessWidget {
 
 class UpdateCheckWrapper extends StatefulWidget {
   final Widget child;
-  
+
   const UpdateCheckWrapper({super.key, required this.child});
 
   @override
@@ -389,8 +389,9 @@ class _LoginScreenState extends State<LoginScreen> {
         if (user['is_active'] == 1) {
           connectivity.setCurrentUser(user);
           if (mounted) {
-            // Force reload for non-admin local users if server IP exists
-            final forceRemote = user['role'] != 'admin';
+            // Force reload for non-admin/non-cashier local users if server IP exists
+            final forceRemote =
+                user['role'] != 'admin' && user['role'] != 'cashier';
             context.read<ProductProvider>().loadProducts(
               connectivity: connectivity,
               forceRemote: forceRemote,
@@ -896,6 +897,24 @@ class _MainLayoutState extends State<MainLayout> {
                           2,
                           Icons.category_outlined,
                           AppStrings.categoriesNav,
+                          sidebarFg,
+                        ),
+                        _buildSidebarItem(
+                          3,
+                          Icons.layers_outlined,
+                          AppStrings.locationsNav,
+                          sidebarFg,
+                        ),
+                        _buildSidebarItem(
+                          4,
+                          Icons.table_bar_outlined,
+                          AppStrings.tablesSettingsNav,
+                          sidebarFg,
+                        ),
+                        _buildSidebarItem(
+                          5,
+                          Icons.people_outline,
+                          AppStrings.waitersNav,
                           sidebarFg,
                         ),
                         Divider(

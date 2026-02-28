@@ -330,4 +330,23 @@ class AppStrings {
   static String get permEditPrice => Translations.get('perm_edit_price', _lang);
   static String get permChangeTable =>
       Translations.get('perm_change_table', _lang);
+
+  static String getUnitLabel(String? unit) {
+    if (unit == null) return unitDona;
+    switch (unit.toLowerCase()) {
+      case 'portion':
+      case 'porsiya':
+      case 'porisiya':
+      case 'protion':
+        return unitPortion;
+      case 'dona':
+        return unitDona;
+      case 'kg':
+        return unitKg;
+      case 'set':
+        return unitSet;
+      default:
+        return unit;
+    }
+  }
 }

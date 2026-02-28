@@ -38,6 +38,9 @@ class CartProvider extends ChangeNotifier {
   int? _activeWaiterId;
   int? _activeLocationId;
   DateTime? _activeOpenedAt;
+  int _activeOrderType = 0; // 0: Dine-in, 1: Saboy
+
+  bool _isNewOrderSession = false;
 
   Map<int, CartItem> get items => _items;
   String? get lastPrintError => _lastPrintError;
@@ -47,7 +50,7 @@ class CartProvider extends ChangeNotifier {
   DateTime? get activeOpenedAt => _activeOpenedAt;
 
   bool get hasUnconfirmedChanges {
-    return _items.values.any((item) => item.quantity > item.printedQuantity);
+    return _items.values.any((item) => item.quantity != item.printedQuantity);
   }
 
   double get totalAmount {
@@ -144,13 +147,16 @@ class CartProvider extends ChangeNotifier {
     int? tableId,
     int? locationId, [
     ConnectivityProvider? connectivity,
+    int orderType = 0,
   ]) async {
     _activeTableId = tableId;
     _activeLocationId = locationId;
+    _activeOrderType = orderType;
     _items.clear();
     _activeOrderId = null;
     _activeWaiterId = null;
     _activeOpenedAt = null;
+    _isNewOrderSession = false;
 
     if (tableId != null) {
       if (connectivity != null &&
@@ -179,7 +185,7 @@ class CartProvider extends ChangeNotifier {
             final List itemsList = orderDetail['items'] ?? [];
             for (var row in itemsList) {
               final product = Product(
-                id: row['product_id'] as int,
+                id: (row['product_id'] as num).toInt(),
                 name: row['product_name'] as String,
                 price: (row['price'] as num).toDouble(),
                 category: '',
@@ -187,6 +193,7 @@ class CartProvider extends ChangeNotifier {
               _items[product.id!] = CartItem(
                 product: product,
                 quantity: (row['qty'] as num).toDouble(),
+                printedQuantity: (row['printed_qty'] as num? ?? 0).toDouble(),
               );
             }
           }
@@ -241,7 +248,7 @@ class CartProvider extends ChangeNotifier {
 
             for (var row in itemsRes) {
               final product = Product(
-                id: row['product_id'] as int,
+                id: (row['product_id'] as num).toInt(),
                 name: row['product_name'] as String,
                 price: (row['product_price'] as num).toDouble(),
                 category: row['product_category'] as String,
@@ -264,13 +271,16 @@ class CartProvider extends ChangeNotifier {
     BuildContext context, [
     ConnectivityProvider? connectivity,
   ]) async {
+    if (_activeOrderId == null) {
+      await _ensureOrderExists(connectivity);
+    }
     if (_activeOrderId == null) return;
     if (!hasUnconfirmedChanges) return;
 
     final List<OrderItem> itemsToPrint = [];
 
     for (var item in _items.values) {
-      if (item.quantity > item.printedQuantity) {
+      if (item.quantity != item.printedQuantity) {
         final double delta = item.quantity - item.printedQuantity;
         itemsToPrint.add(
           OrderItem(
@@ -288,16 +298,33 @@ class CartProvider extends ChangeNotifier {
 
     if (itemsToPrint.isEmpty) return;
 
+    int? currentDailyNo;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final existingOrderMap = await db.query(
+        'orders',
+        columns: ['daily_number'],
+        where: 'id = ?',
+        whereArgs: [_activeOrderId],
+      );
+      if (existingOrderMap.isNotEmpty) {
+        currentDailyNo = existingOrderMap.first['daily_number'] as int?;
+      }
+    } catch (e) {
+      debugPrint("Could not fetch daily number for confirm: $e");
+    }
+
     final populatedOrder = Order(
       id: _activeOrderId!,
       total: totalAmount,
       paymentType: 'Pending',
       createdAt: DateTime.now(),
       items: itemsToPrint,
-      orderType: 0,
+      orderType: _activeOrderType,
       tableId: _activeTableId,
       waiterId: _activeWaiterId,
       locationId: _activeLocationId,
+      dailyNumber: currentDailyNo,
       tableName: _activeTableId != null
           ? context
                 .read<TableProvider>()
@@ -317,12 +344,20 @@ class CartProvider extends ChangeNotifier {
     try {
       await PrintingService.printDividedOrder(order: populatedOrder);
 
-      // Update in-memory printedQuantity
-      for (var item in _items.values) {
-        item.printedQuantity = item.quantity;
+      // Update in-memory printedQuantity and clean up deleted items
+      final List<int> toRemove = [];
+      _items.forEach((id, item) {
+        if (item.quantity == 0) {
+          toRemove.add(id);
+        } else {
+          item.printedQuantity = item.quantity;
+        }
+      });
+
+      for (var id in toRemove) {
+        _items.remove(id);
       }
 
-      // Update database printed_qty
       await _syncItems(connectivity, context);
       notifyListeners();
 
@@ -348,7 +383,7 @@ class CartProvider extends ChangeNotifier {
 
   Future<void> _ensureOrderExists([ConnectivityProvider? connectivity]) async {
     final tableId = _activeTableId;
-    if (tableId == null) return;
+    if (tableId == null && _activeOrderType == 0) return;
     if (_activeOrderId != null) return;
 
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
@@ -357,7 +392,7 @@ class CartProvider extends ChangeNotifier {
         body: jsonEncode({
           'table_id': tableId,
           'waiter_id': connectivity.currentUser?['id'],
-          'order_type': 0,
+          'order_type': _activeOrderType,
         }),
         headers: {
           'Content-Type': 'application/json',
@@ -376,6 +411,7 @@ class CartProvider extends ChangeNotifier {
     final newOrderId = const Uuid().v4();
     _activeOrderId = newOrderId;
     _activeOpenedAt = DateTime.now();
+    _isNewOrderSession = true;
 
     _activeWaiterId ??= await DatabaseHelper.instance.getDefaultWaiterId();
 
@@ -385,19 +421,55 @@ class CartProvider extends ChangeNotifier {
       'payment_type': 'Pending',
       'created_at': _activeOpenedAt!.toIso8601String(),
       'opened_at': _activeOpenedAt!.toIso8601String(),
-      'order_type': 0,
+      'order_type': _activeOrderType,
       'table_id': tableId,
       'location_id': _activeLocationId,
       'waiter_id': _activeWaiterId,
       'status': 0,
     });
 
+    if (tableId != null) {
+      await db.update(
+        'tables',
+        {'status': 1, 'active_order_id': newOrderId},
+        where: 'id = ?',
+        whereArgs: [tableId],
+      );
+    }
+
+    // Assign daily number
+    final dailyNo = await _getNextDailyNumber();
     await db.update(
-      'tables',
-      {'status': 1, 'active_order_id': newOrderId},
+      'orders',
+      {'daily_number': dailyNo},
       where: 'id = ?',
-      whereArgs: [tableId],
+      whereArgs: [newOrderId],
     );
+  }
+
+  Future<int> _getNextDailyNumber() async {
+    final db = await DatabaseHelper.instance.database;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
+    final todayEnd = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      23,
+      59,
+      59,
+    ).toIso8601String();
+
+    final res = await db.rawQuery(
+      'SELECT MAX(daily_number) as max_no FROM orders WHERE created_at BETWEEN ? AND ?',
+      [todayStart, todayEnd],
+    );
+
+    int nextNo = 1;
+    if (res.isNotEmpty && res.first['max_no'] != null) {
+      nextNo = (res.first['max_no'] as int) + 1;
+    }
+    return nextNo;
   }
 
   Future<void> _syncOrderHeader([BuildContext? context]) async {
@@ -431,7 +503,7 @@ class CartProvider extends ChangeNotifier {
     ConnectivityProvider? connectivity,
     BuildContext? context,
   ]) async {
-    if (_activeTableId == null) return;
+    if (_activeTableId == null && _activeOrderType == 0) return;
     await _ensureOrderExists(connectivity);
     await _syncOrderHeader(context);
 
@@ -470,6 +542,8 @@ class CartProvider extends ChangeNotifier {
       );
 
       for (var item in _items.values) {
+        if (item.quantity == 0 && item.printedQuantity == 0) continue;
+
         await txn.insert('order_items', {
           'order_id': _activeOrderId,
           'product_id': item.product.id,
@@ -480,18 +554,6 @@ class CartProvider extends ChangeNotifier {
           'printed_qty': item.printedQuantity,
         });
       }
-
-      await txn.update(
-        'orders',
-        {
-          'total': totalAmount,
-          'food_total': totalAmount,
-          'grand_total':
-              totalAmount, // Initial, will be updated with room/waiter
-        },
-        where: 'id = ?',
-        whereArgs: [_activeOrderId],
-      );
     });
   }
 
@@ -538,9 +600,16 @@ class CartProvider extends ChangeNotifier {
     ConnectivityProvider? connectivity,
     BuildContext? context,
   ]) {
-    _items.remove(productId);
-    _syncItems(connectivity, context);
-    notifyListeners();
+    if (_items.containsKey(productId)) {
+      final item = _items[productId]!;
+      if (item.printedQuantity > 0) {
+        item.quantity = 0;
+      } else {
+        _items.remove(productId);
+      }
+      _syncItems(connectivity, context);
+      notifyListeners();
+    }
   }
 
   void updateQuantity(
@@ -643,6 +712,21 @@ class CartProvider extends ChangeNotifier {
         final double grandTotal = foodTotal + roomCharge + serviceFee;
 
         if (_activeOrderId != null) {
+          // Fetch existing daily_number
+          final existingOrderMap = await txn.query(
+            'orders',
+            columns: ['daily_number'],
+            where: 'id = ?',
+            whereArgs: [orderId],
+          );
+          int? currentDailyNo;
+          if (existingOrderMap.isNotEmpty) {
+            currentDailyNo = existingOrderMap.first['daily_number'] as int?;
+          }
+          if (currentDailyNo == null) {
+            currentDailyNo = await _getNextDailyNumber();
+          }
+
           await txn.update(
             'orders',
             {
@@ -658,11 +742,13 @@ class CartProvider extends ChangeNotifier {
               'room_total': roomCharge,
               'service_total': serviceFee,
               'grand_total': grandTotal,
+              'daily_number': currentDailyNo,
             },
             where: 'id = ?',
             whereArgs: [orderId],
           );
         } else {
+          final dailyNo = await _getNextDailyNumber();
           final order = Order(
             id: orderId,
             total: grandTotal,
@@ -681,6 +767,7 @@ class CartProvider extends ChangeNotifier {
             grandTotal: grandTotal,
             openedAt: now,
             closedAt: now,
+            dailyNumber: dailyNo,
           );
           await txn.insert('orders', order.toMap());
         }
@@ -740,6 +827,19 @@ class CartProvider extends ChangeNotifier {
       final double currentGrandTotal =
           currentFoodTotal + currentRoomCharge + currentServiceFee;
 
+      // Extract daily number again, since it might have been generated in the transaction
+      final dbAfter = await DatabaseHelper.instance.database;
+      final finalOrderMap = await dbAfter.query(
+        'orders',
+        columns: ['daily_number'],
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+      int? finalDailyNo;
+      if (finalOrderMap.isNotEmpty) {
+        finalDailyNo = finalOrderMap.first['daily_number'] as int?;
+      }
+
       final populatedOrder = Order(
         id: orderId,
         total: currentGrandTotal,
@@ -757,6 +857,7 @@ class CartProvider extends ChangeNotifier {
         roomTotal: currentRoomCharge,
         serviceTotal: currentServiceFee,
         grandTotal: currentGrandTotal,
+        dailyNumber: finalDailyNo,
         tableName: (tableId ?? _activeTableId) != null
             ? context
                   .read<TableProvider>()
@@ -873,7 +974,6 @@ class CartProvider extends ChangeNotifier {
     if (_activeOrderId == null) return false;
 
     try {
-      final oldOrderId = _activeOrderId;
       if (connectivity != null &&
           connectivity.mode == ConnectivityMode.client) {
         // Client mode: send cancel request to server
@@ -930,6 +1030,39 @@ class CartProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint("Cancel order error: $e");
       return false;
+    }
+  }
+
+  Future<void> discardUnconfirmedChanges([
+    ConnectivityProvider? connectivity,
+    BuildContext? context,
+  ]) async {
+    if (_activeOrderId == null) return;
+
+    final bool anyPrinted = _items.values.any(
+      (item) => item.printedQuantity > 0,
+    );
+
+    if (_isNewOrderSession && !anyPrinted) {
+      // If nothing was ever printed AND it was a new order session, just cancel the whole order to free the table
+      await cancelOrder(connectivity);
+    } else if (hasUnconfirmedChanges) {
+      // Revert unconfirmed changes (revert qty to printed_qty)
+      final List<int> toRemove = [];
+      _items.forEach((id, item) {
+        if (item.printedQuantity == 0) {
+          toRemove.add(id);
+        } else {
+          item.quantity = item.printedQuantity;
+        }
+      });
+
+      for (var id in toRemove) {
+        _items.remove(id);
+      }
+
+      await _syncItems(connectivity, context);
+      notifyListeners();
     }
   }
 

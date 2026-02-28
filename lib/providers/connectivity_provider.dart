@@ -155,7 +155,10 @@ class ConnectivityProvider extends ChangeNotifier {
   bool shouldFetchRemote({bool forceRemote = false}) {
     if (forceRemote) return true;
     if (_mode == ConnectivityMode.client) return true;
-    if (_currentUser != null && _currentUser!['role'] != 'admin') return true;
+    if (_currentUser != null &&
+        _currentUser!['role'] != 'admin' &&
+        _currentUser!['role'] != 'cashier')
+      return true;
     return false;
   }
 

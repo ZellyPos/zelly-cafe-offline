@@ -7,6 +7,7 @@ import '../../../providers/category_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/connectivity_provider.dart';
 import '../../../core/utils/price_formatter.dart';
+import '../../../core/app_strings.dart';
 
 class ProductCardWidget extends StatelessWidget {
   final Product product;
@@ -81,12 +82,13 @@ class ProductCardWidget extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        PriceFormatter.format(product.price),
+                        "${PriceFormatter.format(product.price)} / ${AppStrings.getUnitLabel(product.unit)}",
                         style: TextStyle(
                           color: isDarkColor
                               ? Colors.white
                               : Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.bold,
+                          fontSize: isCompact ? 11 : 13,
                         ),
                       ),
                       Row(

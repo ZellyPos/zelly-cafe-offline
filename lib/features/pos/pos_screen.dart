@@ -240,34 +240,40 @@ class _PosScreenState extends State<PosScreen> {
   Widget _buildDineInHeader(BuildContext context, bool isCompact) {
     final cartProvider = context.read<CartProvider>();
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      color: isDark
-          ? theme.colorScheme.surface
-          : theme.colorScheme.primaryContainer.withOpacity(0.3),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+      ),
       child: Row(
         children: [
           ElevatedButton.icon(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back),
-            label: Text('⬅ ${AppStrings.back}'),
+            icon: const Icon(Icons.arrow_back_rounded, size: 18),
+            label: Text(AppStrings.back),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
+              backgroundColor: const Color(0xFFF1F5F9),
+              foregroundColor: theme.colorScheme.onSurface,
+              elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
           ),
-          SizedBox(width: isCompact ? 10 : 20),
-          const Icon(Icons.table_bar, color: Colors.blue, size: 20),
-          const SizedBox(width: 8),
+          const SizedBox(width: 24),
+          const Icon(
+            Icons.table_bar_rounded,
+            color: Color(0xFF3B82F6),
+            size: 22,
+          ),
+          const SizedBox(width: 10),
           Text(
             '${AppStrings.tableLabel}: ${widget.table!.name}',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: isCompact ? 14 : 16,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+              letterSpacing: -0.5,
             ),
           ),
           const SizedBox(width: 8),
@@ -275,81 +281,81 @@ class _PosScreenState extends State<PosScreen> {
             onPressed: () async {
               if (await context.read<CartProvider>().checkPermission(
                 context,
-                'change_table',
+                'perm_manage_tables',
               )) {
                 _showChangeTableDialog(context);
               }
             },
-            icon: const Icon(Icons.swap_horiz, color: Colors.blue),
+            icon: const Icon(
+              Icons.swap_horiz_rounded,
+              color: Color(0xFF64748B),
+            ),
             tooltip: AppStrings.changeTable,
-            iconSize: 20,
+            iconSize: 22,
           ),
-          const SizedBox(width: 4),
           IconButton(
             onPressed: () => _showMergeTableDialog(context),
-            icon: const Icon(Icons.merge_type, color: Colors.blue),
+            icon: const Icon(
+              Icons.merge_type_rounded,
+              color: Color(0xFF64748B),
+            ),
             tooltip: 'Stollarni birlashtirish',
-            iconSize: 20,
+            iconSize: 22,
           ),
-          SizedBox(width: isCompact ? 12 : 24),
-          const Icon(Icons.person, color: Colors.blue, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: InkWell(
-              onTap: () => _showWaiterSelectionDialog(context),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white12
-                        : Colors.blue.withOpacity(0.2),
+          const Spacer(),
+          // Waiter Info
+          InkWell(
+            onTap: () => _showWaiterSelectionDialog(context),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF1F5F9)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.person_pin_rounded,
+                    color: Color(0xFF3B82F6),
+                    size: 20,
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        cartProvider.activeWaiterId != null
-                            ? context
-                                  .watch<WaiterProvider>()
-                                  .waiters
-                                  .firstWhere(
-                                    (w) => w.id == cartProvider.activeWaiterId,
-                                    orElse: () => Waiter(
-                                      name: AppStrings.kassa,
-                                      type: 0,
-                                      value: 0,
-                                    ),
-                                  )
-                                  .name
-                            : AppStrings.waiterKassa,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  const SizedBox(width: 10),
+                  Text(
+                    cartProvider.activeWaiterId != null
+                        ? context
+                              .watch<WaiterProvider>()
+                              .waiters
+                              .firstWhere(
+                                (w) => w.id == cartProvider.activeWaiterId,
+                                orElse: () => Waiter(
+                                  name: AppStrings.kassa,
+                                  type: 0,
+                                  value: 0,
+                                ),
+                              )
+                              .name
+                        : AppStrings.waiterKassa,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
-                    const Icon(
-                      Icons.arrow_drop_down,
-                      color: Colors.blue,
-                      size: 20,
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: Color(0xFF64748B),
+                    size: 20,
+                  ),
+                ],
               ),
             ),
           ),
+          const SizedBox(width: 16),
           _buildTimerInfo(context, cartProvider, isCompact),
-          const SizedBox(width: 12),
-          const SizedBox(width: 12),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           _buildSortButton(context),
         ],
       ),
@@ -358,33 +364,41 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _buildSaboyHeader(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.all(16),
-      color: isDark
-          ? theme.colorScheme.surface
-          : Colors.orange.withOpacity(0.1),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+      ),
       child: Row(
         children: [
           ElevatedButton.icon(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('⬅ Orqaga'),
+            icon: const Icon(Icons.arrow_back_rounded, size: 18),
+            label: Text(AppStrings.back),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              backgroundColor: const Color(0xFFF1F5F9),
+              foregroundColor: theme.colorScheme.onSurface,
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
           ),
           const SizedBox(width: 24),
-          const Icon(Icons.shopping_bag, color: Colors.orange),
-          const SizedBox(width: 8),
+          const Icon(
+            Icons.shopping_bag_rounded,
+            color: Color(0xFFF59E0B),
+            size: 22,
+          ),
+          const SizedBox(width: 10),
           const Text(
             'SABOY (Olib ketish)',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+              letterSpacing: -0.5,
+            ),
           ),
           const Spacer(),
           _buildSortButton(context),
@@ -445,12 +459,18 @@ class _PosScreenState extends State<PosScreen> {
     CategoryProvider categoryProvider,
     bool isCompact,
   ) {
+    final theme = Theme.of(context);
     return Container(
-      height: 75,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      height: 80,
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        border: const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       child: Row(
         children: [
           _buildBurgerButton(context, categories, categoryProvider),
+          const SizedBox(width: 16),
           Expanded(
             child: _buildCategoryList(categories, categoryProvider, isCompact),
           ),
@@ -464,6 +484,7 @@ class _PosScreenState extends State<PosScreen> {
     List<String> categories,
     CategoryProvider categoryProvider,
   ) {
+    final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.only(right: 12),
       child: InkWell(
@@ -472,10 +493,14 @@ class _PosScreenState extends State<PosScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor,
-            borderRadius: BorderRadius.circular(8),
+            color: theme.colorScheme.primary,
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.grid_view_rounded, color: Colors.white),
+          child: const Icon(
+            Icons.grid_view_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
         ),
       ),
     );
@@ -487,13 +512,12 @@ class _PosScreenState extends State<PosScreen> {
     bool isCompact,
   ) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return ListView.separated(
       controller: _categoryScrollController,
       scrollDirection: Axis.horizontal,
       itemCount: categories.length,
-      separatorBuilder: (_, __) => const SizedBox(width: 10),
+      separatorBuilder: (_, __) => const SizedBox(width: 8),
       itemBuilder: (context, index) {
         final cat = categories[index];
         final isSelected = selectedCategory == cat;
@@ -510,20 +534,10 @@ class _PosScreenState extends State<PosScreen> {
             }
           } catch (_) {}
         }
-        return ChoiceChip(
-          label: Text(
-            cat,
-            style: TextStyle(
-              fontSize: isCompact ? 16 : 18,
-              color: isSelected
-                  ? Colors.white
-                  : (isDark ? Colors.white70 : Colors.black),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          selected: isSelected,
-          onSelected: (val) {
-            if (val) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: InkWell(
+            onTap: () {
               setState(() => selectedCategory = cat);
               _pageController.animateToPage(
                 index,
@@ -531,15 +545,34 @@ class _PosScreenState extends State<PosScreen> {
                 curve: Curves.easeInOut,
               );
               _scrollToCategory(index);
-            }
-          },
-          selectedColor: catColor ?? AppTheme.primaryColor,
-          backgroundColor:
-              catColor?.withOpacity(1) ??
-              (isDark
-                  ? theme.colorScheme.surface
-                  : theme.dividerColor.withOpacity(0.1)),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (catColor ?? theme.colorScheme.primary)
+                    : theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected
+                      ? (catColor ?? theme.colorScheme.primary)
+                      : const Color(0xFFE2E8F0),
+                ),
+                boxShadow: isSelected ? AppTheme.softShadow : null,
+              ),
+              child: Text(
+                cat,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: isSelected ? Colors.white : const Color(0xFF64748B),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
@@ -847,21 +880,25 @@ class _PosScreenState extends State<PosScreen> {
     BuildContext context,
     Product product,
   ) async {
-    final result = await showDialog<double>(
+    final result = await showDialog(
       context: context,
       builder: (context) => QuantityDialog(product: product),
     );
 
-    if (result != null && result > 0 && mounted) {
+    if (result != null && result is Map && mounted) {
+      final double qty = result['quantity'];
+      final double price = result['price'];
+      final modifiedProduct = product.copyWith(price: price);
+
       context.read<CartProvider>().addItem(
-        product,
+        modifiedProduct,
         context.read<ConnectivityProvider>(),
         context,
-        result,
+        qty,
       );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${product.name} savatga qo\'shildi ($result ta)'),
+          content: Text('${product.name} savatga qo\'shildi ($qty ta)'),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 1),
         ),

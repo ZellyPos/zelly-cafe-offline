@@ -11,6 +11,7 @@ import '../../core/app_strings.dart';
 import 'pos_screen.dart';
 import 'widgets/floor_plan_viewer.dart';
 import 'widgets/floor_plan_editor.dart';
+import '../login/login_screen.dart';
 
 class TablesScreen extends StatefulWidget {
   const TablesScreen({super.key});
@@ -104,27 +105,41 @@ class _TablesScreenState extends State<TablesScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: _buildLocationTabs(context, locationProvider)),
-                const SizedBox(width: 16),
-                _buildViewToggle(context),
-                const SizedBox(width: 16),
-                if (role == 'admin') ...[
-                  _buildDesignToggle(context),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header / Navigation
+          SizedBox(
+            width: double.infinity,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: _buildLocationTabs(context, locationProvider),
+                  ),
                   const SizedBox(width: 16),
+                  _buildViewToggle(context),
+                  const SizedBox(width: 12),
+                  if (role == 'admin') ...[
+                    _buildDesignToggle(context),
+                    const SizedBox(width: 12),
+                  ],
+                  if (role == 'cashier') ...[
+                    _buildLogoutButton(context),
+                    const SizedBox(width: 12),
+                  ],
+                  _buildSaboyButton(context),
                 ],
-                _buildSaboyButton(context),
-              ],
+              ),
             ),
-            const SizedBox(height: 32),
-            Expanded(
+          ),
+          const SizedBox(height: 24),
+          // Main Content
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: tableProvider.isLoading && tableProvider.tables.isEmpty
                   ? const Center(child: CircularProgressIndicator())
                   : _isFloorPlanView
@@ -140,6 +155,7 @@ class _TablesScreenState extends State<TablesScreen> {
                                 _handleTableTap(context, table),
                           ))
                   : GridView.builder(
+                      padding: const EdgeInsets.only(bottom: 24),
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount:
                             MediaQuery.of(context).size.width >= 1600
@@ -149,9 +165,9 @@ class _TablesScreenState extends State<TablesScreen> {
                                   : (MediaQuery.of(context).size.width >= 1000
                                         ? 5
                                         : 4)),
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 0.95,
+                        crossAxisSpacing: 20,
+                        mainAxisSpacing: 20,
+                        childAspectRatio: 0.9,
                       ),
                       itemCount: tables.length,
                       itemBuilder: (context, index) {
@@ -163,8 +179,8 @@ class _TablesScreenState extends State<TablesScreen> {
                       },
                     ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -173,9 +189,17 @@ class _TablesScreenState extends State<TablesScreen> {
     BuildContext context,
     LocationProvider locationProvider,
   ) {
+    if (locationProvider.locations.isEmpty) return const SizedBox.shrink();
+
     final theme = Theme.of(context);
-    return SizedBox(
-      height: 60,
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)), // Slate 200
+      ),
+      padding: const EdgeInsets.all(4),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: locationProvider.locations.length,
@@ -183,24 +207,29 @@ class _TablesScreenState extends State<TablesScreen> {
           final loc = locationProvider.locations[index];
           final isSelected = _selectedLocationId == loc.id;
           return Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: ChoiceChip(
-              label: Text(loc.name),
-              selected: isSelected,
-              onSelected: (val) => setState(() => _selectedLocationId = loc.id),
-              selectedColor: AppTheme.primaryColor,
-              backgroundColor: theme.colorScheme.surface,
-              labelStyle: TextStyle(
-                color: isSelected
-                    ? Colors.white
-                    : theme.colorScheme.onSurface.withOpacity(0.6),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                inherit: true,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            padding: const EdgeInsets.only(right: 4),
+            child: InkWell(
+              onTap: () => setState(() => _selectedLocationId = loc.id),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  loc.name,
+                  style: TextStyle(
+                    color: isSelected
+                        ? Colors.white
+                        : theme.colorScheme.onSurface.withOpacity(0.6),
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    fontSize: 15,
+                  ),
+                ),
               ),
             ),
           );
@@ -210,29 +239,32 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   Widget _buildSaboyButton(BuildContext context) {
-    return ElevatedButton.icon(
-      onPressed: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const PosScreen(orderType: 1),
+    return Container(
+      height: 52,
+      child: ElevatedButton.icon(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const PosScreen(orderType: 1),
+            ),
+          );
+        },
+        icon: const Icon(Icons.shopping_bag_outlined, size: 20),
+        label: Text(
+          AppStrings.saboy.toUpperCase(),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
           ),
-        );
-      },
-      icon: const Icon(Icons.shopping_bag_outlined),
-      label: Text(
-        AppStrings.saboy,
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 16,
-          inherit: true,
         ),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 0,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange.shade600,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 0,
+        ),
       ),
     );
   }
@@ -250,32 +282,16 @@ class _TablesScreenState extends State<TablesScreen> {
     return Container(
       decoration: BoxDecoration(
         color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isOccupied
-              ? (isJoined
-                    ? Colors.blue.withOpacity(0.5)
-                    : Colors.red.withOpacity(0.3))
-              : theme.dividerColor.withOpacity(0.3),
-          width: isJoined ? 3 : 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isJoined
-                ? Colors.blue.withOpacity(0.05)
-                : theme.shadowColor.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+        boxShadow: AppTheme.softShadow,
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _handleTableTap(context, table),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppTheme.borderRadius),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -286,10 +302,10 @@ class _TablesScreenState extends State<TablesScreen> {
                       child: Text(
                         table.name,
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
                           color: theme.colorScheme.onSurface,
-                          inherit: true,
+                          letterSpacing: -0.5,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -303,71 +319,72 @@ class _TablesScreenState extends State<TablesScreen> {
                 ),
                 if (isJoined)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
+                    padding: const EdgeInsets.only(top: 6.0),
                     child: Text(
                       "Birlashgan: ${joinedWith.where((t) => t.id != table.id).map((t) => t.name).join(', ')}",
                       style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.w500,
-                        inherit: true,
+                        fontSize: 12,
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 if (isOccupied && info != null) ...[
                   _buildIconText(
                     context,
-                    Icons.person_outline,
+                    Icons.person_outline_rounded,
                     info.waiterName ?? "Kassa",
                   ),
+                  const SizedBox(height: 6),
                   if (table.pricingType == 1)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6.0),
-                      child: _buildIconText(
-                        context,
-                        Icons.timer_outlined,
-                        _formatDuration(info.openedAt),
-                        color: Colors.orange,
-                      ),
+                    _buildIconText(
+                      context,
+                      Icons.timer_outlined,
+                      _formatDuration(info.openedAt),
+                      color: Colors.orange.shade700,
                     ),
                   const Spacer(),
-                  Text(
-                    "${PriceFormatter.format(info.totalAmount)} so'm",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
-                      inherit: true,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "${PriceFormatter.format(info.totalAmount)} so'm",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                   ),
                 ] else ...[
                   const Spacer(),
                   Center(
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.table_bar_outlined,
-                          size: 36,
-                          color: Colors.green.withOpacity(0.1),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          AppStrings.tableEmpty,
-                          style: TextStyle(
-                            color: theme.colorScheme.onSurface.withOpacity(0.4),
-                            fontSize: 12,
-                            inherit: true,
-                          ),
-                        ),
-                      ],
+                    child: Icon(
+                      Icons.table_bar_outlined,
+                      size: 40,
+                      color: theme.colorScheme.onSurface.withOpacity(0.05),
                     ),
                   ),
                   const Spacer(),
+                  Text(
+                    AppStrings.tableEmpty,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ],
-                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -407,20 +424,21 @@ class _TablesScreenState extends State<TablesScreen> {
 
   Widget _buildStatusBadge(bool occupied) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: occupied
-            ? Colors.red.withOpacity(0.1)
-            : Colors.green.withOpacity(0.1),
+            ? const Color(0xFFFEF2F2) // Red 50
+            : const Color(0xFFECFDF5), // Emerald 50
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         occupied ? AppStrings.occupied : AppStrings.available,
         style: TextStyle(
-          color: occupied ? Colors.red.shade700 : Colors.green.shade700,
+          color: occupied
+              ? const Color(0xFFEF4444) // Red 500
+              : const Color(0xFF10B981), // Emerald 500
           fontWeight: FontWeight.bold,
-          fontSize: 12,
-          inherit: true,
+          fontSize: 11,
         ),
       ),
     );
@@ -428,23 +446,22 @@ class _TablesScreenState extends State<TablesScreen> {
 
   Widget _buildJoinBadge() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.1),
+        color: const Color(0xFFEFF6FF), // Blue 50
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.link, size: 12, color: Colors.blue.shade700),
+          const Icon(Icons.link_rounded, size: 12, color: Color(0xFF3B82F6)),
           const SizedBox(width: 4),
-          Text(
+          const Text(
             "Birlashgan",
             style: TextStyle(
-              color: Colors.blue.shade700,
+              color: Color(0xFF3B82F6),
               fontWeight: FontWeight.bold,
-              fontSize: 12,
-              inherit: true,
+              fontSize: 11,
             ),
           ),
         ],
@@ -455,23 +472,18 @@ class _TablesScreenState extends State<TablesScreen> {
   Widget _buildViewToggle(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
+      height: 52,
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.shadowColor.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: IconButton(
         onPressed: () => setState(() => _isFloorPlanView = !_isFloorPlanView),
         icon: Icon(
-          _isFloorPlanView ? Icons.grid_view : Icons.map_outlined,
-          color: AppTheme.primaryColor,
+          _isFloorPlanView ? Icons.grid_view_rounded : Icons.map_outlined,
+          color: theme.colorScheme.primary,
+          size: 22,
         ),
         tooltip: _isFloorPlanView
             ? 'Grid ko\'rinishi'
@@ -485,23 +497,20 @@ class _TablesScreenState extends State<TablesScreen> {
 
     final theme = Theme.of(context);
     return Container(
+      height: 52,
       decoration: BoxDecoration(
         color: _isDesignMode ? Colors.orange : theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: theme.shadowColor.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(
+          color: _isDesignMode ? Colors.orange : const Color(0xFFE2E8F0),
+        ),
       ),
       child: IconButton(
         onPressed: () => setState(() => _isDesignMode = !_isDesignMode),
         icon: Icon(
-          _isDesignMode ? Icons.check : Icons.design_services,
+          _isDesignMode ? Icons.check_rounded : Icons.design_services_rounded,
           color: _isDesignMode ? Colors.white : Colors.orange,
+          size: 22,
         ),
         tooltip: _isDesignMode ? 'Saqlash' : 'Dizayn rejimi',
       ),
@@ -528,5 +537,56 @@ class _TablesScreenState extends State<TablesScreen> {
         .then((_) {
           context.read<TableProvider>().loadTables();
         });
+  }
+
+  Widget _buildLogoutButton(BuildContext context) {
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: const Color(0xFFEF4444), // Red 500
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFEF4444).withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Chiqish'),
+              content: const Text('Rostdan ham tizimdan chiqmoqchimisiz?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Bekor qilish'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    context.read<ConnectivityProvider>().setCurrentUser(null);
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) => const LoginScreen(),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                  child: const Text(
+                    'Chiqish',
+                    style: TextStyle(color: Color(0xFFEF4444)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+        icon: const Icon(Icons.logout_rounded, color: Colors.white, size: 24),
+        tooltip: 'Tizimdan chiqish',
+      ),
+    );
   }
 }

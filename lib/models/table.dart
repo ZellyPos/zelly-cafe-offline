@@ -60,11 +60,11 @@ class TableModel {
     ActiveOrderInfo? activeOrder,
   }) {
     return TableModel(
-      id: map['id'],
-      locationId: map['location_id'],
+      id: (map['id'] as num?)?.toInt(),
+      locationId: (map['location_id'] as num).toInt(),
       name: map['name'],
-      status: map['status'] ?? 0,
-      pricingType: map['pricing_type'] ?? 0,
+      status: (map['status'] as num?)?.toInt() ?? 0,
+      pricingType: (map['pricing_type'] as num?)?.toInt() ?? 0,
       hourlyRate: (map['hourly_rate'] as num?)?.toDouble() ?? 0.0,
       fixedAmount: (map['fixed_amount'] as num?)?.toDouble() ?? 0.0,
       servicePercentage: (map['service_percentage'] as num?)?.toDouble() ?? 0.0,
@@ -74,7 +74,7 @@ class TableModel {
       y: (map['y'] as num?)?.toDouble() ?? 0.0,
       width: (map['width'] as num?)?.toDouble() ?? 0.1,
       height: (map['height'] as num?)?.toDouble() ?? 0.1,
-      shape: map['shape'] ?? 0,
+      shape: (map['shape'] as num?)?.toInt() ?? 0,
     );
   }
 

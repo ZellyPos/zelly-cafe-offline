@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/connectivity_provider.dart';
-import '../../../core/theme.dart';
 import '../../../core/app_strings.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../models/table.dart';
@@ -29,12 +28,12 @@ class CartPanelWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Senior approach: Use Selector to only rebuild if cart items or totals change
+    final theme = Theme.of(context);
     return Container(
       width: isCompact ? 340 : 400,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(left: BorderSide(color: Theme.of(context).dividerColor)),
+        color: theme.colorScheme.surface,
+        border: const Border(left: BorderSide(color: Color(0xFFF1F5F9))),
       ),
       child: Column(
         children: [
@@ -47,41 +46,66 @@ class CartPanelWidget extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
     return Selector<CartProvider, int>(
       selector: (_, provider) => provider.items.length,
       builder: (context, itemCount, _) {
         final cartProvider = context.read<CartProvider>();
         return Container(
-          padding: EdgeInsets.all(isCompact ? 12 : 20),
-          color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
+          padding: EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: isCompact ? 16 : 24,
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                AppStrings.currentOrder,
-                style: TextStyle(
-                  fontSize: isCompact ? 16 : 18,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AppStrings.currentOrder,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  Text(
+                    "$itemCount ta mahsulot",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
-              IconButton(
-                icon: Icon(
-                  Icons.delete_outline,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-                onPressed: () async {
-                  if (await cartProvider.checkPermission(
-                    context,
-                    'delete_item',
-                  )) {
-                    cartProvider.clearCart(
-                      context.read<ConnectivityProvider>(),
+              if (itemCount > 0)
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Color(0xFFEF4444),
+                      size: 20,
+                    ),
+                  ),
+                  onPressed: () async {
+                    if (await cartProvider.checkPermission(
                       context,
-                    );
-                  }
-                },
-              ),
+                      'delete_item',
+                    )) {
+                      cartProvider.clearCart(
+                        context.read<ConnectivityProvider>(),
+                        context,
+                      );
+                    }
+                  },
+                ),
             ],
           ),
         );
@@ -94,7 +118,30 @@ class CartPanelWidget extends StatelessWidget {
       child: Consumer<CartProvider>(
         builder: (context, cartProvider, _) {
           final items = cartProvider.items.values.toList();
+          if (items.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.shopping_cart_outlined,
+                    size: 64,
+                    color: const Color(0xFFF1F5F9),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Savat bo'sh",
+                    style: TextStyle(
+                      color: const Color(0xFF94A3B8),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
           return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
@@ -104,8 +151,12 @@ class CartPanelWidget extends StatelessWidget {
                 background: Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  color: Theme.of(context).colorScheme.error,
-                  child: Icon(Icons.delete, color: Colors.white),
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.delete_rounded, color: Colors.white),
                 ),
                 confirmDismiss: (direction) async {
                   bool hasPerm = await cartProvider.checkPermission(
@@ -115,9 +166,6 @@ class CartPanelWidget extends StatelessWidget {
                   if (!hasPerm) return false;
 
                   if (item.printedQuantity > 0) {
-                    // If it has been printed, it will only be marked as cancelled (qty = 0)
-                    // and must remain in the list. So we refuse the dismiss animation
-                    // and update the state manually.
                     cartProvider.removeItem(
                       item.product.id!,
                       context.read<ConnectivityProvider>(),
@@ -149,166 +197,144 @@ class CartPanelWidget extends StatelessWidget {
     dynamic item,
     CartProvider cartProvider,
   ) {
+    final theme = Theme.of(context);
+    final isCancelled = item.quantity == 0;
     return InkWell(
       onTap: () async {
-        final result = await showDialog<double>(
+        if (!await cartProvider.checkPermission(context, 'perm_edit_price')) {
+          return;
+        }
+        final result = await showDialog(
           context: context,
           builder: (context) => QuantityDialog(product: item.product),
         );
-        if (result != null && result >= 0) {
-          final oldQty = item.quantity;
-          if (result < oldQty) {
-            final permission = result == 0 ? 'delete_item' : 'reduce_item';
+        if (result != null && result is Map) {
+          final double newQty = result['quantity'];
+          final double newPrice = result['price'];
+
+          if (newQty < item.quantity) {
+            final permission = newQty == 0 ? 'perm_delete_item' : 'reduce_item';
             if (!await cartProvider.checkPermission(context, permission)) {
               return;
             }
           }
 
-          cartProvider.updateQuantity(
+          cartProvider.updateItem(
             item.product.id!,
-            result,
-            context.read<ConnectivityProvider>(),
-            context,
+            quantity: newQty,
+            price: newPrice,
+            connectivity: context.read<ConnectivityProvider>(),
+            context: context,
           );
         }
       },
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isCompact ? 6 : 16,
-          vertical: isCompact ? 8 : 12,
-        ),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+          color: isCancelled ? const Color(0xFFFEF2F2).withOpacity(0.5) : null,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isCancelled
+                ? const Color(0xFFFCA5A5).withOpacity(0.3)
+                : Colors.transparent,
+          ),
         ),
         child: Row(
           children: [
             Expanded(
-              flex: 3,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     item.product.name,
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: isCompact ? 13 : 14,
-                      color: item.quantity == 0
-                          ? Colors.red
-                          : Theme.of(context).colorScheme.onSurface,
-                      decoration: item.quantity == 0
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: isCancelled
+                          ? const Color(0xFFEF4444)
+                          : theme.colorScheme.onSurface,
+                      decoration: isCancelled
                           ? TextDecoration.lineThrough
                           : null,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (item.quantity == 0)
-                    Container(
-                      margin: const EdgeInsets.only(top: 2),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade100,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'BEKOR QILINDI',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
-                    PriceFormatter.format(item.product.price),
+                    "${PriceFormatter.format(item.product.price)} so'm",
                     style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
-                      fontSize: isCompact ? 11 : 12,
+                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 4),
-            Flexible(
-              flex: 4,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(8),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildQtyBtn(context, Icons.remove_rounded, () async {
+                      final currentQty = item.quantity;
+                      final permission = currentQty <= 1
+                          ? 'delete_item'
+                          : 'reduce_item';
+                      if (!await cartProvider.checkPermission(
+                        context,
+                        permission,
+                      )) {
+                        return;
+                      }
+                      cartProvider.updateQuantity(
+                        item.product.id!,
+                        item.quantity - 1,
+                        context.read<ConnectivityProvider>(),
+                        context,
+                      );
+                    }),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        '${item.quantity}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 2,
-                      vertical: 2,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildQtyBtn(context, Icons.remove, () async {
-                          final currentQty = item.quantity;
-                          final permission = currentQty <= 1
-                              ? 'delete_item'
-                              : 'reduce_item';
-
-                          if (!await cartProvider.checkPermission(
-                            context,
-                            permission,
-                          )) {
-                            return;
-                          }
-
-                          cartProvider.updateQuantity(
-                            item.product.id!,
-                            item.quantity - 1,
-                            context.read<ConnectivityProvider>(),
-                            context,
-                          );
-                        }),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: Text(
-                            '${item.quantity} ${AppStrings.getUnitLabel(item.product.unit)}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: isCompact ? 11 : 13,
+                    _buildQtyBtn(
+                      context,
+                      Icons.add_rounded,
+                      isCancelled
+                          ? null
+                          : () => cartProvider.updateQuantity(
+                              item.product.id!,
+                              item.quantity + 1,
+                              context.read<ConnectivityProvider>(),
+                              context,
                             ),
-                          ),
-                        ),
-                        _buildQtyBtn(
-                          context,
-                          Icons.add,
-                          item.quantity == 0
-                              ? null
-                              : () => cartProvider.updateQuantity(
-                                  item.product.id!,
-                                  item.quantity + 1,
-                                  context.read<ConnectivityProvider>(),
-                                  context,
-                                ),
-                        ),
-                      ],
                     ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  PriceFormatter.format(item.total),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: isCancelled
+                        ? const Color(0xFFEF4444)
+                        : theme.colorScheme.primary,
                   ),
-                  SizedBox(width: isCompact ? 4 : 8),
-                  Text(
-                    PriceFormatter.format(item.total),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: isCompact ? 13 : 14,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
@@ -323,39 +349,44 @@ class CartPanelWidget extends StatelessWidget {
   ) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: Icon(
           icon,
-          size: isCompact ? 16 : 20,
+          size: 16,
           color: onTap == null
-              ? Colors.grey
-              : Theme.of(context).colorScheme.primary,
+              ? const Color(0xFFCBD5E1)
+              : const Color(0xFF475569),
         ),
       ),
     );
   }
 
   Widget _buildBottomPanel(BuildContext context) {
+    final theme = Theme.of(context);
     return Consumer<CartProvider>(
       builder: (context, cartProvider, _) {
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
+            color: theme.colorScheme.surface,
             boxShadow: [
               BoxShadow(
-                color: Theme.of(context).shadowColor.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, -4),
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 20,
+                offset: const Offset(0, -8),
               ),
             ],
           ),
           child: Column(
             children: [
               _buildTotalsBreakdown(context, cartProvider),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               _buildActionButtons(context, cartProvider),
             ],
           ),
@@ -370,7 +401,7 @@ class CartPanelWidget extends StatelessWidget {
   ) {
     return Column(
       children: [
-        _buildRow("Taomlar:", cartProvider.totalAmount),
+        _buildRow(context, "Taomlar jami", cartProvider.totalAmount),
         if (orderType == 0 && table != null)
           FutureBuilder<double>(
             future: cartProvider.calculateRoomChargeForUI(context),
@@ -383,11 +414,20 @@ class CartPanelWidget extends StatelessWidget {
                   cartProvider.totalAmount + roomCharge + serviceFee;
               return Column(
                 children: [
-                  if (roomCharge > 0) _buildRow("Xona/Stol:", roomCharge),
+                  if (roomCharge > 0)
+                    _buildRow(context, "Xona / Stol", roomCharge),
                   if (serviceFee > 0)
-                    _buildRow("Ofitsiant xizmati:", serviceFee),
-                  const Divider(height: 16),
-                  _buildRow("JAMI:", grandTotal, isMain: true),
+                    _buildRow(context, "Xizmat haqi", serviceFee),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Divider(color: Color(0xFFF1F5F9)),
+                  ),
+                  _buildRow(
+                    context,
+                    "TO'LANADIGAN SUMMA:",
+                    grandTotal,
+                    isMain: true,
+                  ),
                 ],
               );
             },
@@ -402,9 +442,17 @@ class CartPanelWidget extends StatelessWidget {
               return Column(
                 children: [
                   if (serviceFee > 0)
-                    _buildRow("Ofitsiant xizmati:", serviceFee),
-                  const Divider(height: 16),
-                  _buildRow("JAMI:", grandTotal, isMain: true),
+                    _buildRow(context, "Xizmat haqi", serviceFee),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Divider(color: Color(0xFFF1F5F9)),
+                  ),
+                  _buildRow(
+                    context,
+                    "TO'LANADIGAN SUMMA:",
+                    grandTotal,
+                    isMain: true,
+                  ),
                 ],
               );
             },
@@ -413,25 +461,37 @@ class CartPanelWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(String label, double value, {bool isMain = false}) {
+  Widget _buildRow(
+    BuildContext context,
+    String label,
+    double value, {
+    bool isMain = false,
+  }) {
+    final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: isCompact ? 2 : 4),
+      padding: EdgeInsets.symmetric(vertical: isMain ? 4 : 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
             style: TextStyle(
-              fontSize: isMain ? (isCompact ? 18 : 20) : (isCompact ? 14 : 16),
-              fontWeight: isMain ? FontWeight.bold : FontWeight.normal,
+              fontSize: isMain ? 15 : 13,
+              fontWeight: isMain ? FontWeight.w800 : FontWeight.w600,
+              color: isMain
+                  ? theme.colorScheme.onSurface
+                  : const Color(0xFF94A3B8),
+              letterSpacing: isMain ? -0.2 : 0,
             ),
           ),
           Text(
             PriceFormatter.format(value),
             style: TextStyle(
-              fontSize: isMain ? (isCompact ? 22 : 24) : (isCompact ? 14 : 16),
-              fontWeight: FontWeight.bold,
-              color: isMain ? AppTheme.secondaryColor : Colors.black,
+              fontSize: isMain ? 22 : 14,
+              fontWeight: FontWeight.w900,
+              color: isMain
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface,
             ),
           ),
         ],
@@ -442,52 +502,64 @@ class CartPanelWidget extends StatelessWidget {
   Widget _buildActionButtons(BuildContext context, CartProvider cartProvider) {
     final connectivity = context.read<ConnectivityProvider>();
     final bool isEmpty = cartProvider.items.isEmpty;
-    final bool isWaiter =
-        (connectivity.currentUser?['role'] ?? 'admin') == 'waiter';
+    final String role = connectivity.currentUser?['role'] ?? 'admin';
+    final bool isWaiter = role == 'waiter';
 
     return Column(
       children: [
         if (isEmpty && cartProvider.activeOrderId != null && !isWaiter)
           SizedBox(
             width: double.infinity,
-            height: 60,
+            height: 56,
             child: ElevatedButton.icon(
               onPressed: onCancelOrder,
-              icon: const Icon(Icons.cancel_outlined),
+              icon: const Icon(Icons.cancel_outlined, size: 20),
               label: const Text(
                 'BUYURTMANI BEKOR QILISH',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade600,
-                foregroundColor: Colors.white,
+                backgroundColor: const Color(0xFFFEF2F2),
+                foregroundColor: const Color(0xFFEF4444),
+                elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
             ),
           ),
         if (!isEmpty)
-          cartProvider.hasUnconfirmedChanges
+          (cartProvider.hasUnconfirmedChanges &&
+                  cartProvider.hasPermission(context, 'perm_confirm_order'))
               ? SizedBox(
                   width: double.infinity,
-                  height: 60,
+                  height: 56,
                   child: ElevatedButton.icon(
-                    onPressed: () =>
-                        cartProvider.confirmTableOrder(context, connectivity),
-                    icon: const Icon(Icons.check_circle_outline),
+                    onPressed: () async {
+                      if (await cartProvider.checkPermission(
+                        context,
+                        'perm_confirm_order',
+                      )) {
+                        cartProvider.confirmTableOrder(context, connectivity);
+                      }
+                    },
+                    icon: const Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 20,
+                    ),
                     label: const Text(
-                      'TASDIQLASH',
+                      'BUYURTMANI TASDIQLASH',
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade600,
+                      backgroundColor: const Color(0xFF10B981),
                       foregroundColor: Colors.white,
+                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                   ),
@@ -495,8 +567,9 @@ class CartPanelWidget extends StatelessWidget {
               : Row(
                   children: [
                     SizedBox(
-                      height: 60,
-                      child: ElevatedButton.icon(
+                      height: 56,
+                      width: 64,
+                      child: ElevatedButton(
                         onPressed: () async {
                           if (await cartProvider.checkPermission(
                             context,
@@ -505,36 +578,47 @@ class CartPanelWidget extends StatelessWidget {
                             onPrintReceipt();
                           }
                         },
-                        icon: const Icon(Icons.print, size: 20),
-                        label: const Text(''),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
-                          foregroundColor: Colors.white,
+                          backgroundColor: const Color(0xFFF1F5F9),
+                          foregroundColor: const Color(0xFF475569),
+                          elevation: 0,
+                          padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
+                        child: const Icon(Icons.print_outlined, size: 24),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: SizedBox(
-                        height: 60,
+                        height: 56,
                         child: LicenseGate(
                           child: ElevatedButton(
-                            onPressed: onShowPaymentDialog,
+                            onPressed: () async {
+                              if (await cartProvider.checkPermission(
+                                context,
+                                'perm_checkout',
+                              )) {
+                                onShowPaymentDialog();
+                              }
+                            },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.secondaryColor,
+                              backgroundColor: const Color(0xFF0F172A),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                               ),
                             ),
                             child: Text(
-                              isWaiter ? 'SAQLASH' : AppStrings.checkout,
+                              (isWaiter ? 'SAQLASH' : AppStrings.checkout)
+                                  .toUpperCase(),
                               style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ),

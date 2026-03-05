@@ -12,10 +12,10 @@ class Category {
 
   factory Category.fromMap(Map<String, dynamic> map) {
     return Category(
-      id: map['id'] as int?,
+      id: (map['id'] as num?)?.toInt(),
       name: map['name'] as String,
       color: map['color'] as String?,
-      sortOrder: map['sort_order'] as int? ?? 0,
+      sortOrder: (map['sort_order'] as num?)?.toInt() ?? 0,
     );
   }
 

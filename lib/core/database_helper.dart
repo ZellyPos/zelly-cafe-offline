@@ -32,10 +32,23 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 38,
+      version: 42,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
+
+    // Final failsafe for users.permissions column
+    try {
+      await db.rawQuery('SELECT permissions FROM users LIMIT 1');
+    } catch (e) {
+      if (e.toString().contains('no such column')) {
+        try {
+          await db.execute('ALTER TABLE users ADD COLUMN permissions TEXT');
+        } catch (e2) {
+          print('Failsafe: Error adding permissions column: $e2');
+        }
+      }
+    }
 
     // Ensure default waiter "Kassa" exists
     await _ensureDefaultWaiterExists(db);
@@ -794,6 +807,29 @@ class DatabaseHelper {
         print('Error upgrading database to v38: $e');
       }
     }
+
+    if (oldVersion < 39) {
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN permissions TEXT');
+      } catch (e) {
+        print('Error upgrading database to v39: $e');
+      }
+    }
+
+    if (oldVersion < 41 || oldVersion < 42) {
+      try {
+        final tableInfo = await db.rawQuery('PRAGMA table_info(users)');
+        final hasPermissions = tableInfo.any(
+          (column) => column['name'] == 'permissions',
+        );
+
+        if (!hasPermissions) {
+          await db.execute('ALTER TABLE users ADD COLUMN permissions TEXT');
+        }
+      } catch (e) {
+        print('Error upgrading database to v42: $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -941,7 +977,8 @@ CREATE TABLE IF NOT EXISTS users (
   name $textType,
   pin $textType,
   role $textType,
-  is_active $integerType DEFAULT 1
+  is_active $integerType DEFAULT 1,
+  permissions TEXT
 )
 ''');
 

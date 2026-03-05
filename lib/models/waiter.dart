@@ -31,12 +31,12 @@ class Waiter {
 
   factory Waiter.fromMap(Map<String, dynamic> map) {
     return Waiter(
-      id: map['id'],
+      id: (map['id'] as num?)?.toInt(),
       name: map['name'],
-      type: map['type'] ?? 0,
+      type: (map['type'] as num?)?.toInt() ?? 0,
       value: (map['value'] as num?)?.toDouble() ?? 0.0,
       pinCode: map['pin_code'],
-      isActive: map['is_active'] ?? 1,
+      isActive: (map['is_active'] as num?)?.toInt() ?? 1,
       permissions: _parsePermissions(map['permissions']),
     );
   }

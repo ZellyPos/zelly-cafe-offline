@@ -81,8 +81,8 @@ class ProductProvider extends ChangeNotifier {
 
     _salesCountCache.clear();
     for (var row in result) {
-      final productId = row['product_id'] as int;
-      final totalSold = row['total_sold'] as int;
+      final productId = (row['product_id'] as num).toInt();
+      final totalSold = (row['total_sold'] as num).toInt();
       _salesCountCache[productId] = totalSold;
     }
   }

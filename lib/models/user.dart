@@ -4,6 +4,7 @@ class AppUser {
   final String pin;
   final String role;
   final int isActive;
+  final String? permissions;
 
   AppUser({
     this.id,
@@ -11,6 +12,7 @@ class AppUser {
     required this.pin,
     required this.role,
     this.isActive = 1,
+    this.permissions,
   });
 
   factory AppUser.fromMap(Map<String, dynamic> map) {
@@ -20,6 +22,7 @@ class AppUser {
       pin: map['pin'],
       role: map['role'],
       isActive: map['is_active'] ?? 1,
+      permissions: map['permissions'],
     );
   }
 
@@ -30,6 +33,7 @@ class AppUser {
       'pin': pin,
       'role': role,
       'is_active': isActive,
+      'permissions': permissions,
     };
   }
 
@@ -39,6 +43,7 @@ class AppUser {
     String? pin,
     String? role,
     int? isActive,
+    String? permissions,
   }) {
     return AppUser(
       id: id ?? this.id,
@@ -46,6 +51,7 @@ class AppUser {
       pin: pin ?? this.pin,
       role: role ?? this.role,
       isActive: isActive ?? this.isActive,
+      permissions: permissions ?? this.permissions,
     );
   }
 }

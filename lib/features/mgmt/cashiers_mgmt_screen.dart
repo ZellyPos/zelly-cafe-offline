@@ -154,6 +154,19 @@ class CashiersMgmtScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              if (cashier.permissions != null &&
+                  cashier.permissions!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Tooltip(
+                    message: "Ruxsatlar belgilangan",
+                    child: Icon(
+                      Icons.security_rounded,
+                      size: 18,
+                      color: theme.colorScheme.primary.withOpacity(0.7),
+                    ),
+                  ),
+                ),
               Switch(
                 value: cashier.isActive == 1,
                 onChanged: (val) {
@@ -200,6 +213,24 @@ class CashiersMgmtScreen extends StatelessWidget {
   void _showAddEditDialog(BuildContext context, [AppUser? cashier]) {
     final nameController = TextEditingController(text: cashier?.name);
     final pinController = TextEditingController(text: cashier?.pin);
+    List<String> selectedPermissions =
+        cashier?.permissions?.split(',').where((p) => p.isNotEmpty).toList() ??
+        [];
+
+    final availablePermissions = {
+      'perm_confirm_order': 'Tasdiqlash',
+      'perm_delete_item': "Taomni o'chirish",
+      'perm_add_item': "Taom qo'shish",
+      'perm_edit_price': "Narxni o'zgartirish",
+      'perm_manage_products': "Yangi taom qo'shish",
+      'perm_apply_discount': 'Chegirma qo\'llash',
+      'perm_checkout': 'Hisob-kitob (Checkout)',
+      'perm_view_reports': 'Hisobotlar',
+      'perm_manage_expenses': 'Xarajatlar',
+      'perm_cancel_order': 'Buyurtmani bekor qilish',
+      'perm_manage_shifts': 'Smenani yopish',
+      'perm_manage_tables': 'Stollarni boshqarish',
+    };
 
     showDialog(
       context: context,
@@ -245,6 +276,51 @@ class CashiersMgmtScreen extends StatelessWidget {
                 keyboardType: TextInputType.number,
                 maxLength: 4,
               ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Ruxsatlar:",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 250,
+                width: 400,
+                child: StatefulBuilder(
+                  builder: (context, setDialogState) {
+                    return ListView(
+                      shrinkWrap: true,
+                      children: availablePermissions.entries.map((entry) {
+                        return CheckboxListTile(
+                          title: Text(
+                            entry.value,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          value: selectedPermissions.contains(entry.key),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              if (val == true) {
+                                selectedPermissions.add(entry.key);
+                              } else {
+                                selectedPermissions.remove(entry.key);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
           actions: [
@@ -259,12 +335,15 @@ class CashiersMgmtScreen extends StatelessWidget {
                 }
 
                 final provider = context.read<UserProvider>();
+                final permsString = selectedPermissions.join(',');
+
                 if (cashier == null) {
                   await provider.addUser(
                     AppUser(
                       name: nameController.text,
                       pin: pinController.text,
                       role: 'cashier',
+                      permissions: permsString,
                     ),
                     connectivity: context.read<ConnectivityProvider>(),
                   );
@@ -273,6 +352,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                     cashier.copyWith(
                       name: nameController.text,
                       pin: pinController.text,
+                      permissions: permsString,
                     ),
                     connectivity: context.read<ConnectivityProvider>(),
                   );

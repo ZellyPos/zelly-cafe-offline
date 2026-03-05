@@ -8,6 +8,7 @@ import '../../../providers/cart_provider.dart';
 import '../../../providers/connectivity_provider.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../core/app_strings.dart';
+import '../../../core/theme.dart';
 
 class ProductCardWidget extends StatelessWidget {
   final Product product;
@@ -23,8 +24,7 @@ class ProductCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // We use context.select to only rebuild if the category color might have changed
-    // (though categories usually don't change often, it's good practice)
+    final theme = Theme.of(context);
     final categoryColor = context.select<CategoryProvider, Color?>((provider) {
       final category = provider.categories.firstWhere(
         (c) => c.name == product.category,
@@ -38,150 +38,188 @@ class ProductCardWidget extends StatelessWidget {
       }
     });
 
-    final bool isDarkColor =
-        categoryColor != null && categoryColor.computeLuminance() < 0.5;
-
-    return InkWell(
-      onTap: () {
-        context.read<CartProvider>().addItem(
-          product,
-          context.read<ConnectivityProvider>(),
-          context,
-        );
-      },
-      onLongPress: () => onShowQuantityDialog(context, product),
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 2,
-        color: categoryColor ?? Theme.of(context).colorScheme.surface,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildImage(context, isDarkColor),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: isCompact ? 14 : 16,
-                      height: 1.1,
-                      color: isDarkColor
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: isCompact ? 2 : 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "${PriceFormatter.format(product.price)} / ${AppStrings.getUnitLabel(product.unit)}",
-                        style: TextStyle(
-                          color: isDarkColor
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: isCompact ? 11 : 13,
-                        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+        boxShadow: AppTheme.softShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            context.read<CartProvider>().addItem(
+              product,
+              context.read<ConnectivityProvider>(),
+              context,
+            );
+          },
+          onLongPress: () => onShowQuantityDialog(context, product),
+          borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildImage(context, categoryColor),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: isCompact ? 14 : 16,
+                        height: 1.1,
+                        color: theme.colorScheme.onSurface,
+                        letterSpacing: -0.3,
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (product.quantity != null)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDarkColor
-                                    ? Colors.white24
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.primary.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                "${product.quantity!.toStringAsFixed(0)} ta",
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "${PriceFormatter.format(product.price)} so'm",
                                 style: TextStyle(
-                                  fontSize: 10,
-                                  color: isDarkColor
-                                      ? Colors.white
-                                      : Theme.of(context).colorScheme.primary,
+                                  color: theme.colorScheme.primary,
                                   fontWeight: FontWeight.bold,
+                                  fontSize: isCompact ? 13 : 15,
                                 ),
                               ),
+                              Text(
+                                "/ ${AppStrings.getUnitLabel(product.unit)}",
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.4),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (product.quantity != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 3,
                             ),
-                          if (product.isSet) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.auto_awesome,
-                              size: 14,
-                              color: Theme.of(context).colorScheme.secondary,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9), // Slate 100
+                              borderRadius: BorderRadius.circular(6),
                             ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
+                            child: Text(
+                              "${product.quantity!.toStringAsFixed(0)}",
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.6,
+                                ),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImage(BuildContext context, Color? categoryColor) {
+    return Expanded(
+      child: Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppTheme.borderRadius),
               ),
             ),
-          ],
-        ),
+            clipBehavior: Clip.antiAlias,
+            child: Builder(
+              builder: (context) {
+                final connectivity = context.read<ConnectivityProvider>();
+                final imageUrl = connectivity.getImageUrl(product.imagePath);
+
+                if (imageUrl != null) {
+                  if (imageUrl.startsWith('http')) {
+                    return Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _buildPlaceholder(context),
+                    );
+                  } else if (File(imageUrl).existsSync()) {
+                    return Image.file(File(imageUrl), fit: BoxFit.cover);
+                  }
+                }
+                return _buildPlaceholder(context);
+              },
+            ),
+          ),
+          if (categoryColor != null)
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: categoryColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (product.isSet)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 14,
+                  color: Colors.orange,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildImage(BuildContext context, bool isDarkColor) {
-    return SizedBox(
-      height: isCompact ? 100 : 120,
-      child: Container(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
-        child: Builder(
-          builder: (context) {
-            final connectivity = context.read<ConnectivityProvider>();
-            final imageUrl = connectivity.getImageUrl(product.imagePath);
-
-            if (imageUrl != null) {
-              if (imageUrl.startsWith('http')) {
-                return Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  errorBuilder: (_, __, ___) =>
-                      _buildPlaceholder(context, isDarkColor),
-                );
-              } else if (File(imageUrl).existsSync()) {
-                return Image.file(
-                  File(imageUrl),
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                );
-              }
-            }
-            return _buildPlaceholder(context, isDarkColor);
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholder(BuildContext context, bool isDarkColor) {
+  Widget _buildPlaceholder(BuildContext context) {
     return Center(
       child: Icon(
-        Icons.fastfood,
+        Icons.fastfood_rounded,
         size: isCompact ? 32 : 40,
-        color: isDarkColor
-            ? Colors.white.withOpacity(0.7)
-            : Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+        color: const Color(0xFFE2E8F0),
       ),
     );
   }

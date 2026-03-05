@@ -15,7 +15,7 @@ import 'connectivity_provider.dart';
 import '../core/services/audit_service.dart';
 
 class CartItem {
-  final Product product;
+  Product product;
   double quantity;
   double printedQuantity;
 
@@ -77,6 +77,23 @@ class CartProvider extends ChangeNotifier {
 
     // Admin has all permissions
     if (role == 'admin') return true;
+
+    if (role == 'cashier') {
+      // Unrestricted printing and checkout for cashiers
+      if (permissionId.contains('print') || permissionId.contains('checkout'))
+        return true;
+
+      // Note: perm_confirm_order is now toggleable for cashiers (as requested)
+      final userPerms = connectivity.currentUser?['permissions'];
+      if (userPerms != null) {
+        if (userPerms is List) {
+          return userPerms.contains(permissionId);
+        } else if (userPerms is String) {
+          return userPerms.split(',').contains(permissionId);
+        }
+      }
+      return false;
+    }
 
     if (role == 'waiter') {
       // 1. If we have permissions in currentUser map (from API login), use them
@@ -270,6 +287,7 @@ class CartProvider extends ChangeNotifier {
   Future<void> confirmTableOrder(
     BuildContext context, [
     ConnectivityProvider? connectivity,
+    bool showNotification = true,
   ]) async {
     if (_activeOrderId == null) {
       await _ensureOrderExists(connectivity);
@@ -361,7 +379,7 @@ class CartProvider extends ChangeNotifier {
       await _syncItems(connectivity, context);
       notifyListeners();
 
-      if (context.mounted) {
+      if (context.mounted && showNotification) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Buyurtma oshxonaga yuborildi'),
@@ -578,13 +596,15 @@ class CartProvider extends ChangeNotifier {
     }
 
     if (_items.containsKey(product.id)) {
-      _items.update(
-        product.id!,
-        (existing) => CartItem(
-          product: existing.product,
+      _items.update(product.id!, (existing) {
+        final newItem = CartItem(
+          product:
+              product, // use the passed product which might have updated price
           quantity: existing.quantity + quantity,
-        ),
-      );
+          printedQuantity: existing.printedQuantity,
+        );
+        return newItem;
+      });
     } else {
       _items.putIfAbsent(
         product.id!,
@@ -593,6 +613,9 @@ class CartProvider extends ChangeNotifier {
     }
     _syncItems(connectivity, context);
     notifyListeners();
+
+    // Auto-confirm if user lacks permission
+    _checkAutoConfirm(context);
   }
 
   void removeItem(
@@ -609,6 +632,7 @@ class CartProvider extends ChangeNotifier {
       }
       _syncItems(connectivity, context);
       notifyListeners();
+      _checkAutoConfirm(context);
     }
   }
 
@@ -639,6 +663,59 @@ class CartProvider extends ChangeNotifier {
       }
       _syncItems(connectivity, context);
       notifyListeners();
+      _checkAutoConfirm(context);
+    }
+  }
+
+  void updateItem(
+    int productId, {
+    double? quantity,
+    double? price,
+    ConnectivityProvider? connectivity,
+    BuildContext? context,
+  }) {
+    if (_items.containsKey(productId)) {
+      final item = _items[productId]!;
+      if (quantity != null) {
+        if (item.product.quantity != null &&
+            quantity > (item.product.quantity!)) {
+          if (context != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(AppStrings.insufficientStock),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        if (quantity <= 0) {
+          _items.remove(productId);
+        } else {
+          item.quantity = quantity;
+        }
+      }
+
+      if (price != null && _items.containsKey(productId)) {
+        _items[productId]!.product = _items[productId]!.product.copyWith(
+          price: price,
+        );
+      }
+
+      _syncItems(connectivity, context);
+      notifyListeners();
+      _checkAutoConfirm(context);
+    }
+  }
+
+  Future<void> _checkAutoConfirm(BuildContext? context) async {
+    if (context == null) return;
+    try {
+      if (!hasPermission(context, 'perm_confirm_order')) {
+        await confirmTableOrder(context, null, false);
+      }
+    } catch (e) {
+      debugPrint("Auto-confirm error: $e");
     }
   }
 
@@ -662,6 +739,15 @@ class CartProvider extends ChangeNotifier {
     bool shouldPrint = true,
   }) async {
     if (_items.isEmpty) return false;
+
+    // Automatic kitchen printing for unconfirmed changes during checkout
+    if (hasUnconfirmedChanges) {
+      try {
+        await confirmTableOrder(context, null, false);
+      } catch (e) {
+        debugPrint("Automatic kitchen print error: $e");
+      }
+    }
 
     final orderId = _activeOrderId ?? const Uuid().v4();
     final currentTableId = _activeTableId; // Capture locally

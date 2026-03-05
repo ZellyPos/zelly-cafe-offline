@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/license_service.dart';
 import '../../core/theme.dart';
-import '../../main.dart';
+import '../login/login_screen.dart';
 
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});

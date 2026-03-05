@@ -14,27 +14,51 @@ class QuantityDialog extends StatefulWidget {
 
 class _QuantityDialogState extends State<QuantityDialog> {
   String _quantityStr = '1';
+  String _priceStr = '0';
   bool _isFirstInput = true;
   bool _hasDecimal = false;
+  bool _isPriceMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _priceStr = widget.product.price.toStringAsFixed(0);
+  }
 
   void _onNumpadPressed(String value) {
     setState(() {
       if (value == 'C') {
-        _quantityStr = '0';
+        if (_isPriceMode) {
+          _priceStr = '0';
+        } else {
+          _quantityStr = '0';
+        }
         _isFirstInput = true;
         _hasDecimal = false;
       } else if (value == '⌫') {
-        if (_quantityStr.length > 1) {
-          if (_quantityStr.endsWith('.')) {
+        String current = _isPriceMode ? _priceStr : _quantityStr;
+        if (current.length > 1) {
+          if (current.endsWith('.')) {
             _hasDecimal = false;
           }
-          _quantityStr = _quantityStr.substring(0, _quantityStr.length - 1);
+          current = current.substring(0, current.length - 1);
         } else {
-          _quantityStr = '0';
+          current = '0';
           _isFirstInput = true;
           _hasDecimal = false;
         }
+
+        if (_isPriceMode) {
+          _priceStr = current;
+        } else {
+          _quantityStr = current;
+        }
       } else if (value == '.') {
+        if (_isPriceMode)
+          return; // Price usually doesn't have decimals in this app's context, but we could allow it.
+        // For simplicity and common POS practice, let's say prices are whole numbers or handled differently.
+        // Actually, let's allow it if needed, but the current PriceFormatter handles doubles.
+
         if (!_hasDecimal) {
           if (_isFirstInput) {
             _quantityStr = '0.';
@@ -45,13 +69,21 @@ class _QuantityDialogState extends State<QuantityDialog> {
           _hasDecimal = true;
         }
       } else {
-        if (_isFirstInput || _quantityStr == '0') {
-          _quantityStr = value;
+        String current = _isPriceMode ? _priceStr : _quantityStr;
+        if (_isFirstInput || current == '0') {
+          current = value;
           _isFirstInput = false;
+          _hasDecimal = false;
         } else {
-          if (_quantityStr.length < 7) {
-            _quantityStr += value;
+          if (current.length < 9) {
+            current += value;
           }
+        }
+
+        if (_isPriceMode) {
+          _priceStr = current;
+        } else {
+          _quantityStr = current;
         }
       }
     });
@@ -60,137 +92,144 @@ class _QuantityDialogState extends State<QuantityDialog> {
   @override
   Widget build(BuildContext context) {
     final double quantity = double.tryParse(_quantityStr) ?? 0;
-    final double total = widget.product.price * quantity;
+    final double price = double.tryParse(_priceStr) ?? 0;
+    final double total = price * quantity;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Container(
         padding: const EdgeInsets.all(24),
-        width: 400,
+        width: 440,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               widget.product.name,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
               ),
               textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 8),
-            Text(
-              PriceFormatter.format(widget.product.price),
-              style: TextStyle(
-                fontSize: 16,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
-            const Divider(height: 32),
+            const SizedBox(height: 24),
+
+            // Mode Toggle
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Theme.of(context).dividerColor),
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    "Soni (${AppStrings.getUnitLabel(widget.product.unit)}):",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
+                  _buildModeTab(
+                    label: "Soni",
+                    icon: Icons.exposure_rounded,
+                    active: !_isPriceMode,
+                    onTap: () => setState(() {
+                      _isPriceMode = false;
+                      _isFirstInput = true;
+                      _hasDecimal = _quantityStr.contains('.');
+                    }),
                   ),
-                  Text(
-                    _quantityStr,
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                  _buildModeTab(
+                    label: "Narxi",
+                    icon: Icons.payments_rounded,
+                    active: _isPriceMode,
+                    onTap: () => setState(() {
+                      _isPriceMode = true;
+                      _isFirstInput = true;
+                      _hasDecimal = false;
+                    }),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Umumiy summa:",
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.6),
-                  ),
+
+            const SizedBox(height: 24),
+
+            // Display
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              decoration: BoxDecoration(
+                color: _isPriceMode
+                    ? const Color(0xFFEFF6FF)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _isPriceMode
+                      ? const Color(0xFF3B82F6).withOpacity(0.2)
+                      : const Color(0xFFE2E8F0),
+                  width: 2,
                 ),
-                Text(
-                  PriceFormatter.format(total),
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ],
-            ),
-            if (widget.product.quantity != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              ),
+              child: Column(
                 children: [
-                  Text(
-                    "Mavjud qoldiq:",
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _isPriceMode
+                            ? "Donasi (so'm):"
+                            : "Soni (${AppStrings.getUnitLabel(widget.product.unit)}):",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      Text(
+                        _isPriceMode
+                            ? PriceFormatter.format(price)
+                            : _quantityStr,
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w900,
+                          color: _isPriceMode
+                              ? const Color(0xFF2563EB)
+                              : const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    widget.product.unit == 'kg'
-                        ? "${widget.product.quantity!.toStringAsFixed(2)} kg"
-                        : "${widget.product.quantity!.toStringAsFixed(0)} ta",
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: quantity > widget.product.quantity!
-                          ? Theme.of(context).colorScheme.error
-                          : Theme.of(context).colorScheme.primary,
-                    ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Divider(),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "Jami summa:",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                      Text(
+                        PriceFormatter.format(total),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              if (quantity > widget.product.quantity!)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    "Omborda mahsulot yetarli emas!",
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-            ],
+            ),
+
             const SizedBox(height: 24),
             // Numpad Grid
             GridView.count(
               shrinkWrap: true,
               crossAxisCount: 3,
-              childAspectRatio: 1.5,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
+              childAspectRatio: 1.6,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _buildNumpadBtn('1'),
@@ -204,19 +243,17 @@ class _QuantityDialogState extends State<QuantityDialog> {
                 _buildNumpadBtn('9'),
                 _buildNumpadBtn(
                   '⌫',
-                  color: Theme.of(context).colorScheme.error.withOpacity(0.1),
-                  textColor: Theme.of(context).colorScheme.error,
+                  color: const Color(0xFFFEF2F2),
+                  textColor: const Color(0xFFEF4444),
                 ),
-
-                // _buildNumpadBtn(
-                //   'C',
-                //   color: Theme.of(
-                //     context,
-                //   ).colorScheme.secondary.withOpacity(0.1),
-                //   textColor: Theme.of(context).colorScheme.secondary,
-                // ),
                 _buildNumpadBtn('0'),
-                _buildNumpadBtn('.'),
+                _buildNumpadBtn(
+                  '.',
+                  color: _isPriceMode
+                      ? const Color(0xFFF1F5F9).withOpacity(0.5)
+                      : null,
+                  textColor: _isPriceMode ? const Color(0xFF94A3B8) : null,
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -224,24 +261,20 @@ class _QuantityDialogState extends State<QuantityDialog> {
               children: [
                 Expanded(
                   child: SizedBox(
-                    height: 56,
-                    child: OutlinedButton(
+                    height: 60,
+                    child: TextButton(
                       onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                          color: Theme.of(context).colorScheme.error,
-                          width: 2,
-                        ),
+                      style: TextButton.styleFrom(
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                       ),
                       child: Text(
-                        "Bekor qilish",
-                        style: TextStyle(
+                        AppStrings.cancel,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.error,
+                          color: Color(0xFF64748B),
                         ),
                       ),
                     ),
@@ -250,27 +283,28 @@ class _QuantityDialogState extends State<QuantityDialog> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: SizedBox(
-                    height: 56,
+                    height: 60,
                     child: ElevatedButton(
-                      onPressed:
-                          (quantity > 0 &&
-                              (widget.product.quantity == null ||
-                                  quantity <= widget.product.quantity!))
-                          ? () => Navigator.pop(context, quantity)
+                      onPressed: (quantity > 0)
+                          ? () => Navigator.pop(context, {
+                              'quantity': quantity,
+                              'price': price,
+                            })
                           : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                         elevation: 0,
                       ),
                       child: const Text(
-                        "Qo'shish",
+                        "TASDIQLASH",
                         style: TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
@@ -284,20 +318,76 @@ class _QuantityDialogState extends State<QuantityDialog> {
     );
   }
 
+  Widget _buildModeTab({
+    required String label,
+    required IconData icon,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: active ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: active
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFF94A3B8),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                  color: active
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFF94A3B8),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNumpadBtn(String val, {Color? color, Color? textColor}) {
+    final disabled = val == '.' && _isPriceMode;
     return Material(
-      color: color ?? Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(12),
+      color: color ?? const Color(0xFFF8FAFC),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        onTap: () => _onNumpadPressed(val),
-        borderRadius: BorderRadius.circular(12),
+        onTap: disabled ? null : () => _onNumpadPressed(val),
+        borderRadius: BorderRadius.circular(16),
         child: Center(
           child: Text(
             val,
             style: TextStyle(
               fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: textColor ?? Theme.of(context).colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
+              color: disabled
+                  ? const Color(0xFFCBD5E1)
+                  : (textColor ?? const Color(0xFF1E293B)),
             ),
           ),
         ),

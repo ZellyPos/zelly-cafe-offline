@@ -124,94 +124,111 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
           Container(
             padding: const EdgeInsets.all(24),
             color: theme.colorScheme.surface,
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    onChanged: (val) => setState(() => searchQuery = val),
-                    decoration: InputDecoration(
-                      hintText: AppStrings.searchProductHint,
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                      filled: true,
-                      fillColor: isDark
-                          ? Colors.white12
-                          : const Color(0xFFF1F5F9),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: selectedCategoryFilter,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                      ),
-                    ),
-                    hint: Text(AppStrings.allCategories),
-                    items: [
-                      DropdownMenuItem(
-                        value: null,
-                        child: Text(AppStrings.allCategories),
-                      ),
-                      ...categoryProvider.categories.map(
-                        (c) => DropdownMenuItem(
-                          value: c.name,
-                          child: Text(c.name),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 800),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 400,
+                      child: TextField(
+                        onChanged: (val) => setState(() => searchQuery = val),
+                        decoration: InputDecoration(
+                          hintText: AppStrings.searchProductHint,
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: Colors.grey,
+                          ),
+                          filled: true,
+                          fillColor: isDark
+                              ? Colors.white12
+                              : const Color(0xFFF1F5F9),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 0,
+                          ),
                         ),
                       ),
-                    ],
-                    onChanged: (val) =>
-                        setState(() => selectedCategoryFilter = val),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: DropdownButtonFormField<bool?>(
-                    initialValue: selectedStatusFilter,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFFF1F5F9),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
+                    ),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: 200,
+                      child: DropdownButtonFormField<String?>(
+                        isExpanded: true,
+                        value: selectedCategoryFilter,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: const Color(0xFFF1F5F9),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
+                        ),
+                        hint: Text(AppStrings.allCategories),
+                        items: [
+                          DropdownMenuItem(
+                            value: null,
+                            child: Text(AppStrings.allCategories),
+                          ),
+                          ...categoryProvider.categories.map(
+                            (c) => DropdownMenuItem(
+                              value: c.name,
+                              child: Text(c.name),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => selectedCategoryFilter = val),
                       ),
                     ),
-                    hint: Text(AppStrings.allStatuses),
-                    items: [
-                      DropdownMenuItem(
-                        value: null,
-                        child: Text(AppStrings.allStatuses),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: 200,
+                      child: DropdownButtonFormField<bool?>(
+                        isExpanded: true,
+                        value: selectedStatusFilter,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: isDark
+                              ? Colors.white12
+                              : const Color(0xFFF1F5F9),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
+                        ),
+                        hint: Text(AppStrings.allStatuses),
+                        items: [
+                          DropdownMenuItem(
+                            value: null,
+                            child: Text(AppStrings.allStatuses),
+                          ),
+                          DropdownMenuItem(
+                            value: true,
+                            child: Text(AppStrings.active),
+                          ),
+                          DropdownMenuItem(
+                            value: false,
+                            child: Text(AppStrings.outOfStock),
+                          ),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => selectedStatusFilter = val),
                       ),
-                      DropdownMenuItem(
-                        value: true,
-                        child: Text(AppStrings.active),
-                      ),
-                      DropdownMenuItem(
-                        value: false,
-                        child: Text(AppStrings.outOfStock),
-                      ),
-                    ],
-                    onChanged: (val) =>
-                        setState(() => selectedStatusFilter = val),
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           // Grid
@@ -268,16 +285,12 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+        boxShadow: AppTheme.softShadow,
         border: Border.all(
-          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : const Color(0xFFE2E8F0),
         ),
       ),
       child: Material(

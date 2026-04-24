@@ -23,6 +23,15 @@ class LocationProvider extends ChangeNotifier {
           connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
         final remoteData = await connectivity.getRemoteData('/locations');
         data = List<Map<String, dynamic>>.from(remoteData);
+
+        // Sync to local DB
+        final db = await DatabaseHelper.instance.database;
+        await db.transaction((txn) async {
+          await txn.delete('locations');
+          for (var item in data) {
+            await txn.insert('locations', Map<String, dynamic>.from(item));
+          }
+        });
       } else {
         data = await DatabaseHelper.instance.queryAll('locations');
       }

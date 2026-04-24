@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../core/app_strings.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../providers/cart_provider.dart';
 import '../../widgets/ai_action_button.dart';
 import '../../providers/ai_provider.dart';
 
@@ -159,7 +160,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                       width: 200,
                       child: DropdownButtonFormField<String?>(
                         isExpanded: true,
-                        value: selectedCategoryFilter,
+                        initialValue: selectedCategoryFilter,
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: const Color(0xFFF1F5F9),
@@ -193,7 +194,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                       width: 200,
                       child: DropdownButtonFormField<bool?>(
                         isExpanded: true,
-                        value: selectedStatusFilter,
+                        initialValue: selectedStatusFilter,
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: isDark
@@ -322,23 +323,35 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     ),
                     const SizedBox(width: 8),
                     if (product.quantity != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          "${product.quantity!.toStringAsFixed(product.unit == 'kg' ? 2 : 0)} ${_getUnitLabel(product.unit)}",
-                          style: const TextStyle(
-                            color: Colors.orange,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                      Consumer<CartProvider>(
+                        builder: (context, cart, _) {
+                          final inCart =
+                              cart.getProductCartQuantity(product.id!);
+                          final displayQty = product.quantity! - inCart;
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: displayQty <= 5
+                                  ? Colors.red.withOpacity(0.1)
+                                  : Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              "${displayQty.toStringAsFixed(product.unit == 'kg' ? 2 : 0)} ${_getUnitLabel(product.unit)}",
+                              style: TextStyle(
+                                color: displayQty <= 5
+                                    ? Colors.red
+                                    : Colors.orange,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     const SizedBox(width: 8),
                     _buildStatusBadge(product.isActive),
@@ -951,6 +964,14 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     }
                   }
 
+                  final enteredQty = double.tryParse(quantityController.text);
+                  int calculatedTrackType = product?.trackType ?? 0;
+
+                  // Agar miqdor kiritilgan bo'lsa va trackType hali 0 bo'lsa, uni 1 (Retail) ga o'tkazamiz
+                  if (enteredQty != null && calculatedTrackType == 0) {
+                    calculatedTrackType = 1;
+                  }
+
                   final newProduct = Product(
                     id: product?.id,
                     name: nameController.text,
@@ -960,8 +981,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     imagePath: finalImagePath,
                     bundleItems: isSet ? bundleItems : null,
                     sortOrder: product?.sortOrder ?? 0,
-                    quantity: double.tryParse(quantityController.text),
-                    trackType: product?.trackType ?? 0,
+                    quantity: enteredQty,
+                    trackType: calculatedTrackType,
                     allowNegativeStock: product?.allowNegativeStock ?? false,
                     noServiceCharge: noServiceCharge,
                     unit: selectedUnit,

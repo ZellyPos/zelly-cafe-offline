@@ -4,24 +4,22 @@ import 'package:flutter/foundation.dart';
 import 'utils/price_formatter.dart';
 
 class TelegramService {
-  static Future<bool> sendMessage({
+  static Future<String?> sendMessage({
     required String token,
     required String chatId,
     required String text,
     String? webAppUrl,
+    Uint8List? imageBytes,
   }) async {
     try {
-      final url = Uri.parse('https://api.telegram.org/bot$token/sendMessage');
+      final isPhoto = imageBytes != null;
+      final endpoint = isPhoto ? 'sendPhoto' : 'sendMessage';
+      final url = Uri.parse('https://api.telegram.org/bot$token/$endpoint');
 
-      final Map<String, dynamic> body = {
-        'chat_id': chatId,
-        'text': text,
-        'parse_mode': 'HTML',
-      };
-
+      String? replyMarkup;
       if (webAppUrl != null) {
         final bool isHttps = webAppUrl.startsWith('https://');
-        body['reply_markup'] = jsonEncode({
+        replyMarkup = jsonEncode({
           'inline_keyboard': [
             [
               {
@@ -38,21 +36,59 @@ class TelegramService {
         });
       }
 
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
-      );
+      http.Response response;
+
+      if (isPhoto) {
+        var request = http.MultipartRequest('POST', url);
+        request.fields['chat_id'] = chatId;
+        request.fields['caption'] = text;
+        request.fields['parse_mode'] = 'HTML';
+        if (replyMarkup != null) {
+          request.fields['reply_markup'] = replyMarkup;
+        }
+
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'photo',
+            imageBytes,
+            filename: 'report.png',
+          ),
+        );
+
+        final streamedResponse = await request.send();
+        response = await http.Response.fromStream(streamedResponse);
+      } else {
+        final Map<String, dynamic> body = {
+          'chat_id': chatId,
+          'text': text,
+          'parse_mode': 'HTML',
+        };
+        if (replyMarkup != null) {
+          body['reply_markup'] = jsonDecode(replyMarkup);
+        }
+
+        response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        );
+      }
 
       if (response.statusCode == 200) {
-        return true;
+        return null; // null means success
       } else {
         debugPrint('Telegram error: ${response.body}');
-        return false;
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded['description'] != null) {
+            return decoded['description'];
+          }
+        } catch (_) {}
+        return 'Server error: ${response.statusCode}';
       }
     } catch (e) {
       debugPrint('Telegram exception: $e');
-      return false;
+      return e.toString();
     }
   }
 

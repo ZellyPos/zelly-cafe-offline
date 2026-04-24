@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 42,
+      version: 44,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -46,6 +46,31 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE users ADD COLUMN permissions TEXT');
         } catch (e2) {
           print('Failsafe: Error adding permissions column: $e2');
+        }
+      }
+    }
+
+    // Migration: Update products that have quantity but track_type = 0
+    try {
+      await db.execute('''
+        UPDATE products 
+        SET track_type = 1 
+        WHERE track_type = 0 AND quantity IS NOT NULL AND quantity > 0
+      ''');
+    } catch (e) {
+      print('Migration: Error updating product track_type: $e');
+    }
+
+    // Failsafe migration for printers.is_main column
+    try {
+      await db.rawQuery('SELECT is_main FROM printers LIMIT 1');
+    } catch (e) {
+      if (e.toString().contains('no such column')) {
+        try {
+          await db.execute('ALTER TABLE printers ADD COLUMN is_main INTEGER DEFAULT 0');
+          print('Failsafe: Added is_main column to printers table');
+        } catch (e2) {
+          print('Failsafe: Error adding is_main column: $e2');
         }
       }
     }
@@ -830,6 +855,29 @@ class DatabaseHelper {
         print('Error upgrading database to v42: $e');
       }
     }
+    if (oldVersion < 43) {
+      try {
+        final tableInfo = await db.rawQuery('PRAGMA table_info(orders)');
+        final hasNote = tableInfo.any((col) => col['name'] == 'note');
+        if (!hasNote) {
+          await db.execute('ALTER TABLE orders ADD COLUMN note TEXT');
+        }
+      } catch (e) {
+        print('Error upgrading database to v43: $e');
+      }
+    }
+
+    if (oldVersion < 44) {
+      try {
+        final tableInfo = await db.rawQuery('PRAGMA table_info(printers)');
+        final hasIsMain = tableInfo.any((col) => col['name'] == 'is_main');
+        if (!hasIsMain) {
+          await db.execute('ALTER TABLE printers ADD COLUMN is_main INTEGER DEFAULT 0');
+        }
+      } catch (e) {
+        print('Error upgrading database to v44: $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -896,7 +944,8 @@ CREATE TABLE IF NOT EXISTS orders (
   service_total REAL NOT NULL DEFAULT 0,
   grand_total REAL NOT NULL DEFAULT 0,
   shift_id INTEGER,
-  daily_number INTEGER
+  daily_number INTEGER,
+  note TEXT
 )
 ''');
 

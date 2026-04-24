@@ -54,8 +54,9 @@ class _QuantityDialogState extends State<QuantityDialog> {
           _quantityStr = current;
         }
       } else if (value == '.') {
-        if (_isPriceMode)
+        if (_isPriceMode) {
           return; // Price usually doesn't have decimals in this app's context, but we could allow it.
+        }
         // For simplicity and common POS practice, let's say prices are whole numbers or handled differently.
         // Actually, let's allow it if needed, but the current PriceFormatter handles doubles.
 
@@ -95,224 +96,245 @@ class _QuantityDialogState extends State<QuantityDialog> {
     final double price = double.tryParse(_priceStr) ?? 0;
     final double total = price * quantity;
 
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isSmall = screenHeight < 780;
+    final spacing = isSmall ? 12.0 : 24.0;
+    final btnHeight = isSmall ? 48.0 : 60.0;
+    final numpadRatio = isSmall ? 2.2 : 1.6;
+    final displayVertPad = isSmall ? 12.0 : 24.0;
+    final numFontSize = isSmall ? 28.0 : 36.0;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.product.name,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.5,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 440,
+          maxHeight: screenHeight * 0.92,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.product.name,
+                style: TextStyle(
+                  fontSize: isSmall ? 18 : 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
+              SizedBox(height: spacing),
 
-            // Mode Toggle
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(16),
+              // Mode Toggle
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    _buildModeTab(
+                      label: "Soni",
+                      icon: Icons.exposure_rounded,
+                      active: !_isPriceMode,
+                      isSmall: isSmall,
+                      onTap: () => setState(() {
+                        _isPriceMode = false;
+                        _isFirstInput = true;
+                        _hasDecimal = _quantityStr.contains('.');
+                      }),
+                    ),
+                    _buildModeTab(
+                      label: "Narxi",
+                      icon: Icons.payments_rounded,
+                      active: _isPriceMode,
+                      isSmall: isSmall,
+                      onTap: () => setState(() {
+                        _isPriceMode = true;
+                        _isFirstInput = true;
+                        _hasDecimal = false;
+                      }),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                children: [
-                  _buildModeTab(
-                    label: "Soni",
-                    icon: Icons.exposure_rounded,
-                    active: !_isPriceMode,
-                    onTap: () => setState(() {
-                      _isPriceMode = false;
-                      _isFirstInput = true;
-                      _hasDecimal = _quantityStr.contains('.');
-                    }),
+
+              SizedBox(height: spacing),
+
+              // Display
+              Container(
+                padding: EdgeInsets.symmetric(
+                  vertical: displayVertPad,
+                  horizontal: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: _isPriceMode
+                      ? const Color(0xFFEFF6FF)
+                      : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _isPriceMode
+                        ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
+                        : const Color(0xFFE2E8F0),
+                    width: 2,
                   ),
-                  _buildModeTab(
-                    label: "Narxi",
-                    icon: Icons.payments_rounded,
-                    active: _isPriceMode,
-                    onTap: () => setState(() {
-                      _isPriceMode = true;
-                      _isFirstInput = true;
-                      _hasDecimal = false;
-                    }),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _isPriceMode
+                              ? "Donasi (so'm):"
+                              : "Soni (${AppStrings.getUnitLabel(widget.product.unit)}):",
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                        Text(
+                          _isPriceMode
+                              ? PriceFormatter.format(price)
+                              : _quantityStr,
+                          style: TextStyle(
+                            fontSize: numFontSize,
+                            fontWeight: FontWeight.w900,
+                            color: _isPriceMode
+                                ? const Color(0xFF2563EB)
+                                : const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12),
+                      child: const Divider(),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Jami summa:",
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                        Text(
+                          PriceFormatter.format(total),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              SizedBox(height: spacing),
+
+              // Numpad Grid
+              GridView.count(
+                shrinkWrap: true,
+                crossAxisCount: 3,
+                childAspectRatio: numpadRatio,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  _buildNumpadBtn('1'),
+                  _buildNumpadBtn('2'),
+                  _buildNumpadBtn('3'),
+                  _buildNumpadBtn('4'),
+                  _buildNumpadBtn('5'),
+                  _buildNumpadBtn('6'),
+                  _buildNumpadBtn('7'),
+                  _buildNumpadBtn('8'),
+                  _buildNumpadBtn('9'),
+                  _buildNumpadBtn(
+                    '⌫',
+                    color: const Color(0xFFFEF2F2),
+                    textColor: const Color(0xFFEF4444),
+                  ),
+                  _buildNumpadBtn('0'),
+                  _buildNumpadBtn(
+                    '.',
+                    color: _isPriceMode
+                        ? const Color(0xFFF1F5F9).withValues(alpha: 0.5)
+                        : null,
+                    textColor: _isPriceMode ? const Color(0xFF94A3B8) : null,
                   ),
                 ],
               ),
-            ),
 
-            const SizedBox(height: 24),
+              SizedBox(height: isSmall ? 16 : 32),
 
-            // Display
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-              decoration: BoxDecoration(
-                color: _isPriceMode
-                    ? const Color(0xFFEFF6FF)
-                    : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: _isPriceMode
-                      ? const Color(0xFF3B82F6).withOpacity(0.2)
-                      : const Color(0xFFE2E8F0),
-                  width: 2,
-                ),
-              ),
-              child: Column(
+              Row(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _isPriceMode
-                            ? "Donasi (so'm):"
-                            : "Soni (${AppStrings.getUnitLabel(widget.product.unit)}):",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF64748B),
+                  Expanded(
+                    child: SizedBox(
+                      height: btnHeight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
-                      ),
-                      Text(
-                        _isPriceMode
-                            ? PriceFormatter.format(price)
-                            : _quantityStr,
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w900,
-                          color: _isPriceMode
-                              ? const Color(0xFF2563EB)
-                              : const Color(0xFF0F172A),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Jami summa:",
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF94A3B8),
-                        ),
-                      ),
-                      Text(
-                        PriceFormatter.format(total),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-            // Numpad Grid
-            GridView.count(
-              shrinkWrap: true,
-              crossAxisCount: 3,
-              childAspectRatio: 1.6,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _buildNumpadBtn('1'),
-                _buildNumpadBtn('2'),
-                _buildNumpadBtn('3'),
-                _buildNumpadBtn('4'),
-                _buildNumpadBtn('5'),
-                _buildNumpadBtn('6'),
-                _buildNumpadBtn('7'),
-                _buildNumpadBtn('8'),
-                _buildNumpadBtn('9'),
-                _buildNumpadBtn(
-                  '⌫',
-                  color: const Color(0xFFFEF2F2),
-                  textColor: const Color(0xFFEF4444),
-                ),
-                _buildNumpadBtn('0'),
-                _buildNumpadBtn(
-                  '.',
-                  color: _isPriceMode
-                      ? const Color(0xFFF1F5F9).withOpacity(0.5)
-                      : null,
-                  textColor: _isPriceMode ? const Color(0xFF94A3B8) : null,
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 60,
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Text(
-                        AppStrings.cancel,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF64748B),
+                        child: Text(
+                          AppStrings.cancel,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF64748B),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: SizedBox(
-                    height: 60,
-                    child: ElevatedButton(
-                      onPressed: (quantity > 0)
-                          ? () => Navigator.pop(context, {
-                              'quantity': quantity,
-                              'price': price,
-                            })
-                          : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: btnHeight,
+                      child: ElevatedButton(
+                        onPressed: (quantity > 0)
+                            ? () => Navigator.pop(context, {
+                                'quantity': quantity,
+                                'price': price,
+                              })
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F172A),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
                         ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        "TASDIQLASH",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
+                        child: const Text(
+                          "TASDIQLASH",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -323,20 +345,21 @@ class _QuantityDialogState extends State<QuantityDialog> {
     required IconData icon,
     required bool active,
     required VoidCallback onTap,
+    bool isSmall = false,
   }) {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12),
           decoration: BoxDecoration(
             color: active ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             boxShadow: active
                 ? [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),

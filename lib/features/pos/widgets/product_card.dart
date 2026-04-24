@@ -89,7 +89,7 @@ class ProductCardWidget extends StatelessWidget {
                               Text(
                                 "${PriceFormatter.format(product.price)} so'm",
                                 style: TextStyle(
-                                  color: theme.colorScheme.primary,
+                                  color: const Color(0xFF10B981),
                                   fontWeight: FontWeight.bold,
                                   fontSize: isCompact ? 13 : 15,
                                 ),
@@ -107,25 +107,58 @@ class ProductCardWidget extends StatelessWidget {
                           ),
                         ),
                         if (product.quantity != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9), // Slate 100
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              "${product.quantity!.toStringAsFixed(0)}",
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.6,
+                          Consumer<CartProvider>(
+                            builder: (context, cart, _) {
+                              final inCart = product.id != null
+                                  ? cart.getProductCartQuantity(product.id!)
+                                  : 0.0;
+                              final displayQty = product.quantity! - inCart;
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
                                 ),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                                decoration: BoxDecoration(
+                                  color: displayQty <= 5
+                                      ? Colors.red.withOpacity(0.1)
+                                      : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: displayQty <= 5
+                                        ? Colors.red.withOpacity(0.3)
+                                        : Colors.transparent,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.inventory_2_outlined,
+                                      size: 10,
+                                      color: displayQty <= 5
+                                          ? Colors.red
+                                          : theme.colorScheme.onSurface
+                                              .withOpacity(0.6),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      displayQty <= 0
+                                          ? "Tugadi"
+                                          : "Qoldi: ${displayQty.toStringAsFixed(0)}",
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: displayQty <= 5
+                                            ? Colors.red
+                                            : theme.colorScheme.onSurface
+                                                .withOpacity(0.7),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),

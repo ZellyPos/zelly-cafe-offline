@@ -4,6 +4,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'core/theme.dart';
+import 'core/utils/keyboard_utils.dart';
 import 'core/database_helper.dart';
 import 'core/services/license_service.dart';
 import 'core/update_service.dart';
@@ -192,8 +193,39 @@ class BootstrapErrorApp extends StatelessWidget {
   }
 }
 
-class TezzroApp extends StatelessWidget {
+class TezzroApp extends StatefulWidget {
   const TezzroApp({super.key});
+
+  @override
+  State<TezzroApp> createState() => _TezzroAppState();
+}
+
+class _TezzroAppState extends State<TezzroApp> {
+  bool _hasFocus = false;
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeListener(_onFocusChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    final focused = FocusManager.instance.primaryFocus != null &&
+        FocusManager.instance.primaryFocus!.context != null;
+    if (focused != _hasFocus) {
+      setState(() => _hasFocus = focused);
+    }
+  }
+
+  void _dismissKeyboard() {
+    KeyboardUtils.dismiss();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -214,6 +246,69 @@ class TezzroApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: appSettings.themeMode,
+          // Touchscreen monobloklarda: textfield tashqarisiga bosganda
+          // klaviatura yopilishi va focus tushishi uchun global handler
+          builder: (context, child) {
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _dismissKeyboard,
+              child: Stack(
+                children: [
+                  child!,
+                  // Windows touch klaviaturasi uchun: focus bo'lganda
+                  // ekranning o'ng pastida "Klaviaturani yopish" tugmasi
+                  if (_hasFocus)
+                    Positioned(
+                      bottom: 12,
+                      right: 12,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _dismissKeyboard,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.keyboard_hide_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Yopish',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
           home: _getHome(status),
         );
       },

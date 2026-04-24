@@ -71,19 +71,35 @@ class ConnectivityProvider extends ChangeNotifier {
   Future<void> startServer() async {
     if (_isServerRunning) return;
 
-    final info = NetworkInfo();
-    _serverIp = await info.getWifiIP();
+    String? foundIp;
+    try {
+      // 1. WiFi IP ni tekshirish
+      final info = NetworkInfo();
+      foundIp = await info.getWifiIP();
 
-    // Fallback search for IP if wifi info is empty (common on Windows ethernet)
-    if (_serverIp == null) {
-      // shelf io handles anyIPv4, but we want to show it to user
-      // Simple fallback: check common local interfaces
+      // 2. Agar WiFi bo'lmasa, barcha interfeyslarni tekshirish (Ethernet va h.k.)
+      if (foundIp == null || foundIp == '0.0.0.0' || foundIp == '127.0.0.1') {
+        final interfaces = await NetworkInterface.list(
+          includeLoopback: false,
+          type: InternetAddressType.IPv4,
+        );
+        if (interfaces.isNotEmpty) {
+          foundIp = interfaces.first.addresses.first.address;
+        }
+      }
+    } catch (e) {
+      debugPrint("IP detection error: $e");
     }
+
+    _serverIp = foundIp;
 
     final success = await ApiServer.start(_port);
     if (success != null) {
       _isServerRunning = true;
-      _serverIp = success;
+      // Agar ApiServer 0.0.0.0 qaytarsa, biz topgan aniq IP ni saqlaymiz
+      if (success != '0.0.0.0') {
+        _serverIp = success;
+      }
     }
     notifyListeners();
   }
@@ -157,8 +173,9 @@ class ConnectivityProvider extends ChangeNotifier {
     if (_mode == ConnectivityMode.client) return true;
     if (_currentUser != null &&
         _currentUser!['role'] != 'admin' &&
-        _currentUser!['role'] != 'cashier')
+        _currentUser!['role'] != 'cashier') {
       return true;
+    }
     return false;
   }
 
@@ -274,6 +291,25 @@ class ConnectivityProvider extends ChangeNotifier {
       debugPrint('Post Remote Data Error: $e');
       return false;
     }
+  }
+
+  Future<bool> payOrder(
+    String orderId,
+    Map<String, dynamic> paymentData, {
+    double roomCharge = 0,
+    double serviceFee = 0,
+    double foodTotal = 0,
+    double grandTotal = 0,
+    int? waiterId,
+  }) async {
+    final Map<String, dynamic> fullData = Map<String, dynamic>.from(paymentData);
+    fullData['room_charge'] = roomCharge;
+    fullData['service_total'] = serviceFee;
+    fullData['food_total'] = foodTotal;
+    fullData['grand_total'] = grandTotal;
+    fullData['waiter_id'] = waiterId;
+
+    return await postRemoteData('/orders/$orderId/pay', fullData);
   }
 
   Future<bool> deleteRemoteData(String path) async {

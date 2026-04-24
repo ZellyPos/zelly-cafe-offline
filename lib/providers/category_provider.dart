@@ -23,6 +23,17 @@ class CategoryProvider extends ChangeNotifier {
           connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
         final remoteData = await connectivity.getRemoteData('/categories');
         data = List<Map<String, dynamic>>.from(remoteData);
+
+        // Sync to local DB for components that depend on it (like PrinterService)
+        final db = await DatabaseHelper.instance.database;
+        await db.transaction((txn) async {
+          await txn.delete('categories');
+          for (var item in data) {
+            final categoryForDb = Map<String, dynamic>.from(item);
+            // Ensure ID is present if it's sent from remote
+            await txn.insert('categories', categoryForDb);
+          }
+        });
       } else {
         final db = await DatabaseHelper.instance.database;
         data = await db.query('categories', orderBy: 'sort_order ASC');

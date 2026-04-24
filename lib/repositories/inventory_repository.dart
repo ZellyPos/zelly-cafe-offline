@@ -153,9 +153,12 @@ class InventoryRepository {
 
   // --- Flags ---
 
-  Future<OrderInventoryFlag?> getInventoryFlag(String orderId) async {
-    final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query(
+  Future<OrderInventoryFlag?> getInventoryFlag(
+    String orderId, [
+    Transaction? txn,
+  ]) async {
+    final executor = txn ?? (await _dbHelper.database);
+    final List<Map<String, dynamic>> maps = await executor.query(
       'order_inventory_flags',
       where: 'order_id = ?',
       whereArgs: [orderId],

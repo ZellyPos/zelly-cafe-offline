@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
@@ -8,6 +9,8 @@ import '../utils/price_formatter.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../models/customer.dart';
+import '../../models/order.dart';
+import '../services/inventory_service.dart';
 
 class ApiServer {
   static HttpServer? _server;
@@ -92,6 +95,7 @@ class ApiServer {
 
       if (users.isNotEmpty) {
         final user = users.first;
+        final userPermsStr = user['permissions']?.toString() ?? '';
         return Response.ok(
           jsonEncode({
             'token': 'admin-token-${user['id']}',
@@ -99,6 +103,7 @@ class ApiServer {
               'id': user['id'],
               'name': user['name'],
               'role': user['role'], // admin or cashier
+              'permissions': userPermsStr,
             },
           }),
         );
@@ -180,19 +185,30 @@ class ApiServer {
       final db = await DatabaseHelper.instance.database;
       // Get tables with their active orders if any
       final summary = await db.rawQuery('''
-        SELECT 
-          t.*, 
+        SELECT
+          t.id, t.location_id, t.name, t.status, t.pricing_type, 
+          t.hourly_rate, t.fixed_amount, t.active_order_id,
+          t.x, t.y, t.width, t.height, t.shape, t.service_percentage,
           l.name as location_name,
-          o.id as order_id, 
-          o.total as order_total, 
-          o.waiter_id, 
+          o.id as order_id,
+          o.total as order_total,
+          o.waiter_id,
           w.name as waiter_name,
           o.opened_at
         FROM tables t
         LEFT JOIN locations l ON t.location_id = l.id
-        LEFT JOIN orders o ON t.id = o.table_id AND o.status = 0
+        LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
         LEFT JOIN waiters w ON o.waiter_id = w.id
       ''');
+      
+      print('API [GET] /tables/summary: Loaded ${summary.length} tables');
+      if (summary.isNotEmpty) {
+        print('First table summary example: ID=${summary.first['id']}, '
+              'Status=${summary.first['status']}, '
+              'ActiveOrderID=${summary.first['active_order_id']}, '
+              'JoinOrderID=${summary.first['order_id']}');
+      }
+      
       return Response.ok(jsonEncode(summary));
     });
 
@@ -408,60 +424,93 @@ class ApiServer {
           }
         }
       });
-      return Response.ok(jsonEncode({'status': 'success'}));
+
+      return Response.ok(jsonEncode({'success': true}));
     });
 
-    // 8. Orders
     _router.post('/orders/open', (Request request) async {
-      final payload = jsonDecode(await request.readAsString());
-      final tableId = payload['table_id'] as int;
+      try {
+        final payload = jsonDecode(await request.readAsString());
+        final tableId = payload['table_id'] as int?;
 
-      // Enforce waiter_id from token
-      final authHeader = request.headers['Authorization'] ?? '';
-      int waiterId = 1; // Default
-      if (authHeader.startsWith('Bearer waiter-token-')) {
-        waiterId =
-            int.tryParse(authHeader.replaceFirst('Bearer waiter-token-', '')) ??
-            1;
-      }
+        // Enforce waiter_id from token
+        final authHeader = request.headers['Authorization'] ?? '';
+        int waiterId = 1;
+        if (authHeader.startsWith('Bearer waiter-token-')) {
+          waiterId =
+              int.tryParse(authHeader.replaceFirst('Bearer waiter-token-', '')) ??
+              1;
+        }
 
-      final orderType = payload['order_type'] as int? ?? 0;
+        final orderType = payload['order_type'] as int? ?? 0;
+        final db = await DatabaseHelper.instance.database;
 
-      final db = await DatabaseHelper.instance.database;
+        // Check if table already has open order (only for dine-in)
+        if (tableId != null) {
+          final existing = await db.query(
+            'orders',
+            where: 'table_id = ? AND status = 0',
+            whereArgs: [tableId],
+          );
 
-      // Check if table already has open order
-      final existing = await db.query(
-        'orders',
-        where: 'table_id = ? AND status = 0',
-        whereArgs: [tableId],
-      );
-      if (existing.isNotEmpty) {
-        return Response.badRequest(body: 'Table already has an open order');
-      }
+          if (existing.isNotEmpty) {
+            final orderId = existing.first['id'];
+            final dailyNo = existing.first['daily_number'];
+            return Response.ok(jsonEncode({
+              'order_id': orderId,
+              'daily_number': dailyNo,
+              'status': 'existing'
+            }));
+          }
+        }
 
-      final orderId = DateTime.now().millisecondsSinceEpoch.toString();
-      await db.transaction((txn) async {
-        await txn.insert('orders', {
-          'id': orderId,
-          'total': 0.0,
-          'payment_type': 'Pending',
-          'created_at': DateTime.now().toIso8601String(),
-          'order_type': orderType,
-          'table_id': tableId,
-          'waiter_id': waiterId,
-          'status': 0, // open
-          'opened_at': DateTime.now().toIso8601String(),
+        final orderId = DateTime.now().millisecondsSinceEpoch.toString();
+
+        final now = DateTime.now();
+        final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
+        final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
+
+        int nextNo = 1;
+        final res = await db.rawQuery(
+          'SELECT MAX(daily_number) as max_no FROM orders WHERE created_at BETWEEN ? AND ?',
+          [todayStart, todayEnd],
+        );
+        if (res.isNotEmpty && res.first['max_no'] != null) {
+          nextNo = (res.first['max_no'] as int) + 1;
+        }
+
+        await db.transaction((txn) async {
+          await txn.insert('orders', {
+            'id': orderId,
+            'total': 0.0,
+            'payment_type': 'Pending',
+            'created_at': DateTime.now().toIso8601String(),
+            'order_type': orderType,
+            'table_id': tableId,
+            'waiter_id': waiterId,
+            'status': 0,
+            'opened_at': DateTime.now().toIso8601String(),
+            'daily_number': nextNo,
+          });
+
+          if (tableId != null) {
+            await txn.update(
+              'tables',
+              {'status': 1, 'active_order_id': orderId},
+              where: 'id = ?',
+              whereArgs: [tableId],
+            );
+          }
         });
 
-        await txn.update(
-          'tables',
-          {'status': 1, 'active_order_id': orderId},
-          where: 'id = ?',
-          whereArgs: [tableId],
-        );
-      });
-
-      return Response.ok(jsonEncode({'order_id': orderId}));
+        return Response.ok(jsonEncode({
+          'order_id': orderId,
+          'daily_number': nextNo
+        }));
+      } catch (e, st) {
+        debugPrint('[orders/open] ERROR: $e\n$st');
+        return Response.internalServerError(body: 'orders/open error: $e');
+      }
     });
 
     _router.get('/orders/<id>', (Request request, String id) async {
@@ -469,19 +518,19 @@ class ApiServer {
       final orders = await db.query(
         'orders',
         where: 'id = ?',
-        whereArgs: [id],
+        whereArgs: [id.toString()],
         limit: 1,
       );
       if (orders.isEmpty) return Response.notFound('Order not found');
 
       final items = await db.rawQuery(
         '''
-        SELECT oi.*, p.name as product_name
+        SELECT oi.*, p.name as product_name, p.no_service_charge
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
         WHERE oi.order_id = ?
       ''',
-        [id],
+        [id.toString()],
       );
 
       var order = Map<String, dynamic>.from(orders.first);
@@ -532,32 +581,356 @@ class ApiServer {
         );
       }
 
+      // Preserve existing printed_qty — never allow it to decrease (race condition guard)
+      final existingItems = await db.query(
+        'order_items',
+        where: 'order_id = ?',
+        whereArgs: [id],
+      );
+      final Map<int, double> existingPrintedQty = {
+        for (var row in existingItems)
+          (row['product_id'] as int): (row['printed_qty'] as num?)?.toDouble() ?? 0.0,
+      };
+
       await db.transaction((txn) async {
-        // Delete existing items for simplicity in MVP (or use update logic)
         await txn.delete('order_items', where: 'order_id = ?', whereArgs: [id]);
 
-        double total = 0;
+        double totalAmount = 0;
+        double totalForServiceCharge = 0;
+
         for (var item in items) {
           final double price = (item['price'] as num).toDouble();
-          final int qty = (item['qty'] as num).toInt();
+          final double qty = (item['qty'] as num).toDouble();
+          final int productId = item['product_id'] as int;
           final String? productName = item['product_name'] as String?;
-          total += price * qty;
+
+          totalAmount += price * qty;
+
+          final prodRes = await txn.query(
+            'products',
+            columns: ['no_service_charge'],
+            where: 'id = ?',
+            whereArgs: [productId],
+          );
+          bool noServiceCharge = false;
+          if (prodRes.isNotEmpty) {
+            noServiceCharge = (prodRes.first['no_service_charge'] as int? ?? 0) == 1;
+          }
+
+          if (!noServiceCharge) {
+            totalForServiceCharge += price * qty;
+          }
+
+          final double newPrintedQty = (item['printed_qty'] as num?)?.toDouble() ?? 0.0;
+          // Never decrease printed_qty — use the higher value to avoid race condition
+          final double safePrintedQty = newPrintedQty > (existingPrintedQty[productId] ?? 0.0)
+              ? newPrintedQty
+              : (existingPrintedQty[productId] ?? 0.0);
 
           await txn.insert('order_items', {
             'order_id': id,
-            'product_id': item['product_id'],
+            'product_id': productId,
             'product_name': productName,
             'qty': qty,
             'price': price,
+            'printed_qty': safePrintedQty,
           });
         }
 
+        // Calculate Charges
+        double roomCharge = 0;
+        final orderData = orders.first;
+        final int? tableId = orderData['table_id'] as int?;
+        final int? orderType = orderData['order_type'] as int?;
+
+        if (orderType == 0 && tableId != null) {
+          // Dine-in: Calculate room charge from linked tables
+          final List<Map<String, dynamic>> linkedTables = await txn.query(
+            'tables',
+            where: 'active_order_id = ? OR id = ?',
+            whereArgs: [id, tableId],
+          );
+
+          double totalRoomCharge = 0;
+          final DateTime now = DateTime.now();
+          final DateTime openedAt = DateTime.tryParse(orderData['opened_at']?.toString() ?? '') ?? now;
+
+          for (var tableMap in linkedTables) {
+            final int pricingType = tableMap['pricing_type'] as int? ?? 0;
+            final double hourlyRate = (tableMap['hourly_rate'] as num? ?? 0).toDouble();
+            final double fixedAmount = (tableMap['fixed_amount'] as num? ?? 0).toDouble();
+            final double servicePercentage = (tableMap['service_percentage'] as num? ?? 0).toDouble();
+
+            if (pricingType == 1) {
+              final duration = now.difference(openedAt);
+              final hours = duration.inMinutes / 60.0;
+              totalRoomCharge += hours * hourlyRate;
+            } else if (pricingType == 2) {
+              totalRoomCharge += fixedAmount;
+            } else if (pricingType == 3) {
+              totalRoomCharge += (totalForServiceCharge * servicePercentage / 100);
+            }
+          }
+          roomCharge = totalRoomCharge;
+        }
+
+        // Waiter Service Fee
+        double serviceFee = 0;
+        final int? waiterId = orderData['waiter_id'] as int?;
+        if (waiterId != null) {
+          final waiterRes = await txn.query('waiters', where: 'id = ?', whereArgs: [waiterId]);
+          if (waiterRes.isNotEmpty) {
+            final waiter = waiterRes.first;
+            final String waiterName = waiter['name']?.toString() ?? '';
+            final int waiterType = waiter['type'] as int? ?? 0;
+            final double waiterValue = (waiter['value'] as num? ?? 0).toDouble();
+
+            if (waiterName.toLowerCase() != 'kassa') {
+              if (waiterType == 1) { // percentage
+                serviceFee = (totalForServiceCharge * waiterValue / 100).roundToDouble();
+              } else { // fixed
+                serviceFee = waiterValue;
+              }
+            }
+          }
+        }
+
+        final double grandTotal = totalAmount + roomCharge + serviceFee;
+
         await txn.update(
           'orders',
-          {'total': total},
+          {
+            'total': grandTotal,
+            'food_total': totalAmount,
+            'room_charge': roomCharge,
+            'room_total': roomCharge,
+            'service_total': serviceFee,
+            'grand_total': grandTotal,
+            'waiter_id': payload['waiter_id'] ?? order['waiter_id'],
+          },
+          where: 'id = ?',
+          whereArgs: [id.toString()],
+        );
+        print('API [POST] /orders/$id/items: Order total updated to $grandTotal');
+      });
+
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    // Move order to another table
+    _router.put('/orders/<id>/move', (Request request, String id) async {
+      final payload = jsonDecode(await request.readAsString());
+      final newTableId = payload['table_id'] as int?;
+      final newLocationId = payload['location_id'] as int?;
+
+      if (newTableId == null) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'table_id required'}),
+        );
+      }
+
+      final db = await DatabaseHelper.instance.database;
+
+      final orders = await db.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (orders.isEmpty) return Response.notFound('Order not found');
+
+      final oldTableId = orders.first['table_id'] as int?;
+
+      await db.transaction((txn) async {
+        // Update order
+        final updateData = <String, dynamic>{'table_id': newTableId};
+        if (newLocationId != null) updateData['location_id'] = newLocationId;
+        await txn.update(
+          'orders',
+          updateData,
+          where: 'id = ?',
+          whereArgs: [id.toString()],
+        );
+
+        // Free old table
+        if (oldTableId != null) {
+          await txn.update(
+            'tables',
+            {'status': 0, 'active_order_id': null},
+            where: 'id = ?',
+            whereArgs: [oldTableId],
+          );
+        }
+
+        // Occupy new table
+        await txn.update(
+          'tables',
+          {'status': 1, 'active_order_id': id},
+          where: 'id = ?',
+          whereArgs: [newTableId],
+        );
+      });
+
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    // Merge two tables' orders
+    _router.post('/tables/merge', (Request request) async {
+      final payload = jsonDecode(await request.readAsString());
+      final sourceTableId = payload['source_table_id'] as int?;
+      final targetTableId = payload['target_table_id'] as int?;
+
+      if (sourceTableId == null || targetTableId == null) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'source_table_id and target_table_id required'}),
+        );
+      }
+
+      final db = await DatabaseHelper.instance.database;
+
+      final sourceRes = await db.query(
+        'tables',
+        where: 'id = ?',
+        whereArgs: [sourceTableId],
+      );
+      final targetRes = await db.query(
+        'tables',
+        where: 'id = ?',
+        whereArgs: [targetTableId],
+      );
+
+      if (sourceRes.isEmpty || targetRes.isEmpty) {
+        return Response.notFound(jsonEncode({'error': 'Table not found'}));
+      }
+
+      final String? sourceOrderId =
+          sourceRes.first['active_order_id'] as String?;
+      final String? targetOrderId =
+          targetRes.first['active_order_id'] as String?;
+
+      if (sourceOrderId == null && targetOrderId == null) {
+        return Response.badRequest(
+          body: jsonEncode({'error': 'Both tables are empty'}),
+        );
+      }
+
+      await db.transaction((txn) async {
+        String finalOrderId;
+
+        if (targetOrderId != null) {
+          finalOrderId = targetOrderId;
+          if (sourceOrderId != null && sourceOrderId != targetOrderId) {
+            final sourceItems = await txn.query(
+              'order_items',
+              where: 'order_id = ?',
+              whereArgs: [sourceOrderId],
+            );
+            for (var item in sourceItems) {
+              final existing = await txn.query(
+                'order_items',
+                where: 'order_id = ? AND product_id = ?',
+                whereArgs: [finalOrderId, item['product_id']],
+              );
+              if (existing.isNotEmpty) {
+                final srcPrintedQty = item['printed_qty'] ?? item['qty'];
+                await txn.rawUpdate(
+                  'UPDATE order_items SET qty = qty + ?, printed_qty = printed_qty + ? WHERE id = ?',
+                  [item['qty'], srcPrintedQty, existing.first['id']],
+                );
+              } else {
+                await txn.insert('order_items', {
+                  'order_id': finalOrderId,
+                  'product_id': item['product_id'],
+                  'qty': item['qty'],
+                  'price': item['price'],
+                  'printed_qty': item['printed_qty'] ?? item['qty'],
+                });
+              }
+            }
+            await txn.delete(
+              'order_items',
+              where: 'order_id = ?',
+              whereArgs: [sourceOrderId],
+            );
+            await txn.delete(
+              'orders',
+              where: 'id = ?',
+              whereArgs: [sourceOrderId],
+            );
+          }
+        } else {
+          finalOrderId = sourceOrderId!;
+        }
+
+        await txn.update(
+          'tables',
+          {'status': 1, 'active_order_id': finalOrderId},
+          where: 'id = ? OR id = ?',
+          whereArgs: [sourceTableId, targetTableId],
+        );
+      });
+
+      return Response.ok(jsonEncode({'status': 'success'}));
+    });
+
+    _router.post('/orders/<id>/pay', (Request request, String id) async {
+      final payload = jsonDecode(await request.readAsString());
+      final db = await DatabaseHelper.instance.database;
+
+      // Get order data
+      final orders = await db.query('orders', where: 'id = ?', whereArgs: [id], limit: 1);
+      if (orders.isEmpty) return Response.notFound('Order not found');
+
+      final orderData = Map<String, dynamic>.from(orders.first);
+      final itemRows = await db.rawQuery(
+        '''
+        SELECT oi.*, p.quantity, p.track_type, p.is_set, p.image_path, p.no_service_charge, p.unit, p.name as product_name
+        FROM order_items oi
+        JOIN products p ON oi.product_id = p.id
+        WHERE oi.order_id = ?
+        ''',
+        [id],
+      );
+      
+      final List<OrderItem> orderItems = itemRows.map((row) => OrderItem.fromMap(row, productName: row['product_name'] as String? ?? '')).toList();
+      final orderObj = Order.fromMap(orderData, items: orderItems);
+
+      await db.transaction((txn) async {
+        // Update order status and payment info
+        await txn.update(
+          'orders',
+          {
+            'status': 1, // Paid
+            'payment_type': payload['payment_type'] ?? 'Cash',
+            'paid_amount': (payload['paid_amount'] as num?)?.toDouble() ?? (payload['grand_total'] as num?)?.toDouble() ?? orderObj.total,
+            'receipt_change': (payload['change'] as num?)?.toDouble() ?? 0.0,
+            'closed_at': DateTime.now().toIso8601String(),
+            'note': payload['note'],
+            // Updates from client-calculated values
+            'room_charge': (payload['room_charge'] as num?)?.toDouble() ?? orderObj.roomCharge,
+            'room_total': (payload['room_charge'] as num?)?.toDouble() ?? orderObj.roomTotal,
+            'service_total': (payload['service_total'] as num?)?.toDouble() ?? orderObj.serviceTotal,
+            'food_total': (payload['food_total'] as num?)?.toDouble() ?? orderObj.foodTotal,
+            'total': (payload['grand_total'] as num?)?.toDouble() ?? orderObj.total,
+            'grand_total': (payload['grand_total'] as num?)?.toDouble() ?? orderObj.total,
+            'waiter_id': payload['waiter_id'] ?? orderObj.waiterId,
+          },
           where: 'id = ?',
           whereArgs: [id],
         );
+
+        // If it was a table order, clear the table
+        if (orderObj.tableId != null) {
+          await txn.update(
+            'tables',
+            {'status': 0, 'active_order_id': null},
+            where: 'id = ?',
+            whereArgs: [orderObj.tableId],
+          );
+        }
+
+        // --- CRITICAL: Process Inventory Deduction on Server ---
+        await InventoryService.instance.processOrderPaid(orderObj, txn);
       });
 
       return Response.ok(jsonEncode({'status': 'success'}));
@@ -603,32 +976,22 @@ class ApiServer {
         );
       }
 
-      // Check if order has items
-      final items = await db.query(
-        'order_items',
-        where: 'order_id = ?',
-        whereArgs: [id],
-      );
-
-      if (items.isNotEmpty) {
-        return Response.badRequest(
-          body: jsonEncode({
-            'error': "Buyurtmada taomlar mavjud, bekor qilib bo'lmaydi",
-          }),
-        );
-      }
+      // Allow cancelling with items if admin or cashier (if check passed above)
+      // Original logic only allowed empty orders.
 
       // Delete order and free table
       await db.transaction((txn) async {
-        await txn.delete('orders', where: 'id = ?', whereArgs: [id]);
+        await txn.delete('orders', where: 'id = ?', whereArgs: [id.toString()]);
+        await txn.delete('order_items', where: 'order_id = ?', whereArgs: [id.toString()]);
 
         if (tableId != null) {
-          await txn.update(
+          final count = await txn.update(
             'tables',
-            {'status': 0},
+            {'status': 0, 'active_order_id': null},
             where: 'id = ?',
             whereArgs: [tableId],
           );
+          print('API [DELETE] /orders/$id/cancel: Table #$tableId detached. Affected: $count');
         }
       });
 
@@ -673,6 +1036,11 @@ class ApiServer {
       final cash = (metrics['cash_total'] as num?)?.toDouble() ?? 0.0;
       final card = (metrics['card_total'] as num?)?.toDouble() ?? 0.0;
       final terminal = (metrics['terminal_total'] as num?)?.toDouble() ?? 0.0;
+
+      final productsHtml = topProducts.map((p) => '<div class="product-item">'
+              '<span class="product-name">${p['name']}</span>'
+              '<span class="product-price">${PriceFormatter.format((p['revenue'] as num).toDouble())} so\'m</span>'
+              '</div>').join('');
 
       final html =
           '''
@@ -730,12 +1098,7 @@ class ApiServer {
     <div class="card" style="margin-top: 20px;">
         <div class="metric-label" style="margin-bottom: 15px; font-weight: bold;">Top Sotuvlar</div>
         <div class="product-list">
-            ${topProducts.map((p) => '''
-            <div class="product-item">
-                <span class="product-name">${p['name']}</span>
-                <span class="product-price">${PriceFormatter.format((p['revenue'] as num).toDouble())} so'm</span>
-            </div>
-            ''').join('')}
+            $productsHtml
         </div>
     </div>
 </body>

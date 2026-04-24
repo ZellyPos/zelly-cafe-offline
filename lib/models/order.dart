@@ -87,6 +87,9 @@ class Order {
   final double change;
   final int? dailyNumber;
 
+  // Order note / comment
+  final String? note;
+
   Order({
     required this.id,
     required this.total,
@@ -111,6 +114,7 @@ class Order {
     this.serviceTotal = 0,
     this.grandTotal = 0,
     this.dailyNumber,
+    this.note,
   });
 
   Map<String, dynamic> toMap() {
@@ -135,6 +139,7 @@ class Order {
       'service_total': serviceTotal,
       'grand_total': grandTotal,
       'daily_number': dailyNumber,
+      'note': note,
     };
   }
 
@@ -170,6 +175,7 @@ class Order {
       serviceTotal: (map['service_total'] as num?)?.toDouble() ?? 0.0,
       grandTotal: (map['grand_total'] as num?)?.toDouble() ?? 0.0,
       dailyNumber: map['daily_number'] as int?,
+      note: map['note'] as String?,
     );
   }
 }

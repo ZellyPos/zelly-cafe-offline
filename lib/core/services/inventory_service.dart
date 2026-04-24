@@ -71,69 +71,78 @@ class InventoryService {
 
   // --- Checkout Processing (CRITICAL) ---
 
-  Future<void> processOrderPaid(Order order) async {
-    final db = await _dbHelper.database;
+  Future<void> processOrderPaid(Order order, [Transaction? txn]) async {
+    final executor = txn ?? (await _dbHelper.database);
 
-    await db.transaction((txn) async {
-      // 1. Guard against double-deduction
-      final existingFlag = await _repo.getInventoryFlag(order.id);
-      if (existingFlag != null && existingFlag.deducted) {
-        return; // Already processed
-      }
+    // If we have a txn, just run the logic. Otherwise, wrap in a new transaction.
+    if (txn != null) {
+      await _processOrderPaidLogic(order, txn);
+    } else {
+      await (executor as Database).transaction((newTxn) async {
+        await _processOrderPaidLogic(order, newTxn);
+      });
+    }
+  }
 
-      for (var item in order.items) {
-        // Load product with inventory settings
-        final productMap = await txn.query(
-          'products',
-          where: 'id = ?',
-          whereArgs: [item.productId],
-        );
-        if (productMap.isEmpty) continue;
+  Future<void> _processOrderPaidLogic(Order order, Transaction txn) async {
+    // 1. Guard against double-deduction
+    final existingFlag = await _repo.getInventoryFlag(order.id, txn);
+    if (existingFlag != null && existingFlag.deducted) {
+      return; // Already processed
+    }
 
-        final product = Product.fromMap(productMap.first);
-
-        if (product.isSet && item.bundleItemsJson != null) {
-          // Process bundle as snapshot
-          final List<dynamic> bundleList = jsonDecode(item.bundleItemsJson!);
-          for (var bMap in bundleList) {
-            final bItem = BundleItem.fromMap(bMap);
-            // Components of bundle are always products
-            final subProductMap = await txn.query(
-              'products',
-              where: 'id = ?',
-              whereArgs: [bItem.productId],
-            );
-            if (subProductMap.isNotEmpty) {
-              final subProduct = Product.fromMap(subProductMap.first);
-              await _deductProductStock(
-                txn,
-                subProduct,
-                bItem.quantity * item.qty,
-                order.id,
-              );
-            }
-          }
-        } else {
-          // Process direct product
-          await _deductProductStock(
-            txn,
-            product,
-            item.qty.toDouble(),
-            order.id,
-          );
-        }
-      }
-
-      // 2. Set flag
-      await _repo.setInventoryFlag(
-        OrderInventoryFlag(
-          orderId: order.id,
-          deducted: true,
-          deductedAt: DateTime.now(),
-        ),
-        txn,
+    for (var item in order.items) {
+      // Load product with inventory settings
+      final productMap = await txn.query(
+        'products',
+        where: 'id = ?',
+        whereArgs: [item.productId],
       );
-    });
+      if (productMap.isEmpty) continue;
+
+      final product = Product.fromMap(productMap.first);
+
+      if (product.isSet && item.bundleItemsJson != null) {
+        // Process bundle as snapshot
+        final List<dynamic> bundleList = jsonDecode(item.bundleItemsJson!);
+        for (var bMap in bundleList) {
+          final bItem = BundleItem.fromMap(bMap);
+          // Components of bundle are always products
+          final subProductMap = await txn.query(
+            'products',
+            where: 'id = ?',
+            whereArgs: [bItem.productId],
+          );
+          if (subProductMap.isNotEmpty) {
+            final subProduct = Product.fromMap(subProductMap.first);
+            await _deductProductStock(
+              txn,
+              subProduct,
+              bItem.quantity * item.qty,
+              order.id,
+            );
+          }
+        }
+      } else {
+        // Process direct product
+        await _deductProductStock(
+          txn,
+          product,
+          item.qty.toDouble(),
+          order.id,
+        );
+      }
+    }
+
+    // 2. Set flag
+    await _repo.setInventoryFlag(
+      OrderInventoryFlag(
+        orderId: order.id,
+        deducted: true,
+        deductedAt: DateTime.now(),
+      ),
+      txn,
+    );
   }
 
   Future<void> _deductProductStock(
@@ -142,7 +151,8 @@ class InventoryService {
     double qty,
     String orderId,
   ) async {
-    if (product.trackType == 1) {
+    // If trackType is 0 (None) but quantity is NOT null, treat it as Retail
+    if (product.trackType == 1 || (product.trackType == 0 && product.quantity != null)) {
       // Retail Stock
       await _handleRetailDeduction(txn, product, qty);
     } else if (product.trackType == 2) {

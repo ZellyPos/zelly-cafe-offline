@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_settings_provider.dart';
+import '../../core/app_strings.dart';
 
 class TelegramSettingsScreen extends StatefulWidget {
   const TelegramSettingsScreen({super.key});
@@ -29,16 +30,30 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
   }
 
   void _saveSettings() async {
+    final token = _tokenController.text.trim();
+    final chatId = _chatController.text.trim();
+
+    if (token.isNotEmpty && !RegExp(r'^\d{8,11}:[-a-zA-Z0-9_]{35}$').hasMatch(token)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppStrings.invalidToken), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    if (chatId.isNotEmpty && !RegExp(r'^-?\d+$').hasMatch(chatId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppStrings.invalidChatId), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     final settings = context.read<AppSettingsProvider>();
-    await settings.setTelegramSettings(
-      _tokenController.text.trim(),
-      _chatController.text.trim(),
-    );
+    await settings.setTelegramSettings(token, chatId);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Telegram sozlamalari saqlandi!'),
+        SnackBar(
+          content: Text(AppStrings.botSaved),
           backgroundColor: Colors.green,
         ),
       );
@@ -51,7 +66,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Telegram Sozlamalari'),
+        title: Text(AppStrings.telegramSettingsTitle),
         elevation: 0,
         backgroundColor: theme.colorScheme.surface,
         foregroundColor: theme.colorScheme.onSurface,
@@ -78,7 +93,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Bot Sozlamalari',
+                    AppStrings.botSettings,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -87,7 +102,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Hisobotlarni Telegram botga yuborish uchun quyidagi ma\'lumotlarni kiriting.',
+                    AppStrings.reportsDescription,
                     style: TextStyle(
                       color: theme.colorScheme.onSurface.withOpacity(0.6),
                       fontSize: 14,
@@ -95,7 +110,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  _buildLabel('Bot Token'),
+                  _buildLabel(AppStrings.botToken),
                   TextField(
                     controller: _tokenController,
                     decoration: InputDecoration(
@@ -117,7 +132,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  _buildLabel('Chat ID'),
+                  _buildLabel(AppStrings.chatId),
                   TextField(
                     controller: _chatController,
                     decoration: InputDecoration(
@@ -152,8 +167,8 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'Saqlash',
+                      child: Text(
+                        AppStrings.save,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -221,7 +236,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
               Icon(Icons.info_outline, color: iconColor, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Qanday sozlanadi?',
+                AppStrings.tgInstructionsTitle,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: headingColor,
@@ -232,22 +247,22 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
           const SizedBox(height: 16),
           _buildStep(
             1,
-            'Telegramda @BotFather orqasli yangi bot yarating va Token-ni oling.',
+            AppStrings.tgStep1,
             textColor,
           ),
           _buildStep(
             2,
-            'Botni o\'zingizning guruhingizga qo\'shing.',
+            AppStrings.tgStep2,
             textColor,
           ),
           _buildStep(
             3,
-            'Guruhning ID raqamini aniqlash uchun @GetMyChatID_Bot botidan foydalaning.',
+            AppStrings.tgStep3,
             textColor,
           ),
           _buildStep(
             4,
-            'Olingan ma\'lumotlarni yuqoridagi maydonlarga kiriting va "Saqlash" tugmasini bosing.',
+            AppStrings.tgStep4,
             textColor,
           ),
         ],

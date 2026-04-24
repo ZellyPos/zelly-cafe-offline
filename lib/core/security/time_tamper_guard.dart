@@ -47,7 +47,6 @@ class TimeTamperGuard {
       final lastWall = DateTime.parse(lastWallTimeStr);
       final lastUptime = int.parse(lastUptimeStr);
 
-      final wallElapsed = now.difference(lastWall).inMilliseconds;
       final uptimeElapsed = uptime - lastUptime;
 
       // 1. Rollback tekshiruvi: real vaqt orqaga ketganmi?
@@ -57,8 +56,8 @@ class TimeTamperGuard {
       }
 
       // 2. Uptime tekshiruvi:
-      if (uptime > 0 && uptime < lastUptime && wallElapsed < 3600000) {
-        // Reboot bo'lishi mumkin
+      if (uptime > 0 && uptime < lastUptime) {
+        // Reboot bo'lishi mumkin — uptime noldan qayta boshlangan, OK
       } else if (uptime > 0 && uptimeElapsed < -5000) {
         print('Time Tamper Detected: Uptime inconsistency');
         return false;

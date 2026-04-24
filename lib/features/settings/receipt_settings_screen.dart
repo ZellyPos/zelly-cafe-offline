@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/receipt_settings_provider.dart';
 import '../../providers/printer_provider.dart';
+import '../../providers/app_settings_provider.dart';
 import '../../models/receipt_settings.dart';
 
 class ReceiptSettingsScreen extends StatefulWidget {
@@ -68,8 +69,31 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
                         const SizedBox(height: 32),
 
                         _buildSection(
-                          title: 'Restoran ma’lumotlari',
-                          hint: 'Chekda ko\'rinadigan asosiy ma\'lumotlar',
+                          title: "Bu qurilma printer",
+                          hint: "Har bir qurilma o'ziga alohida receipt printer tanlashi mumkin",
+                          child: _buildDevicePrinterSelector(context),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        _buildSection(
+                          title: "Buyurtma sozlamalari",
+                          hint: "Cartga tushgan mahsulotlarni qanday saqlash",
+                          child: _buildCard([
+                            _buildToggleRow(
+                              "Avtomatik tasdiqlash",
+                              "Mahsulot qo’shilganda darhol saqlanadi, tasdiqlash tugmasi ko’rinmaydi",
+                              context.watch<AppSettingsProvider>().autoConfirmOrder,
+                              (v) => context.read<AppSettingsProvider>().setAutoConfirmOrder(v),
+                            ),
+                          ]),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        _buildSection(
+                          title: "Restoran ma’lumotlari",
+                          hint: "Chekda ko’rinadigan asosiy ma’lumotlar",
                           child: _buildCard([
                             _buildInfoInput(
                               label: 'Restoran nomi',
@@ -274,6 +298,98 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
         const SizedBox(height: 16),
         child,
       ],
+    );
+  }
+
+  Widget _buildDevicePrinterSelector(BuildContext context) {
+    final printerProvider = context.watch<PrinterProvider>();
+    final printers = printerProvider.printers;
+    final selectedId = printerProvider.selectedReceiptPrinterId;
+    final theme = Theme.of(context);
+
+    if (printers.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: Text(
+          'Hech qanday printer sozlanmagan. Avval printer qo\'shing.',
+          style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.dividerColor),
+      ),
+      child: Column(
+        children: printers.map((printer) {
+          final isSelected = printer.id == selectedId ||
+              (selectedId == null && printer == printers.first);
+          return InkWell(
+            onTap: () => context
+                .read<PrinterProvider>()
+                .setSelectedReceiptPrinter(printer.id),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    isSelected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          printer.displayName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          printer.type.name == 'network'
+                              ? '${printer.ipAddress}:${printer.port}'
+                              : printer.printerName ?? printer.type.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        if (printer.categoryIds.isNotEmpty)
+                          Text(
+                            'Oshxona printeri (kategoriyalari bor)',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 

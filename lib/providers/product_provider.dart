@@ -3,6 +3,7 @@ import '../core/database_helper.dart';
 import '../models/product.dart';
 import 'connectivity_provider.dart';
 import '../core/services/audit_service.dart';
+import '../models/order.dart';
 
 class ProductProvider extends ChangeNotifier {
   List<Product> _products = [];
@@ -28,6 +29,30 @@ class ProductProvider extends ChangeNotifier {
       if (fetchRemote) {
         final remoteData = await connectivity.getRemoteData('/products');
         data = List<Map<String, dynamic>>.from(remoteData);
+
+        // Sync to local DB for components that depend on it (like PrinterService)
+        final db = await DatabaseHelper.instance.database;
+        await db.transaction((txn) async {
+          await txn.delete('products');
+          await txn.delete('product_bundles');
+          for (var item in data) {
+            final productForDb = Map<String, dynamic>.from(item);
+            // bundle_items is only for memory/API, not for DB column
+            productForDb.remove('bundle_items');
+            await txn.insert('products', productForDb);
+
+            // Sync bundles if present
+            if (item['is_set'] == 1 && item['bundle_items'] != null) {
+              for (var bi in item['bundle_items']) {
+                await txn.insert('product_bundles', {
+                  'bundle_id': productForDb['id'],
+                  'product_id': bi['product_id'],
+                  'qty': bi['qty'],
+                });
+              }
+            }
+          }
+        });
       } else {
         data = await DatabaseHelper.instance.database.then(
           (db) => db.query('products', orderBy: 'sort_order ASC'),
@@ -217,5 +242,24 @@ class ProductProvider extends ChangeNotifier {
     }
 
     await loadProducts(connectivity: connectivity);
+  }
+
+  void decrementQuantities(List<OrderItem> items) {
+    bool changed = false;
+    for (var item in items) {
+      final index = _products.indexWhere((p) => p.id == item.productId);
+      if (index != -1) {
+        final product = _products[index];
+        if (product.quantity != null) {
+          _products[index] = product.copyWith(
+            quantity: product.quantity! - item.qty,
+          );
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      notifyListeners();
+    }
   }
 }

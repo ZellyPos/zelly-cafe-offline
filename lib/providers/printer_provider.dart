@@ -1,23 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/printer_settings.dart';
 import '../core/database_helper.dart';
 import '../core/printing_service.dart';
+
+const String _kSelectedReceiptPrinterId = 'selected_receipt_printer_id';
 
 class PrinterProvider with ChangeNotifier {
   List<PrinterSettings> _printers = [];
   List<String> _windowsPrinters = [];
   List<String> _legacyUsbPrinters = []; // For fallback
   bool _isLoading = false;
+  int? _selectedReceiptPrinterId; // Per-device selection
 
   List<PrinterSettings> get printers => _printers;
-  // Keeps compatibility with old code that expects single settings
-  PrinterSettings get settings =>
-      _printers.isNotEmpty ? _printers.first : PrinterSettings();
+  int? get selectedReceiptPrinterId => _selectedReceiptPrinterId;
+
+  /// Returns the receipt printer selected for THIS device.
+  /// Falls back to the first printer if none selected.
+  PrinterSettings get settings {
+    if (_selectedReceiptPrinterId != null) {
+      final found = _printers.where((p) => p.id == _selectedReceiptPrinterId);
+      if (found.isNotEmpty) return found.first;
+    }
+    return _printers.isNotEmpty ? _printers.first : PrinterSettings();
+  }
+
   List<String> get windowsPrinters => _windowsPrinters;
   List<String> get legacyUsbPrinters => _legacyUsbPrinters;
   bool get isLoading => _isLoading;
 
   Future<void> loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    _selectedReceiptPrinterId = prefs.getInt(_kSelectedReceiptPrinterId);
+
     final db = await DatabaseHelper.instance.database;
     final res = await db.query('printers');
 
@@ -72,6 +88,18 @@ class PrinterProvider with ChangeNotifier {
     } else {
       await savePrinter(newSettings.copyWith(id: _printers.first.id));
     }
+  }
+
+  /// Saves the receipt printer selection locally for THIS device only.
+  Future<void> setSelectedReceiptPrinter(int? printerId) async {
+    _selectedReceiptPrinterId = printerId;
+    final prefs = await SharedPreferences.getInstance();
+    if (printerId == null) {
+      await prefs.remove(_kSelectedReceiptPrinterId);
+    } else {
+      await prefs.setInt(_kSelectedReceiptPrinterId, printerId);
+    }
+    notifyListeners();
   }
 
   Future<void> scanPrinters() async {

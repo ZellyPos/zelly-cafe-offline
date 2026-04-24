@@ -10,6 +10,7 @@ class PrinterSettings {
   final String? ipAddress;
   final int port;
   final List<int> categoryIds;
+  final bool isMain;
 
   PrinterSettings({
     this.id,
@@ -19,6 +20,7 @@ class PrinterSettings {
     this.ipAddress,
     this.port = 9100,
     this.categoryIds = const [],
+    this.isMain = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -29,6 +31,7 @@ class PrinterSettings {
       'ip_address': ipAddress ?? '',
       'port': port,
       'category_ids': jsonEncode(categoryIds),
+      'is_main': isMain ? 1 : 0,
     };
     if (id != null) map['id'] = id;
     return map;
@@ -62,6 +65,7 @@ class PrinterSettings {
       ipAddress: map['ip_address'],
       port: int.tryParse(map['port']?.toString() ?? '9100') ?? 9100,
       categoryIds: catIds,
+      isMain: (map['is_main'] as int? ?? 0) == 1,
     );
   }
 
@@ -73,6 +77,7 @@ class PrinterSettings {
     String? ipAddress,
     int? port,
     List<int>? categoryIds,
+    bool? isMain,
   }) {
     return PrinterSettings(
       id: id ?? this.id,
@@ -82,6 +87,7 @@ class PrinterSettings {
       ipAddress: ipAddress ?? this.ipAddress,
       port: port ?? this.port,
       categoryIds: categoryIds ?? this.categoryIds,
+      isMain: isMain ?? this.isMain,
     );
   }
 }

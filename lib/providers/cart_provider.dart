@@ -12,7 +12,11 @@ import 'table_provider.dart';
 import 'location_provider.dart';
 import 'waiter_provider.dart';
 import 'connectivity_provider.dart';
+import 'app_settings_provider.dart';
+import 'product_provider.dart';
 import '../core/services/audit_service.dart';
+import '../core/services/inventory_service.dart';
+import '../models/table.dart' as table_model;
 
 class CartItem {
   Product product;
@@ -79,30 +83,51 @@ class CartProvider extends ChangeNotifier {
     if (role == 'admin') return true;
 
     if (role == 'cashier') {
-      // Unrestricted printing and checkout for cashiers
-      if (permissionId.contains('print') || permissionId.contains('checkout'))
+      // Unrestricted core POS actions for cashiers (default permissions)
+      final coreActions = [
+        'print',
+        'checkout',
+        'delete',
+        'reduce',
+        'confirm',
+        'cancel',
+      ];
+      if (coreActions.any((action) => permissionId.contains(action))) {
+        // Return true for core actions if the role is cashier
         return true;
+      }
 
-      // Note: perm_confirm_order is now toggleable for cashiers (as requested)
+      final userPerms = connectivity.currentUser?['permissions'];
+
+      // No permissions field set → cashier has full access (default behavior)
+      if (userPerms == null) return true;
+
+      if (userPerms is List) {
+        // Empty list → full access (no restrictions configured)
+        if (userPerms.isEmpty) return true;
+        return userPerms.contains(permissionId);
+      } else if (userPerms is String) {
+        // Empty string → full access (no restrictions configured)
+        if (userPerms.isEmpty) return true;
+        final list = userPerms.split(',').where((s) => s.isNotEmpty).toList();
+        // Check for exact match OR the core action match if it's in the list
+        return list.contains(permissionId);
+      }
+      return true;
+    }
+
+    if (role == 'waiter') {
+      // 1. If we have permissions in currentUser map, use them (List or String)
       final userPerms = connectivity.currentUser?['permissions'];
       if (userPerms != null) {
         if (userPerms is List) {
           return userPerms.contains(permissionId);
-        } else if (userPerms is String) {
+        } else if (userPerms is String && userPerms.isNotEmpty) {
           return userPerms.split(',').contains(permissionId);
         }
       }
-      return false;
-    }
 
-    if (role == 'waiter') {
-      // 1. If we have permissions in currentUser map (from API login), use them
-      final userPerms = connectivity.currentUser?['permissions'];
-      if (userPerms != null && userPerms is List) {
-        return userPerms.contains(permissionId);
-      }
-
-      // 2. Fallback to checking _activeWaiterId if currentUser perms are missing (local mode fallback)
+      // 2. Fallback to checking _activeWaiterId (local waiter table)
       if (_activeWaiterId == null) return false;
 
       try {
@@ -141,10 +166,25 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  double getProductCartQuantity(int productId) {
+    if (_items.containsKey(productId)) {
+      return _items[productId]!.quantity;
+    }
+    return 0;
+  }
+
   void setWaiter(int? waiterId, [BuildContext? context]) {
     final oldWaiterId = _activeWaiterId;
     _activeWaiterId = waiterId;
     _syncOrderHeader(context);
+
+    // If client mode, sync immediately to server
+    if (context != null) {
+      final connectivity = context.read<ConnectivityProvider>();
+      if (connectivity.mode == ConnectivityMode.client) {
+        _syncItems(connectivity, context);
+      }
+    }
 
     // Audit: Ofitsiant o'zgarganda
     if (_activeOrderId != null && oldWaiterId != waiterId) {
@@ -206,6 +246,7 @@ class CartProvider extends ChangeNotifier {
                 name: row['product_name'] as String,
                 price: (row['price'] as num).toDouble(),
                 category: '',
+                noServiceCharge: (row['no_service_charge'] as int? ?? 0) == 1,
               );
               _items[product.id!] = CartItem(
                 product: product,
@@ -255,7 +296,9 @@ class CartProvider extends ChangeNotifier {
 
             final itemsRes = await db.rawQuery(
               '''
-              SELECT oi.*, p.name as product_name, p.price as product_price, p.category as product_category, p.quantity as product_quantity
+              SELECT oi.*, p.name as product_name, p.price as product_price, 
+                     p.category as product_category, p.quantity as product_quantity,
+                     p.no_service_charge
               FROM order_items oi
               JOIN products p ON oi.product_id = p.id
               WHERE oi.order_id = ?
@@ -270,6 +313,7 @@ class CartProvider extends ChangeNotifier {
                 price: (row['product_price'] as num).toDouble(),
                 category: row['product_category'] as String,
                 quantity: (row['product_quantity'] as num?)?.toDouble(),
+                noServiceCharge: (row['no_service_charge'] as int? ?? 0) == 1,
               );
               _items[product.id!] = CartItem(
                 product: product,
@@ -284,16 +328,36 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _showError(BuildContext context, String message) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
   Future<void> confirmTableOrder(
     BuildContext context, [
     ConnectivityProvider? connectivity,
     bool showNotification = true,
   ]) async {
+    debugPrint('[confirm] orderId=$_activeOrderId orderType=$_activeOrderType items=${_items.length} unconfirmed=$hasUnconfirmedChanges');
     if (_activeOrderId == null) {
       await _ensureOrderExists(connectivity);
+      debugPrint('[confirm] after ensureOrder: orderId=$_activeOrderId');
     }
-    if (_activeOrderId == null) return;
-    if (!hasUnconfirmedChanges) return;
+    if (_activeOrderId == null) {
+      if (context.mounted) {
+        final msg = _activeOrderType == 0
+            ? 'Xatolik: Buyurtma ID topilmadi. Stolni qayta tanlang.'
+            : 'Xatolik: Buyurtma yaratilmadi. Saboy bo\'limini qayta oching.';
+        _showError(context, msg);
+      }
+      return;
+    }
+    if (!hasUnconfirmedChanges) {
+      if (context.mounted) _showError(context, 'Yangi o\'zgarish yo\'q. Avval mahsulot qo\'shing.');
+      return;
+    }
 
     final List<OrderItem> itemsToPrint = [];
 
@@ -314,7 +378,10 @@ class CartProvider extends ChangeNotifier {
       }
     }
 
-    if (itemsToPrint.isEmpty) return;
+    if (itemsToPrint.isEmpty) {
+      if (context.mounted) _showError(context, 'Chop etiladigan mahsulot yo\'q.');
+      return;
+    }
 
     int? currentDailyNo;
     try {
@@ -332,9 +399,16 @@ class CartProvider extends ChangeNotifier {
       debugPrint("Could not fetch daily number for confirm: $e");
     }
 
+    final double roomCharge = _activeOrderType == 0
+        ? (await calculateRoomChargeForUI(context))
+        : 0;
+    final double serviceFee = calculateWaiterServiceFee(context);
+    final double foodTotal = totalAmount;
+    final double grandTotal = foodTotal + roomCharge + serviceFee;
+
     final populatedOrder = Order(
       id: _activeOrderId!,
-      total: totalAmount,
+      total: grandTotal,
       paymentType: 'Pending',
       createdAt: DateTime.now(),
       items: itemsToPrint,
@@ -343,6 +417,11 @@ class CartProvider extends ChangeNotifier {
       waiterId: _activeWaiterId,
       locationId: _activeLocationId,
       dailyNumber: currentDailyNo,
+      roomCharge: roomCharge,
+      foodTotal: foodTotal,
+      roomTotal: roomCharge,
+      serviceTotal: serviceFee,
+      grandTotal: grandTotal,
       tableName: _activeTableId != null
           ? context
                 .read<TableProvider>()
@@ -380,12 +459,7 @@ class CartProvider extends ChangeNotifier {
       notifyListeners();
 
       if (context.mounted && showNotification) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Buyurtma oshxonaga yuborildi'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        // No snackbar
       }
     } catch (e) {
       if (context.mounted) {
@@ -401,36 +475,72 @@ class CartProvider extends ChangeNotifier {
 
   Future<void> _ensureOrderExists([ConnectivityProvider? connectivity]) async {
     final tableId = _activeTableId;
-    if (tableId == null && _activeOrderType == 0) return;
+    debugPrint('[ensureOrder] tableId=$tableId orderType=$_activeOrderType mode=${connectivity?.mode}');
+    if (tableId == null && _activeOrderType == 0) {
+      debugPrint('[ensureOrder] EARLY RETURN: no table + dine-in');
+      return;
+    }
     if (_activeOrderId != null) return;
 
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      final response = await http.post(
-        Uri.parse('${connectivity.clientBaseUrl}/orders/open'),
-        body: jsonEncode({
-          'table_id': tableId,
-          'waiter_id': connectivity.currentUser?['id'],
-          'order_type': _activeOrderType,
-        }),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${connectivity.authToken}',
-        },
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _activeOrderId = data['order_id'];
-        _activeOpenedAt = DateTime.now();
+      try {
+        final response = await http.post(
+          Uri.parse('${connectivity.clientBaseUrl}/orders/open'),
+          body: jsonEncode({
+            'table_id': tableId,
+            'waiter_id': connectivity.currentUser?['id'],
+            'order_type': _activeOrderType,
+          }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${connectivity.authToken}',
+          },
+        );
+        debugPrint('[ensureOrder] server status=${response.statusCode} body=${response.body}');
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          _activeOrderId = data['order_id'];
+          _activeOpenedAt = DateTime.now();
+
+          final db = await DatabaseHelper.instance.database;
+          await db.insert('orders', {
+            'id': _activeOrderId,
+            'total': 0.0,
+            'payment_type': 'Pending',
+            'created_at': _activeOpenedAt!.toIso8601String(),
+            'opened_at': _activeOpenedAt!.toIso8601String(),
+            'order_type': _activeOrderType,
+            'table_id': tableId,
+            'location_id': _activeLocationId,
+            'waiter_id': connectivity.currentUser?['id'],
+            'status': 0,
+            'daily_number': data['daily_number'],
+          });
+
+          if (tableId != null) {
+            await db.update(
+              'tables',
+              {'status': 1, 'active_order_id': _activeOrderId},
+              where: 'id = ?',
+              whereArgs: [tableId],
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('[ensureOrder] client HTTP error: $e');
       }
       return;
     }
 
-    final db = await DatabaseHelper.instance.database;
+    // Claim the order ID synchronously BEFORE any await so that concurrent calls
+    // from _syncItems and _checkAutoConfirm (both fire-and-forget from addItem)
+    // cannot both pass the '_activeOrderId != null' guard and create duplicate orders.
     final newOrderId = const Uuid().v4();
     _activeOrderId = newOrderId;
     _activeOpenedAt = DateTime.now();
     _isNewOrderSession = true;
 
+    final db = await DatabaseHelper.instance.database;
     _activeWaiterId ??= await DatabaseHelper.instance.getDefaultWaiterId();
 
     await db.insert('orders', {
@@ -508,6 +618,7 @@ class CartProvider extends ChangeNotifier {
         'total': totalAmount + roomTotal + serviceTotal,
         'waiter_id': _activeWaiterId,
         'food_total': totalAmount,
+        'room_charge': roomTotal,
         'room_total': roomTotal,
         'service_total': serviceTotal,
         'grand_total': totalAmount + roomTotal + serviceTotal,
@@ -536,13 +647,14 @@ class CartProvider extends ChangeNotifier {
               'qty': item.quantity,
               'unit': item.product.unit,
               'price': item.product.price,
+              'printed_qty': item.printedQuantity,
             },
           )
           .toList();
 
       await http.post(
         Uri.parse('${connectivity.clientBaseUrl}/orders/$_activeOrderId/items'),
-        body: jsonEncode({'items': itemsList}),
+        body: jsonEncode({'items': itemsList, 'waiter_id': _activeWaiterId}),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${connectivity.authToken}',
@@ -711,8 +823,15 @@ class CartProvider extends ChangeNotifier {
   Future<void> _checkAutoConfirm(BuildContext? context) async {
     if (context == null) return;
     try {
-      if (!hasPermission(context, 'perm_confirm_order')) {
-        await confirmTableOrder(context, null, false);
+      final connectivity = context.read<ConnectivityProvider>();
+      final role = connectivity.currentUser?['role'] ?? 'admin';
+      final autoConfirm = context.read<AppSettingsProvider>().autoConfirmOrder;
+
+      // Waiter always auto-confirms (no manual confirm button shown)
+      if (role == 'waiter' ||
+          autoConfirm ||
+          !hasPermission(context, 'perm_confirm_order')) {
+        await confirmTableOrder(context, connectivity, false);
       }
     } catch (e) {
       debugPrint("Auto-confirm error: $e");
@@ -737,8 +856,47 @@ class CartProvider extends ChangeNotifier {
     double paidAmount = 0,
     double change = 0,
     bool shouldPrint = true,
+    String? note,
   }) async {
     if (_items.isEmpty) return false;
+
+    // ── FIX 2 & 3: Provider reads BEFORE any await (BuildContext async gap lint)
+    // context.read<>() must be called synchronously before the first await.
+    final int? resolvedTableId = tableId ?? _activeTableId;
+    final int? resolvedLocationId = locationId ?? _activeLocationId;
+    final int? resolvedWaiterId = waiterId ?? _activeWaiterId;
+
+    String? safeTableName;
+    String? safeLocationName;
+    String? safeWaiterName;
+    try {
+      if (resolvedTableId != null) {
+        safeTableName = context
+            .read<TableProvider>()
+            .tables
+            .firstWhere((t) => t.id == resolvedTableId)
+            .name;
+      }
+    } catch (_) {}
+    try {
+      if (resolvedLocationId != null) {
+        safeLocationName = context
+            .read<LocationProvider>()
+            .locations
+            .firstWhere((l) => l.id == resolvedLocationId)
+            .name;
+      }
+    } catch (_) {}
+    try {
+      if (resolvedWaiterId != null) {
+        safeWaiterName = context
+            .read<WaiterProvider>()
+            .waiters
+            .firstWhere((w) => w.id == resolvedWaiterId)
+            .name;
+      }
+    } catch (_) {}
+    final double preServiceFee = calculateWaiterServiceFee(context);
 
     // Automatic kitchen printing for unconfirmed changes during checkout
     if (hasUnconfirmedChanges) {
@@ -755,7 +913,26 @@ class CartProvider extends ChangeNotifier {
 
     try {
       final db = await DatabaseHelper.instance.database;
-      await db.transaction((txn) async {
+
+      // ── FIX 1: daily_number ni transaction TASHQARISIDA olish ──────────────
+      // db.transaction() ichida _getNextDailyNumber() chaqirilsa sqflite_common_ffi
+      // da deadlock yuzaga keladi (lock kutadi, lekin hech qachon bo'shatilmaydi).
+      int? preDailyNo;
+      if (_activeOrderId != null) {
+        final existingMap = await db.query(
+          'orders',
+          columns: ['daily_number'],
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
+        if (existingMap.isNotEmpty) {
+          preDailyNo = existingMap.first['daily_number'] as int?;
+        }
+      }
+      preDailyNo ??= await _getNextDailyNumber();
+
+      // ── Transaction: faqat DB operatsiyalari, hech qanday DB.rawQuery chaqirmaydi
+      final totals = await db.transaction((txn) async {
         double roomCharge = 0;
         double totalRoomCharge = 0;
         DateTime now = DateTime.now();
@@ -788,38 +965,24 @@ class CartProvider extends ChangeNotifier {
           } else if (pricingType == 2) {
             totalRoomCharge += fixedAmount;
           } else if (pricingType == 3) {
-            totalRoomCharge += (totalAmount * servicePercentage / 100);
+            totalRoomCharge +=
+                (totalForServiceCharge * servicePercentage / 100);
           }
         }
         roomCharge = totalRoomCharge;
 
-        final double serviceFee = calculateWaiterServiceFee(context);
+        final double serviceFee = preServiceFee;
         final double foodTotal = totalAmount;
         final double grandTotal = foodTotal + roomCharge + serviceFee;
 
         if (_activeOrderId != null) {
-          // Fetch existing daily_number
-          final existingOrderMap = await txn.query(
-            'orders',
-            columns: ['daily_number'],
-            where: 'id = ?',
-            whereArgs: [orderId],
-          );
-          int? currentDailyNo;
-          if (existingOrderMap.isNotEmpty) {
-            currentDailyNo = existingOrderMap.first['daily_number'] as int?;
-          }
-          if (currentDailyNo == null) {
-            currentDailyNo = await _getNextDailyNumber();
-          }
-
           await txn.update(
             'orders',
             {
               'total': grandTotal,
               'payment_type': paymentType,
               'status': 1,
-              'waiter_id': waiterId ?? _activeWaiterId,
+              'waiter_id': resolvedWaiterId,
               'closed_at': now.toIso8601String(),
               'room_charge': roomCharge,
               'paid_amount': paidAmount,
@@ -828,13 +991,15 @@ class CartProvider extends ChangeNotifier {
               'room_total': roomCharge,
               'service_total': serviceFee,
               'grand_total': grandTotal,
-              'daily_number': currentDailyNo,
+              'daily_number': preDailyNo,
+              'note': (note != null && note.trim().isNotEmpty)
+                  ? note.trim()
+                  : null,
             },
             where: 'id = ?',
             whereArgs: [orderId],
           );
         } else {
-          final dailyNo = await _getNextDailyNumber();
           final order = Order(
             id: orderId,
             total: grandTotal,
@@ -842,7 +1007,7 @@ class CartProvider extends ChangeNotifier {
             createdAt: now,
             orderType: orderType,
             tableId: tableId,
-            waiterId: waiterId ?? _activeWaiterId,
+            waiterId: resolvedWaiterId,
             locationId: locationId,
             status: 1,
             paidAmount: paidAmount,
@@ -853,7 +1018,8 @@ class CartProvider extends ChangeNotifier {
             grandTotal: grandTotal,
             openedAt: now,
             closedAt: now,
-            dailyNumber: dailyNo,
+            dailyNumber: preDailyNo,
+            note: (note != null && note.trim().isNotEmpty) ? note.trim() : null,
           );
           await txn.insert('orders', order.toMap());
         }
@@ -885,14 +1051,6 @@ class CartProvider extends ChangeNotifier {
           );
           await txn.insert('order_items', orderItem.toMap());
           orderItems.add(orderItem);
-
-          // Inventory Management: Decrement product quantity if it exists
-          if (item.product.quantity != null) {
-            await txn.rawUpdate(
-              'UPDATE products SET quantity = quantity - ? WHERE id = ?',
-              [item.quantity, item.product.id],
-            );
-          }
         }
 
         if (tableId != null || _activeTableId != null) {
@@ -903,28 +1061,19 @@ class CartProvider extends ChangeNotifier {
             whereArgs: [orderId],
           );
         }
+
+        return {
+          'roomCharge': roomCharge,
+          'serviceFee': serviceFee,
+          'foodTotal': foodTotal,
+          'grandTotal': grandTotal,
+        };
       });
 
-      final double currentRoomCharge = orderType == 0
-          ? (await calculateRoomChargeForUI(context))
-          : 0;
-      final double currentServiceFee = calculateWaiterServiceFee(context);
-      final double currentFoodTotal = totalAmount;
-      final double currentGrandTotal =
-          currentFoodTotal + currentRoomCharge + currentServiceFee;
-
-      // Extract daily number again, since it might have been generated in the transaction
-      final dbAfter = await DatabaseHelper.instance.database;
-      final finalOrderMap = await dbAfter.query(
-        'orders',
-        columns: ['daily_number'],
-        where: 'id = ?',
-        whereArgs: [orderId],
-      );
-      int? finalDailyNo;
-      if (finalOrderMap.isNotEmpty) {
-        finalDailyNo = finalOrderMap.first['daily_number'] as int?;
-      }
+      final double currentRoomCharge = totals['roomCharge']!;
+      final double currentServiceFee = totals['serviceFee']!;
+      final double currentFoodTotal = totals['foodTotal']!;
+      final double currentGrandTotal = totals['grandTotal']!;
 
       final populatedOrder = Order(
         id: orderId,
@@ -933,9 +1082,9 @@ class CartProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
         items: orderItems,
         orderType: orderType,
-        tableId: tableId ?? _activeTableId,
-        waiterId: waiterId ?? _activeWaiterId,
-        locationId: locationId ?? _activeLocationId,
+        tableId: resolvedTableId,
+        waiterId: resolvedWaiterId,
+        locationId: resolvedLocationId,
         openedAt: _activeOpenedAt,
         closedAt: DateTime.now(),
         roomCharge: currentRoomCharge,
@@ -943,31 +1092,59 @@ class CartProvider extends ChangeNotifier {
         roomTotal: currentRoomCharge,
         serviceTotal: currentServiceFee,
         grandTotal: currentGrandTotal,
-        dailyNumber: finalDailyNo,
-        tableName: (tableId ?? _activeTableId) != null
-            ? context
-                  .read<TableProvider>()
-                  .tables
-                  .firstWhere((t) => t.id == (tableId ?? _activeTableId))
-                  .name
-            : null,
-        locationName: (locationId ?? _activeLocationId) != null
-            ? context
-                  .read<LocationProvider>()
-                  .locations
-                  .firstWhere((l) => l.id == (locationId ?? _activeLocationId))
-                  .name
-            : null,
-        waiterName: (waiterId ?? _activeWaiterId) != null
-            ? context
-                  .read<WaiterProvider>()
-                  .waiters
-                  .firstWhere((w) => w.id == (waiterId ?? _activeWaiterId))
-                  .name
-            : null,
+        dailyNumber: preDailyNo,
+        tableName: safeTableName,
+        locationName: safeLocationName,
+        waiterName: safeWaiterName,
         paidAmount: paidAmount,
         change: change,
+        note: (note != null && note.trim().isNotEmpty) ? note.trim() : null,
       );
+
+      final connectivity = context.read<ConnectivityProvider>();
+      final isClient = connectivity.mode == ConnectivityMode.client;
+
+      // 1. Process Order Payment/Inventory (Server or Local)
+      if (isClient) {
+        final paySuccess = await connectivity.payOrder(
+          orderId,
+          {
+            'payment_type': paymentType,
+            'paid_amount': paidAmount,
+            'change': change,
+            'note': note,
+          },
+          roomCharge: currentRoomCharge,
+          serviceFee: currentServiceFee,
+          foodTotal: currentFoodTotal,
+          grandTotal: currentGrandTotal,
+          waiterId: resolvedWaiterId,
+        );
+
+        if (!paySuccess) {
+          debugPrint("Server payOrder failed");
+          return false;
+        }
+      } else {
+        // Local or Server mode: Process inventory locally if enabled
+        if (context.mounted &&
+            context.read<AppSettingsProvider>().enableInventory) {
+          try {
+            await InventoryService.instance.processOrderPaid(populatedOrder);
+          } catch (e) {
+            debugPrint("Inventory processing error: $e");
+          }
+        }
+      }
+
+      // 2. Optimistic Stock Update (UI only)
+      if (context.mounted) {
+        context.read<ProductProvider>().decrementQuantities(orderItems);
+        // Sync back from server/DB for consistency
+        context.read<ProductProvider>().loadProducts(
+          connectivity: connectivity,
+        );
+      }
 
       _lastPrintError = null;
       if (shouldPrint) {
@@ -995,14 +1172,34 @@ class CartProvider extends ChangeNotifier {
 
   Future<double> calculateRoomChargeForUI(BuildContext context) async {
     final orderId = _activeOrderId;
-    if (orderId == null) return 0;
+    final currentTableId = _activeTableId;
+    // If neither order nor table is known, no charge possible
+    if (orderId == null && currentTableId == null) return 0;
     try {
       final db = await DatabaseHelper.instance.database;
-      final linkedTables = await db.query(
-        'tables',
-        where: 'active_order_id = ?',
-        whereArgs: [orderId],
-      );
+      // Include current table by id too (same as checkout) in case active_order_id
+      // is not yet written to DB for a brand-new order.
+      late List<Map<String, dynamic>> linkedTables;
+      if (orderId != null && currentTableId != null) {
+        linkedTables = await db.query(
+          'tables',
+          where: 'active_order_id = ? OR id = ?',
+          whereArgs: [orderId, currentTableId],
+        );
+      } else if (orderId != null) {
+        linkedTables = await db.query(
+          'tables',
+          where: 'active_order_id = ?',
+          whereArgs: [orderId],
+        );
+      } else {
+        // orderId is null but tableId is known — fresh order not yet in DB
+        linkedTables = await db.query(
+          'tables',
+          where: 'id = ?',
+          whereArgs: [currentTableId],
+        );
+      }
 
       double totalCharge = 0;
       final now = DateTime.now();
@@ -1032,6 +1229,26 @@ class CartProvider extends ChangeNotifier {
     return 0;
   }
 
+  /// Stol obyektidan sinxron tarzda xona narxini hisoblaydi (DB query yo'q).
+  /// CartPanel, payment dialog va temp receipt uchun ishlatiladi.
+  double calculateRoomChargeFromTable(table_model.TableModel? table) {
+    if (table == null) return 0;
+    switch (table.pricingType) {
+      case 1: // soatli
+        if (_activeOpenedAt == null) return 0;
+        final hours =
+            DateTime.now().difference(_activeOpenedAt!).inMinutes / 60.0;
+        return (hours * table.hourlyRate).roundToDouble();
+      case 2: // fiksal
+        return table.fixedAmount;
+      case 3: // xizmat foizi
+        return (totalForServiceCharge * table.servicePercentage / 100)
+            .roundToDouble();
+      default:
+        return 0;
+    }
+  }
+
   double calculateWaiterServiceFee(BuildContext context) {
     if (_activeWaiterId == null) return 0;
     try {
@@ -1056,6 +1273,13 @@ class CartProvider extends ChangeNotifier {
     return 0;
   }
 
+  /// Ofisiant buyurtmadan chiqishda itemlarni DBga saqlash uchun
+  Future<void> persistCartState([ConnectivityProvider? connectivity]) async {
+    if (_items.isEmpty && _activeOrderId == null) return;
+    await _ensureOrderExists(connectivity);
+    await _syncItems(connectivity);
+  }
+
   Future<bool> cancelOrder([ConnectivityProvider? connectivity]) async {
     if (_activeOrderId == null) return false;
 
@@ -1064,7 +1288,9 @@ class CartProvider extends ChangeNotifier {
           connectivity.mode == ConnectivityMode.client) {
         // Client mode: send cancel request to server
         final response = await http.delete(
-          Uri.parse('${connectivity.clientBaseUrl}/orders/$_activeOrderId'),
+          Uri.parse(
+            '${connectivity.clientBaseUrl}/orders/$_activeOrderId/cancel',
+          ),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer ${connectivity.authToken}',
@@ -1150,6 +1376,18 @@ class CartProvider extends ChangeNotifier {
       await _syncItems(connectivity, context);
       notifyListeners();
     }
+  }
+
+  /// Mark all current items as "preserved" so PopScope doesn't cancel the order
+  /// when navigating via pushReplacement (e.g. after moving a table).
+  void markOrderPreserved() {
+    _isNewOrderSession = false;
+    _items.forEach((_, item) {
+      if (item.quantity > 0) {
+        item.printedQuantity = item.quantity;
+      }
+    });
+    notifyListeners();
   }
 
   Future<bool> moveToTable(
@@ -1247,6 +1485,26 @@ class CartProvider extends ChangeNotifier {
     ConnectivityProvider? connectivity,
   ]) async {
     try {
+      // Client mode: send to server
+      if (connectivity != null &&
+          connectivity.mode == ConnectivityMode.client) {
+        final success = await connectivity.postRemoteData('/tables/merge', {
+          'source_table_id': sourceTableId,
+          'target_table_id': targetTableId,
+        });
+        if (success) {
+          if (_activeTableId == sourceTableId ||
+              _activeTableId == targetTableId) {
+            await loadTableOrder(
+              _activeTableId,
+              _activeLocationId,
+              connectivity,
+            );
+          }
+        }
+        return success;
+      }
+
       final db = await DatabaseHelper.instance.database;
 
       // 1. Get source and target table info
@@ -1293,9 +1551,12 @@ class CartProvider extends ChangeNotifier {
               );
 
               if (existing.isNotEmpty) {
+                final srcPrintedQty =
+                    (item['printed_qty'] as num? ?? item['qty'] as num)
+                        .toDouble();
                 await txn.rawUpdate(
-                  'UPDATE order_items SET qty = qty + ? WHERE id = ?',
-                  [item['qty'], existing.first['id']],
+                  'UPDATE order_items SET qty = qty + ?, printed_qty = printed_qty + ? WHERE id = ?',
+                  [item['qty'], srcPrintedQty, existing.first['id']],
                 );
               } else {
                 await txn.insert('order_items', {
@@ -1304,6 +1565,7 @@ class CartProvider extends ChangeNotifier {
                   'qty': item['qty'],
                   'price': item['price'],
                   'bundle_items_json': item['bundle_items_json'],
+                  'printed_qty': item['printed_qty'] ?? item['qty'],
                 });
               }
             }

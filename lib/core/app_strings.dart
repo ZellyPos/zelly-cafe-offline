@@ -331,6 +331,17 @@ class AppStrings {
   static String get permChangeTable =>
       Translations.get('perm_change_table', _lang);
 
+  // Telegram settings
+  static String get botSettings => Translations.get('bot_settings', _lang);
+  static String get tgInstructionsTitle => Translations.get('tg_instructions_title', _lang);
+  static String get tgStep1 => Translations.get('tg_step_1', _lang);
+  static String get tgStep2 => Translations.get('tg_step_2', _lang);
+  static String get tgStep3 => Translations.get('tg_step_3', _lang);
+  static String get tgStep4 => Translations.get('tg_step_4', _lang);
+  static String get invalidToken => Translations.get('invalid_token', _lang);
+  static String get invalidChatId => Translations.get('invalid_chat_id', _lang);
+  static String get botSaved => Translations.get('bot_saved', _lang);
+
   static String getUnitLabel(String? unit) {
     if (unit == null) return unitDona;
     switch (unit.toLowerCase()) {

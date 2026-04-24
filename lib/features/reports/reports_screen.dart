@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'dart:typed_data';
 import '../../providers/report_provider.dart';
 import '../../core/utils/price_formatter.dart';
 import 'widgets/filter_bar.dart';
@@ -16,8 +19,15 @@ import '../../core/app_strings.dart';
 import '../../core/telegram_service.dart';
 import 'package:intl/intl.dart';
 
-class ReportsScreen extends StatelessWidget {
+class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
+
+  @override
+  State<ReportsScreen> createState() => _ReportsScreenState();
+}
+
+class _ReportsScreenState extends State<ReportsScreen> {
+  final GlobalKey _printKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -32,9 +42,11 @@ class ReportsScreen extends StatelessWidget {
           _buildHeader(context),
           const ReportFilterBar(),
           Expanded(
-            child: FutureBuilder<Map<String, dynamic>>(
-              future: reportProvider.getDashboardStats(),
-              builder: (context, snapshot) {
+            child: RepaintBoundary(
+              key: _printKey,
+              child: FutureBuilder<Map<String, dynamic>>(
+                future: reportProvider.getDashboardStats(),
+                builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -138,6 +150,7 @@ class ReportsScreen extends StatelessWidget {
               },
             ),
           ),
+          ),
         ],
       ),
     );
@@ -204,7 +217,10 @@ class ReportsScreen extends StatelessWidget {
   void _handleTelegramSync(BuildContext context) async {
     final settings = context.read<AppSettingsProvider>();
 
-    if (settings.telegramBotToken == null || settings.telegramChatId == null) {
+    final hasToken = settings.telegramBotToken?.isNotEmpty ?? false;
+    final hasChatId = settings.telegramChatId?.isNotEmpty ?? false;
+
+    if (!hasToken || !hasChatId) {
       _showTelegramConfigDialog(context);
     } else {
       _performSync(context);
@@ -249,10 +265,39 @@ class ReportsScreen extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () async {
-              await settings.setTelegramSettings(
-                tokenController.text,
-                chatController.text,
-              );
+              final token = tokenController.text.trim();
+              final chatId = chatController.text.trim();
+
+              // Validatsiya
+              if (token.isEmpty || chatId.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Token va Chat ID bo\'sh bo\'lishi mumkin emas'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              if (!RegExp(r'^\d{8,11}:[-a-zA-Z0-9_]{35}$').hasMatch(token)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(AppStrings.invalidToken),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              if (!RegExp(r'^-?\d+$').hasMatch(chatId)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(AppStrings.invalidChatId),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              await settings.setTelegramSettings(token, chatId);
               if (context.mounted) {
                 Navigator.pop(context);
                 _performSync(context);
@@ -291,28 +336,47 @@ class ReportsScreen extends StatelessWidget {
         date: dateStr,
       );
 
-      // Web View URL if server is running
+      // Web View URL — global tunnel ustuvor, bo'lmasa local IP
       String? webAppUrl;
-      if (connectivity.isServerRunning && connectivity.serverIp != null) {
-        // We use port from connectivity provider
-        webAppUrl =
-            "http://${connectivity.serverIp}:${connectivity.port}/reports/view";
+      final globalUrl = settings.globalTunnelUrl;
+      if (globalUrl != null && globalUrl.isNotEmpty) {
+        webAppUrl = '$globalUrl/reports/view';
+      } else if (connectivity.isServerRunning && connectivity.serverIp != null) {
+        webAppUrl = 'http://${connectivity.serverIp}:${connectivity.port}/reports/view';
       }
 
-      final success = await TelegramService.sendMessage(
+      // Capture Screenshot
+      Uint8List? imageBytes;
+      try {
+        if (_printKey.currentContext != null) {
+          RenderRepaintBoundary boundary = _printKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+          // Capture logic needs a tiny delay to ensure proper rendering sometimes, but await is fine.
+          ui.Image image = await boundary.toImage(pixelRatio: 2.0);
+          ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+          if (byteData != null) {
+            imageBytes = byteData.buffer.asUint8List();
+          }
+        }
+      } catch (e) {
+        debugPrint("Error taking screenshot: $e");
+      }
+
+      final errorStr = await TelegramService.sendMessage(
         token: settings.telegramBotToken!,
         chatId: settings.telegramChatId!,
         text: summary,
         webAppUrl: webAppUrl,
+        imageBytes: imageBytes,
       );
 
       if (context.mounted) {
+        final success = errorStr == null;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               success
                   ? AppStrings.reportSentTelegram
-                  : AppStrings.telegramError,
+                  : '${AppStrings.telegramError}\n($errorStr)',
             ),
             backgroundColor: success ? Colors.green : Colors.red,
           ),

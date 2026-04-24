@@ -10,14 +10,20 @@ class AppSettingsProvider extends ChangeNotifier {
   String _restaurantName = 'ZELLY';
   String? _telegramBotToken;
   String? _telegramChatId;
+  String? _globalTunnelUrl;
   ThemeMode _themeMode = ThemeMode.light;
+  bool _autoConfirmOrder = false;
+  bool _enableInventory = false;
 
   String get loginPin => _loginPin;
   String? get brandImagePath => _brandImagePath;
   String get restaurantName => _restaurantName;
   String? get telegramBotToken => _telegramBotToken;
   String? get telegramChatId => _telegramChatId;
+  String? get globalTunnelUrl => _globalTunnelUrl;
   ThemeMode get themeMode => _themeMode;
+  bool get autoConfirmOrder => _autoConfirmOrder;
+  bool get enableInventory => _enableInventory;
 
   Future<void> loadSettings() async {
     final db = DatabaseHelper.instance;
@@ -75,6 +81,114 @@ class AppSettingsProvider extends ChangeNotifier {
       );
     }
 
+    final autoConfirmRes = await db.queryByColumn(
+      'settings',
+      'key',
+      'auto_confirm_order',
+    );
+    if (autoConfirmRes.isNotEmpty) {
+      _autoConfirmOrder = autoConfirmRes.first['value'] == 'true';
+    }
+
+    final inventoryRes = await db.queryByColumn(
+      'settings',
+      'key',
+      'enable_inventory',
+    );
+    if (inventoryRes.isNotEmpty) {
+      _enableInventory = inventoryRes.first['value'] == 'true';
+    }
+
+    final tunnelRes = await db.queryByColumn(
+      'settings',
+      'key',
+      'global_tunnel_url',
+    );
+    if (tunnelRes.isNotEmpty) {
+      _globalTunnelUrl = tunnelRes.first['value'];
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> setGlobalTunnelUrl(String? url) async {
+    final db = DatabaseHelper.instance;
+    final cleanUrl = url?.trim();
+    final existing = await db.queryByColumn(
+      'settings',
+      'key',
+      'global_tunnel_url',
+    );
+    if (cleanUrl == null || cleanUrl.isEmpty) {
+      // URL o'chirildi
+      if (existing.isNotEmpty) {
+        await db.delete('settings', 'key = ?', ['global_tunnel_url']);
+      }
+      _globalTunnelUrl = null;
+    } else {
+      if (existing.isNotEmpty) {
+        await db.update(
+          'settings',
+          {'value': cleanUrl},
+          'key = ?',
+          ['global_tunnel_url'],
+        );
+      } else {
+        await db.insert('settings', {
+          'key': 'global_tunnel_url',
+          'value': cleanUrl,
+        });
+      }
+      _globalTunnelUrl = cleanUrl;
+    }
+    notifyListeners();
+  }
+
+  Future<void> setAutoConfirmOrder(bool value) async {
+    final db = DatabaseHelper.instance;
+    final existing = await db.queryByColumn(
+      'settings',
+      'key',
+      'auto_confirm_order',
+    );
+    if (existing.isNotEmpty) {
+      await db.update(
+        'settings',
+        {'value': value.toString()},
+        'key = ?',
+        ['auto_confirm_order'],
+      );
+    } else {
+      await db.insert('settings', {
+        'key': 'auto_confirm_order',
+        'value': value.toString(),
+      });
+    }
+    _autoConfirmOrder = value;
+    notifyListeners();
+  }
+
+  Future<void> setEnableInventory(bool value) async {
+    final db = DatabaseHelper.instance;
+    final existing = await db.queryByColumn(
+      'settings',
+      'key',
+      'enable_inventory',
+    );
+    if (existing.isNotEmpty) {
+      await db.update(
+        'settings',
+        {'value': value.toString()},
+        'key = ?',
+        ['enable_inventory'],
+      );
+    } else {
+      await db.insert('settings', {
+        'key': 'enable_inventory',
+        'value': value.toString(),
+      });
+    }
+    _enableInventory = value;
     notifyListeners();
   }
 
@@ -98,7 +212,7 @@ class AppSettingsProvider extends ChangeNotifier {
   Future<void> setTelegramSettings(String? token, String? chatId) async {
     final db = DatabaseHelper.instance;
 
-    if (token != null) {
+    if (token != null && token.isNotEmpty) {
       final existing = await db.queryByColumn(
         'settings',
         'key',
@@ -120,7 +234,7 @@ class AppSettingsProvider extends ChangeNotifier {
       _telegramBotToken = token;
     }
 
-    if (chatId != null) {
+    if (chatId != null && chatId.isNotEmpty) {
       final existing = await db.queryByColumn(
         'settings',
         'key',

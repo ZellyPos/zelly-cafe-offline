@@ -216,12 +216,13 @@ class MainLayoutState extends State<MainLayout> {
                             AppStrings.telegramNav,
                             sidebarFg,
                           ),
-                          _buildSidebarItem(
-                            16,
-                            Icons.warehouse_outlined,
-                            'Ombor',
-                            sidebarFg,
-                          ),
+                          if (context.read<AppSettingsProvider>().enableInventory)
+                            _buildSidebarItem(
+                              16,
+                              Icons.warehouse_outlined,
+                              'Ombor',
+                              sidebarFg,
+                            ),
                         ],
 
                         // Cashier - limited access
@@ -326,9 +327,7 @@ class MainLayoutState extends State<MainLayout> {
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
                 layoutBuilder: (child, previousChildren) {
-                  return Stack(
-                    children: [...previousChildren, if (child != null) child],
-                  );
+                  return Stack(children: [...previousChildren, ?child]);
                 },
                 transitionBuilder: (Widget child, Animation<double> animation) {
                   return FadeTransition(opacity: animation, child: child);
@@ -480,7 +479,7 @@ class MainLayoutState extends State<MainLayout> {
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
-          color: color.withOpacity(0.3),
+          color: color.withOpacity(0.45),
           fontSize: 10,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.5,
@@ -517,7 +516,7 @@ class MainLayoutState extends State<MainLayout> {
                   icon,
                   color: active
                       ? color
-                      : color.withOpacity(_isExpanded ? 0.4 : 0.6),
+                      : color.withOpacity(_isExpanded ? 0.55 : 0.7),
                   size: 24,
                 ),
                 if (_isExpanded) ...[
@@ -526,7 +525,7 @@ class MainLayoutState extends State<MainLayout> {
                     child: Text(
                       label,
                       style: TextStyle(
-                        color: active ? color : color.withOpacity(0.5),
+                        color: active ? color : color.withOpacity(0.65),
                         fontSize: 14,
                         fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                         letterSpacing: 0,
@@ -639,7 +638,7 @@ class MainLayoutState extends State<MainLayout> {
                   _isExpanded
                       ? Icons.keyboard_double_arrow_left
                       : Icons.keyboard_double_arrow_right,
-                  color: color.withOpacity(0.3),
+                  color: color.withOpacity(0.5),
                   size: 20,
                 ),
                 onPressed: () => setState(() => _isExpanded = !_isExpanded),

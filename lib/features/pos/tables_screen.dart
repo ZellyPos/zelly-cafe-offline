@@ -68,7 +68,6 @@ class _TablesScreenState extends State<TablesScreen> {
     final connectivity = context.watch<ConnectivityProvider>();
     final currentUser = connectivity.currentUser;
     final role = currentUser?['role'] ?? 'admin';
-    final userId = currentUser?['id'];
 
     if (_selectedLocationId == null && locationProvider.locations.isNotEmpty) {
       _selectedLocationId = locationProvider.locations.first.id;
@@ -79,22 +78,17 @@ class _TablesScreenState extends State<TablesScreen> {
       (t) => t.locationId == _selectedLocationId,
     );
 
-    // Filter for waiters - show only their tables and empty tables
-    if (role == 'waiter' && userId != null) {
-      filteredTables = filteredTables.where((t) {
-        // Show empty tables (available for waiter to open)
-        if (t.status == 0) return true;
-        // Show occupied tables assigned to this waiter
-        if (t.status == 1 && t.activeOrder?.waiterId == userId) return true;
-        return false;
-      });
-    }
-
     final tables = filteredTables.toList();
 
     // Map of activeOrderId -> List of Tables in that order (Joined tables)
-    final joinGroups = <String, List<TableModel>>{};
+    // Deduplicate by table ID first to prevent duplicate rows (e.g. from stale DB
+    // entries) from incorrectly marking a table as merged with itself.
+    final uniqueTables = <int, TableModel>{};
     for (var t in tableProvider.tables) {
+      if (t.id != null) uniqueTables[t.id!] = t;
+    }
+    final joinGroups = <String, List<TableModel>>{};
+    for (var t in uniqueTables.values) {
       if (t.activeOrderId != null) {
         joinGroups.putIfAbsent(t.activeOrderId!, () => []).add(t);
       }
@@ -239,7 +233,7 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   Widget _buildSaboyButton(BuildContext context) {
-    return Container(
+    return SizedBox(
       height: 52,
       child: ElevatedButton.icon(
         onPressed: () {
@@ -278,10 +272,25 @@ class _TablesScreenState extends State<TablesScreen> {
     final isOccupied = table.status == 1;
     final info = table.activeOrder;
     final bool isJoined = joinedWith != null && joinedWith.length > 1;
+    final connectivity = context.read<ConnectivityProvider>();
+    final role = connectivity.currentUser?['role'] ?? 'admin';
+    final userId = connectivity.currentUser?['id'];
+    final bool isBlockedForWaiter = role == 'waiter' &&
+        isOccupied &&
+        table.activeOrder?.waiterId != null &&
+        table.activeOrder?.waiterId != userId;
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.cardTheme.color,
+        color: isBlockedForWaiter
+            ? (theme.brightness == Brightness.dark
+                ? const Color(0xFF1A1A2E)
+                : const Color(0xFFF8FAFC))
+            : isOccupied
+                ? (theme.brightness == Brightness.dark
+                    ? const Color(0xFF2D1B1B)
+                    : const Color(0xFFFFF5F5))
+                : theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppTheme.borderRadius),
         boxShadow: AppTheme.softShadow,
       ),
@@ -314,7 +323,9 @@ class _TablesScreenState extends State<TablesScreen> {
                     if (isJoined)
                       _buildJoinBadge()
                     else
-                      _buildStatusBadge(isOccupied),
+                      isBlockedForWaiter
+                          ? _buildLockedBadge()
+                          : _buildStatusBadge(isOccupied),
                   ],
                 ),
                 if (isJoined)
@@ -469,6 +480,31 @@ class _TablesScreenState extends State<TablesScreen> {
     );
   }
 
+  Widget _buildLockedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(Icons.lock_outline_rounded, size: 11, color: Color(0xFF94A3B8)),
+          SizedBox(width: 4),
+          Text(
+            'Band',
+            style: TextStyle(
+              color: Color(0xFF94A3B8),
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildViewToggle(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -528,6 +564,24 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   void _handleTableTap(BuildContext context, TableModel table) {
+    final connectivity = context.read<ConnectivityProvider>();
+    final role = connectivity.currentUser?['role'] ?? 'admin';
+    final userId = connectivity.currentUser?['id'];
+
+    // Block waiter from entering another waiter's occupied table
+    if (role == 'waiter' &&
+        table.status == 1 &&
+        table.activeOrder?.waiterId != null &&
+        table.activeOrder?.waiterId != userId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu stol boshqa ofitsiantga tegishli, kira olmaysiz'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context)
         .push(
           MaterialPageRoute(

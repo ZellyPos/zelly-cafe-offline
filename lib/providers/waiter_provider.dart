@@ -23,6 +23,21 @@ class WaiterProvider with ChangeNotifier {
           connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
         final remoteData = await connectivity.getRemoteData('/waiters');
         data = List<Map<String, dynamic>>.from(remoteData);
+
+        // Sync to local DB
+        final db = await DatabaseHelper.instance.database;
+        await db.transaction((txn) async {
+          await txn.delete('waiters');
+          for (var item in data) {
+            final waiterForDb = Map<String, dynamic>.from(item);
+            // permissions is a list from API, but a string in DB
+            if (waiterForDb['permissions'] is List) {
+              waiterForDb['permissions'] =
+                  (waiterForDb['permissions'] as List).join(',');
+            }
+            await txn.insert('waiters', waiterForDb);
+          }
+        });
       } else {
         data = await DatabaseHelper.instance.queryAll('waiters');
       }

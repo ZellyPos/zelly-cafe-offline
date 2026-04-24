@@ -432,10 +432,13 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     List<String> selectedPermissions = List.from(waiter?.permissions ?? []);
 
     final List<Map<String, String>> availablePermissions = [
-      {'id': 'delete_item', 'label': AppStrings.permDeleteItem},
-      {'id': 'print_receipt', 'label': AppStrings.permPrintReceipt},
-      {'id': 'edit_price', 'label': AppStrings.permEditPrice},
-      {'id': 'change_table', 'label': AppStrings.permChangeTable},
+      {'id': 'perm_confirm_order', 'label': 'Buyurtmani tasdiqlash'},
+      {'id': 'delete_item', 'label': 'Taomni o\'chirish'},
+      {'id': 'reduce_item', 'label': 'Miqdorni kamaytirish'},
+      {'id': 'print_receipt', 'label': 'Chek chiqarish'},
+      {'id': 'perm_edit_price', 'label': 'Narxni o\'zgartirish'},
+      {'id': 'perm_manage_tables', 'label': 'Stol almashtirish'},
+      {'id': 'perm_checkout', 'label': 'Hisob-kitob qilish'},
     ];
 
     showDialog(
@@ -579,7 +582,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                           if (!isKassa) ...[
                             const SizedBox(height: 16),
                             DropdownButtonFormField<int>(
-                              value: selectedType,
+                              initialValue: selectedType,
                               dropdownColor: theme.colorScheme.surface,
                               style: TextStyle(
                                 color: theme.colorScheme.onSurface,
@@ -656,7 +659,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                                   () => isActive = val ? 1 : 0,
                                 ),
                                 contentPadding: EdgeInsets.zero,
-                                activeColor: theme.colorScheme.primary,
+                                activeThumbColor: theme.colorScheme.primary,
                               ),
                             ),
 
@@ -748,8 +751,9 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                           flex: 2,
                           child: ElevatedButton(
                             onPressed: () {
-                              if (nameController.text.isEmpty && !isKassa)
+                              if (nameController.text.isEmpty && !isKassa) {
                                 return;
+                              }
                               final newWaiter = Waiter(
                                 id: waiter?.id,
                                 name: nameController.text,

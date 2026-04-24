@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:print_usb/print_usb.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/order.dart';
 import '../models/printer_settings.dart';
 import '../models/receipt_settings.dart';
@@ -18,14 +19,36 @@ class PrintingService {
   static const int _maxChars = 48;
   // Dynamic margin will be passed to helper functions
 
-  /// Loads latest settings directly from DB to ensure sync.
+  /// Loads the receipt printer for THIS device.
+  /// Uses SharedPreferences to remember per-device selection.
+  /// Falls back to the first printer if no selection saved.
   static Future<PrinterSettings> _loadLatestSettings() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      final res = await db.query('printers', limit: 1);
-      if (res.isNotEmpty) {
-        return PrinterSettings.fromMap(res.first);
+      final prefs = await SharedPreferences.getInstance();
+      final selectedId = prefs.getInt('selected_receipt_printer_id');
+
+      if (selectedId != null) {
+        final res = await db.query(
+          'printers',
+          where: 'id = ?',
+          whereArgs: [selectedId],
+        );
+        if (res.isNotEmpty) return PrinterSettings.fromMap(res.first);
       }
+
+      // Check for is_main printers first as fallback
+      final mainPrinters = await db.query('printers', where: 'is_main = 1');
+      if (mainPrinters.isNotEmpty) {
+        return PrinterSettings.fromMap(mainPrinters.first);
+      }
+
+      // Fallback: first printer with no categories (receipt printer)
+      final allPrinters = await db.query('printers');
+      if (allPrinters.isNotEmpty) {
+        return PrinterSettings.fromMap(allPrinters.first);
+      }
+
       // Fallback to old settings table
       final oldRes = await db.query('settings');
       if (oldRes.isNotEmpty) {
@@ -185,6 +208,38 @@ class PrintingService {
 
       bytes += generator.hr();
 
+      // Breakdown
+      final double foodTotal = order.foodTotal > 0
+          ? order.foodTotal
+          : (order.total - order.roomCharge - order.serviceTotal);
+
+      bytes += generator.text(
+        _format2Col('Taomlar:', PriceFormatter.format(foodTotal)),
+      );
+
+      if (order.serviceTotal > 0) {
+        bytes += generator.text(
+          _format2Col('Xizmat haqi:', PriceFormatter.format(order.serviceTotal)),
+        );
+      }
+
+      if (order.roomTotal > 0) {
+        bytes += generator.text(
+          _format2Col('Xona/Stol:', PriceFormatter.format(order.roomTotal)),
+        );
+      }
+
+      bytes += generator.hr();
+
+      bytes += generator.text(
+        'JAMI: ${PriceFormatter.format(order.total)}',
+        styles: const PosStyles(
+          bold: true,
+          align: PosAlign.right,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+        ),
+      );
       bytes += generator.feed(3);
       bytes += generator.cut();
 
@@ -490,23 +545,66 @@ class PrintingService {
     return lines;
   }
 
+  static Future<List<PrinterSettings>> _loadMainPrinters() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final res = await db.query('printers', where: 'is_main = 1');
+      if (res.isNotEmpty) {
+        return res.map((m) => PrinterSettings.fromMap(m)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error loading main printers: $e');
+    }
+    // Fallback to the single latest settings if no main printers defined
+    return [await _loadLatestSettings()];
+  }
+
   // ------------------------------------
 
   static Future<bool> printEscPosBytes({
     required List<int> bytes,
     PrinterSettings? settings,
   }) async {
-    final effectiveSettings = settings ?? await _loadLatestSettings();
-    if (effectiveSettings.type == PrinterType.network) {
+    if (settings != null) {
+      try {
+        return await _sendToSpecificPrinter(bytes, settings);
+      } catch (e) {
+        debugPrint('Print error for specific printer: $e');
+        return false;
+      }
+    }
+
+    final printers = await _loadMainPrinters();
+    
+    // Print to all printers in parallel
+    final results = await Future.wait(
+      printers.map((p) async {
+        try {
+          return await _sendToSpecificPrinter(bytes, p);
+        } catch (e) {
+          debugPrint('Print error for printer ${p.displayName}: $e');
+          return false;
+        }
+      }),
+    );
+
+    return results.any((success) => success);
+  }
+
+  static Future<bool> _sendToSpecificPrinter(
+    List<int> bytes,
+    PrinterSettings settings,
+  ) async {
+    if (settings.type == PrinterType.network) {
       return await _printNetwork(
         bytes,
-        effectiveSettings.ipAddress,
-        effectiveSettings.port,
+        settings.ipAddress,
+        settings.port,
       );
-    } else if (effectiveSettings.type == PrinterType.windows) {
-      return await _printWindowsRaw(bytes, effectiveSettings.printerName);
-    } else if (effectiveSettings.type == PrinterType.usb_legacy) {
-      return await _printUsbLegacy(bytes, effectiveSettings.printerName);
+    } else if (settings.type == PrinterType.windows) {
+      return await _printWindowsRaw(bytes, settings.printerName);
+    } else if (settings.type == PrinterType.usb_legacy) {
+      return await _printUsbLegacy(bytes, settings.printerName);
     }
     return false;
   }
@@ -569,44 +667,33 @@ class PrintingService {
         addInfoLine(rSettings.phoneNumber);
       }
 
+      // 1. DATE & ORDER INFO (NEW FORMAT)
+      bytes += generator.text(
+        _padLine(
+          'Sana: ${DateFormat('dd-MM-yyyy HH:mm').format(order.createdAt)}',
+          rSettings.horizontalMargin,
+        ),
+      );
+
+      bytes += generator.text(
+        _padLine(
+          'Buyurtma ID: #${order.id.substring(0, 8).toUpperCase()}',
+          rSettings.horizontalMargin,
+        ),
+      );
+
       if (order.dailyNumber != null) {
         bytes += generator.text(
           _padLine(
-            _cleanText('Buyurtma №: ${order.dailyNumber}'),
+            'Buyurtma raqam: ${order.dailyNumber}',
             rSettings.horizontalMargin,
           ),
-          styles: const PosStyles(align: PosAlign.left, bold: true),
+          styles: const PosStyles(bold: true),
         );
       }
 
-      bytes += generator.feed(1);
-
-      // Date & Time
-      if (rSettings.showDate) {
-        bytes += generator.text(
-          _format2Col(
-            'Sana: ${DateFormat('yyyy-MM-dd').format(order.createdAt)}',
-            'Vaqt: ${DateFormat('HH:mm').format(order.createdAt)}',
-            margin: rSettings.horizontalMargin,
-          ),
-          styles: const PosStyles(align: PosAlign.left),
-        );
-      }
-
-      if (rSettings.showOrderNumber) {
-        bytes += generator.text(
-          _centerLine(
-            'Buyurtma: #${order.id.substring(0, 8).toUpperCase()}',
-            margin: rSettings.horizontalMargin,
-          ),
-          styles: const PosStyles(align: PosAlign.left, bold: true),
-        );
-      }
-      bytes += generator.hr();
-
-      // 2. ORDER CONTEXT
       if (order.orderType == 0) {
-        if (order.locationName != null && rSettings.showTable) {
+        if (order.locationName != null) {
           bytes += generator.text(
             _padLine(
               'Joy: ${_cleanText(order.locationName!)}',
@@ -614,30 +701,30 @@ class PrintingService {
             ),
           );
         }
-        if (order.tableName != null && rSettings.showTable) {
-          bytes += generator.text(
-            _cleanText(
-              'Stol: ${order.tableName!}',
-            ), // Large font, kept standard center
-            styles: const PosStyles(
-              align: PosAlign.center,
-              height: PosTextSize.size2,
-              width: PosTextSize.size2,
-              bold: true,
-            ),
-          );
-        }
-        if (order.waiterName != null && rSettings.showWaiter) {
+        if (order.tableName != null) {
           bytes += generator.text(
             _padLine(
-              'Ofitsiant: ${_cleanText(order.waiterName!)}',
+              'Stol: ${order.tableName!}',
               rSettings.horizontalMargin,
             ),
+            styles: const PosStyles(bold: true),
           );
         }
+        
+        // --- ADD WAITER/CASHIER INFO ---
+        final waiterInfo = (order.waiterName != null && order.waiterName!.isNotEmpty)
+            ? 'Ofitsiant: ${order.waiterName!}'
+            : 'Kassir';
+        
+        bytes += generator.text(
+          _padLine(
+            _cleanText(waiterInfo),
+            rSettings.horizontalMargin,
+          ),
+        );
       } else {
         bytes += generator.text(
-          _cleanText('SABOY'),
+          'SABOY',
           styles: const PosStyles(
             align: PosAlign.left,
             bold: true,
@@ -832,7 +919,19 @@ class PrintingService {
         bytes += generator.hr();
       }
 
-      // 7. FOOTER
+      // 7. NOTE (izoh)
+      if (order.note != null && order.note!.isNotEmpty) {
+        bytes += generator.hr();
+        bytes += generator.text(
+          _padLine('Izoh:', rSettings.horizontalMargin),
+          styles: const PosStyles(bold: true),
+        );
+        bytes += generator.text(
+          _padLine(_cleanText(order.note!), rSettings.horizontalMargin),
+        );
+      }
+
+      // 8. FOOTER
       if (rSettings.showFooter && rSettings.footerMessage.isNotEmpty) {
         bytes += generator.text(
           _centerLine(
@@ -1686,7 +1785,7 @@ class PrintingService {
             : createdAtRaw;
 
         bytes += generator.text(
-          _padLine(_cleanText('$displayId'), rSettings.horizontalMargin),
+          _padLine(_cleanText(displayId), rSettings.horizontalMargin),
           styles: const PosStyles(bold: true),
         );
         bytes += generator.text(

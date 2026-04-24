@@ -25,12 +25,19 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
   String _paidAmountStr = '';
   String _paymentType = 'Cash'; // Cash or Card
   bool _shouldPrintReceipt = true;
+  final TextEditingController _noteController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     // Auto-fill with total amount by default
     _paidAmountStr = widget.total.toInt().toString();
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
   }
 
   double get _paidAmount {
@@ -73,22 +80,27 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final pad = MediaQuery.of(context).size.width <= 1100 ? 16.0 : 24.0;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
-        padding: EdgeInsets.all(
-          MediaQuery.of(context).size.width <= 1100 ? 16 : 24,
-        ),
-        width: MediaQuery.of(context).size.width * 0.9,
-        constraints: const BoxConstraints(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
           maxWidth: 900,
-        ), // Slightly wider to fit 3 buttons
+          maxHeight: MediaQuery.of(context).size.height * 0.92,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            // Scrollable content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(pad, pad, pad, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                 // Left Side: Payment Info
                 Expanded(
                   flex: 1,
@@ -113,9 +125,9 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
+                          color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
+                          border: Border.all(color: Theme.of(context).dividerColor),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,8 +148,8 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                                 color:
                                     (_paymentType == 'Card' ||
                                         _paymentType == 'Terminal')
-                                    ? Colors.grey
-                                    : Colors.black,
+                                    ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)
+                                    : Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                           ],
@@ -148,10 +160,10 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.05),
+                          color: const Color(0xFF10B981).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.green.withOpacity(0.2),
+                            color: const Color(0xFF10B981).withValues(alpha: 0.25),
                           ),
                         ),
                         child: Row(
@@ -199,6 +211,23 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                         ],
                       ),
                       const SizedBox(height: 24),
+                      // Izoh maydoni
+                      TextField(
+                        controller: _noteController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Izoh (ixtiyoriy)',
+                          hintText: 'Buyurtma haqida eslatma...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                       SwitchListTile(
                         title: const Text(
                           "Chek chiqarish",
@@ -271,58 +300,64 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 32),
-            // Bottom Action
-            Row(
-              children: [
-                Expanded(
-                  flex: 1,
-                  child: SizedBox(
-                    height: 64,
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.red, width: 2),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                  ],
+                ),
+              ),
+            ),
+            // Sticky action buttons — always visible, outside scroll
+            Padding(
+              padding: EdgeInsets.fromLTRB(pad, 16, pad, pad),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: SizedBox(
+                      height: 64,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.red, width: 2),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
-                      ),
-                      child: const Text(
-                        "Ortga",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red,
+                        child: const Text(
+                          "Ortga",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 1,
-                  child: SizedBox(
-                    height: 64,
-                    child: ElevatedButton(
-                      onPressed: _handlePaymentValidation,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.secondaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 1,
+                    child: SizedBox(
+                      height: 64,
+                      child: ElevatedButton(
+                        onPressed: _handlePaymentValidation,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.secondaryColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
                         ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        "To'lovni yakunlash",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                        child: const Text(
+                          "To'lovni yakunlash",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -355,7 +390,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 18, color: Colors.black87),
+          style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurface),
         ),
         Text(
           value,
@@ -393,7 +428,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: AppTheme.primaryColor.withOpacity(0.3),
+                      color: AppTheme.primaryColor.withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -425,7 +460,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
 
   Widget _buildNumpadBtn(String val, {Color? color, Color? textColor}) {
     return Material(
-      color: color ?? Colors.grey.shade100,
+      color: color ?? Theme.of(context).colorScheme.surfaceContainerHighest,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () => _onNumpadPressed(val),
@@ -436,7 +471,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
-              color: textColor ?? Colors.black87,
+              color: textColor ?? Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -458,7 +493,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                       : () => setState(() => _paidAmountStr = a.toString()),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: BorderSide(color: Colors.grey.shade300),
+                    side: BorderSide(color: Theme.of(context).dividerColor),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -467,7 +502,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                     PriceFormatter.format(a.toDouble()),
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.blueGrey.shade700,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -490,6 +525,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
       paidAmount: _paymentType == 'Cash' ? _paidAmount : widget.total,
       change: _paymentType == 'Cash' ? _change : 0.0,
       shouldPrint: _shouldPrintReceipt,
+      note: _noteController.text,
     );
 
     if (mounted) {
@@ -507,14 +543,6 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
           );
         } else {
           // Success
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                "Buyurtma muvaffaqiyatli yakunlandi va chek chiqarildi!",
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
         }
         Navigator.pop(context, true);
       } else {

@@ -28,6 +28,31 @@ class TableProvider extends ChangeNotifier {
           connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
         final remoteData = await connectivity.getRemoteData('/tables/summary');
         data = List<Map<String, dynamic>>.from(remoteData);
+
+        // Sync to local DB for components that depend on it
+        final db = await DatabaseHelper.instance.database;
+        await db.transaction((txn) async {
+          await txn.delete('tables');
+          for (var item in data) {
+            final tableForDb = {
+              'id': item['id'],
+              'location_id': item['location_id'],
+              'name': item['name'],
+              'status': item['status'],
+              'pricing_type': item['pricing_type'],
+              'hourly_rate': item['hourly_rate'],
+              'fixed_amount': item['fixed_amount'],
+              'active_order_id': item['active_order_id'],
+              'x': item['x'],
+              'y': item['y'],
+              'width': item['width'],
+              'height': item['height'],
+              'shape': item['shape'],
+              'service_percentage': item['service_percentage'],
+            };
+            await txn.insert('tables', tableForDb);
+          }
+        });
       } else {
         final db = await DatabaseHelper.instance.database;
         data = await db.rawQuery('''
@@ -85,7 +110,11 @@ class TableProvider extends ChangeNotifier {
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
       await connectivity.postRemoteData('/tables', table.toMap());
     } else {
-      await DatabaseHelper.instance.update('tables', table.toMap(), 'id = ?', [
+      // active_order_id ni o'zgartirmaymiz — bu faqat buyurtma ochilganda/yopilganda yangilanadi.
+      // Aks holda admin stol sozlamalarini o'zgartirganda aktiv buyurtma bog'liqligi o'chib ketadi.
+      final updateMap = Map<String, dynamic>.from(table.toMap())
+        ..remove('active_order_id');
+      await DatabaseHelper.instance.update('tables', updateMap, 'id = ?', [
         table.id,
       ]);
     }

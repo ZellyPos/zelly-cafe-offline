@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -35,7 +34,7 @@ class UpdateInfo {
 }
 
 class UpdateService {
-  static const String _versionUrl = 'https://your-server.com/version.json';
+  // static const String _versionUrl = 'https://your-server.com/version.json';
   static const String _updateCheckKey = 'last_update_check';
   static const Duration _checkInterval = Duration(
     hours: 1,
@@ -55,38 +54,7 @@ class UpdateService {
   }
 
   static Future<UpdateInfo?> checkForUpdates() async {
-    try {
-      if (!await shouldCheckForUpdates()) return null;
-
-      // Python FastAPI serverga POST request
-      final response = await http
-          .post(
-            Uri.parse('https://your-server.com/check'),
-            headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': 'ZellyPOS/${await _getCurrentVersion()}',
-            },
-            body: json.encode({
-              'current_version': await _getCurrentVersion(),
-              'platform': Platform.operatingSystem,
-              'architecture': 'x64',
-            }),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body) as Map<String, dynamic>;
-
-        await markUpdateChecked();
-
-        if (data['update_available'] == true && data['update_info'] != null) {
-          final updateInfo = UpdateInfo.fromJson(data['update_info']);
-          return updateInfo;
-        }
-      }
-    } catch (e) {
-      debugPrint('Update check failed: $e');
-    }
+    // Update server sozlanmagan — tekshiruv o'chirilgan
     return null;
   }
 

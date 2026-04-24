@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/connectivity_provider.dart';
+import '../../../providers/app_settings_provider.dart';
 import '../../../core/app_strings.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../models/table.dart';
@@ -94,11 +95,8 @@ class CartPanelWidget extends StatelessWidget {
                       size: 20,
                     ),
                   ),
-                  onPressed: () async {
-                    if (await cartProvider.checkPermission(
-                      context,
-                      'delete_item',
-                    )) {
+                  onPressed: () {
+                    if (cartProvider.hasPermission(context, 'delete_item')) {
                       cartProvider.clearCart(
                         context.read<ConnectivityProvider>(),
                         context,
@@ -126,7 +124,7 @@ class CartPanelWidget extends StatelessWidget {
                   Icon(
                     Icons.shopping_cart_outlined,
                     size: 64,
-                    color: const Color(0xFFF1F5F9),
+                    color: const Color(0xFFCBD5E1),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -213,7 +211,7 @@ class CartPanelWidget extends StatelessWidget {
           final double newPrice = result['price'];
 
           if (newQty < item.quantity) {
-            final permission = newQty == 0 ? 'perm_delete_item' : 'reduce_item';
+            final permission = newQty == 0 ? 'delete_item' : 'reduce_item';
             if (!await cartProvider.checkPermission(context, permission)) {
               return;
             }
@@ -284,8 +282,8 @@ class CartPanelWidget extends StatelessWidget {
                     _buildQtyBtn(context, Icons.remove_rounded, () async {
                       final currentQty = item.quantity;
                       final permission = currentQty <= 1
-                          ? 'delete_item'
-                          : 'reduce_item';
+                          ? 'perm_delete_item'
+                          : 'perm_delete_item';
                       if (!await cartProvider.checkPermission(
                         context,
                         permission,
@@ -331,7 +329,7 @@ class CartPanelWidget extends StatelessWidget {
                     fontSize: 14,
                     color: isCancelled
                         ? const Color(0xFFEF4444)
-                        : theme.colorScheme.primary,
+                        : const Color(0xFF10B981),
                   ),
                 ),
               ],
@@ -399,64 +397,21 @@ class CartPanelWidget extends StatelessWidget {
     BuildContext context,
     CartProvider cartProvider,
   ) {
+    // Sinxron hisoblash — DB query yo'q, table obyektidan to'g'ridan-to'g'ri
+    final roomCharge = cartProvider.calculateRoomChargeFromTable(table);
+    final serviceFee = cartProvider.calculateWaiterServiceFee(context);
+    final grandTotal = cartProvider.totalAmount + roomCharge + serviceFee;
+
     return Column(
       children: [
         _buildRow(context, "Taomlar jami", cartProvider.totalAmount),
-        if (orderType == 0 && table != null)
-          FutureBuilder<double>(
-            future: cartProvider.calculateRoomChargeForUI(context),
-            builder: (context, snapshot) {
-              final roomCharge = snapshot.data ?? 0;
-              final serviceFee = cartProvider.calculateWaiterServiceFee(
-                context,
-              );
-              final grandTotal =
-                  cartProvider.totalAmount + roomCharge + serviceFee;
-              return Column(
-                children: [
-                  if (roomCharge > 0)
-                    _buildRow(context, "Xona / Stol", roomCharge),
-                  if (serviceFee > 0)
-                    _buildRow(context, "Xizmat haqi", serviceFee),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(color: Color(0xFFF1F5F9)),
-                  ),
-                  _buildRow(
-                    context,
-                    "TO'LANADIGAN SUMMA:",
-                    grandTotal,
-                    isMain: true,
-                  ),
-                ],
-              );
-            },
-          )
-        else
-          Builder(
-            builder: (context) {
-              final serviceFee = cartProvider.calculateWaiterServiceFee(
-                context,
-              );
-              final grandTotal = cartProvider.totalAmount + serviceFee;
-              return Column(
-                children: [
-                  if (serviceFee > 0)
-                    _buildRow(context, "Xizmat haqi", serviceFee),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(color: Color(0xFFF1F5F9)),
-                  ),
-                  _buildRow(
-                    context,
-                    "TO'LANADIGAN SUMMA:",
-                    grandTotal,
-                    isMain: true,
-                  ),
-                ],
-              );
-            },
-          ),
+        if (roomCharge > 0) _buildRow(context, "Xona / Stol", roomCharge),
+        if (serviceFee > 0) _buildRow(context, "Xizmat haqi", serviceFee),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: Divider(color: Color(0xFFF1F5F9)),
+        ),
+        _buildRow(context, "TO'LANADIGAN SUMMA:", grandTotal, isMain: true),
       ],
     );
   }
@@ -490,7 +445,7 @@ class CartPanelWidget extends StatelessWidget {
               fontSize: isMain ? 22 : 14,
               fontWeight: FontWeight.w900,
               color: isMain
-                  ? theme.colorScheme.primary
+                  ? const Color(0xFF10B981)
                   : theme.colorScheme.onSurface,
             ),
           ),
@@ -504,6 +459,9 @@ class CartPanelWidget extends StatelessWidget {
     final bool isEmpty = cartProvider.items.isEmpty;
     final String role = connectivity.currentUser?['role'] ?? 'admin';
     final bool isWaiter = role == 'waiter';
+    final bool autoConfirm = context
+        .watch<AppSettingsProvider>()
+        .autoConfirmOrder;
 
     return Column(
       children: [
@@ -528,105 +486,128 @@ class CartPanelWidget extends StatelessWidget {
               ),
             ),
           ),
-        if (!isEmpty)
-          (cartProvider.hasUnconfirmedChanges &&
-                  cartProvider.hasPermission(context, 'perm_confirm_order'))
-              ? SizedBox(
-                  width: double.infinity,
+        // Waiter: show temporary receipt button only
+        if (!isEmpty && isWaiter)
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton.icon(
+              onPressed: onPrintReceipt,
+              icon: const Icon(Icons.receipt_long_outlined, size: 20),
+              label: const Text(
+                'VAQTINCHALIK CHEK',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3B82F6),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+        if (!isEmpty && isWaiter) const SizedBox(height: 8),
+        // Non-waiter: confirm + checkout buttons
+        if (!isEmpty && !isWaiter) ...[
+          if (!autoConfirm &&
+              cartProvider.hasUnconfirmedChanges &&
+              cartProvider.hasPermission(context, 'perm_confirm_order'))
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  if (cartProvider.hasPermission(
+                    context,
+                    'perm_confirm_order',
+                  )) {
+                    cartProvider.confirmTableOrder(context, connectivity);
+                  }
+                },
+                icon: const Icon(Icons.check_circle_outline_rounded, size: 20),
+                label: const Text(
+                  'TASDIQLASH',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ),
+          if (!autoConfirm &&
+              cartProvider.hasUnconfirmedChanges &&
+              cartProvider.hasPermission(context, 'perm_confirm_order'))
+            const SizedBox(height: 8),
+          Row(
+            children: [
+              SizedBox(
+                height: 56,
+                width: 64,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (cartProvider.hasPermission(
+                      context,
+                      'perm_print_receipt',
+                    )) {
+                      onPrintReceipt();
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    foregroundColor: const Color(0xFF475569),
+                    elevation: 0,
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Icon(Icons.print_outlined, size: 24),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
                   height: 56,
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      if (await cartProvider.checkPermission(
-                        context,
-                        'perm_confirm_order',
-                      )) {
-                        cartProvider.confirmTableOrder(context, connectivity);
-                      }
-                    },
-                    icon: const Icon(
-                      Icons.check_circle_outline_rounded,
-                      size: 20,
-                    ),
-                    label: const Text(
-                      'BUYURTMANI TASDIQLASH',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                  child: LicenseGate(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (cartProvider.hasPermission(
+                          context,
+                          'perm_checkout',
+                        )) {
+                          onShowPaymentDialog();
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                      child: Text(
+                        AppStrings.checkout.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
                   ),
-                )
-              : Row(
-                  children: [
-                    SizedBox(
-                      height: 56,
-                      width: 64,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          if (await cartProvider.checkPermission(
-                            context,
-                            'print_receipt',
-                          )) {
-                            onPrintReceipt();
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFF1F5F9),
-                          foregroundColor: const Color(0xFF475569),
-                          elevation: 0,
-                          padding: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: const Icon(Icons.print_outlined, size: 24),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: SizedBox(
-                        height: 56,
-                        child: LicenseGate(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              if (await cartProvider.checkPermission(
-                                context,
-                                'perm_checkout',
-                              )) {
-                                onShowPaymentDialog();
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0F172A),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: Text(
-                              (isWaiter ? 'SAQLASH' : AppStrings.checkout)
-                                  .toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/printer_provider.dart';
 import '../../providers/category_provider.dart';
+import '../../providers/connectivity_provider.dart';
 import '../../models/printer_settings.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
@@ -16,8 +17,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final connectivity = context.read<ConnectivityProvider>();
       context.read<PrinterProvider>().loadSettings();
-      context.read<CategoryProvider>().loadCategories();
+      context.read<CategoryProvider>().loadCategories(
+            connectivity: connectivity,
+          );
       context.read<PrinterProvider>().scanPrinters();
     });
   }
@@ -143,13 +147,39 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  printer.displayName,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      printer.displayName,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    if (printer.isMain) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green, width: 0.5),
+                        ),
+                        child: const Text(
+                          'Asosiy',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 Text(
                   printer.type == PrinterType.network
@@ -233,6 +263,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     PrinterType selectedType = printer?.type ?? PrinterType.network;
     String? selectedPrinterName = printer?.printerName;
     List<int> selectedCategoryIds = List.from(printer?.categoryIds ?? []);
+    bool isMain = printer?.isMain ?? false;
 
     await showDialog(
       context: context,
@@ -394,6 +425,19 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         );
                       }).toList(),
                     ),
+                    const SizedBox(height: 24),
+                    SwitchListTile(
+                      title: const Text(
+                        'Asosiy printer',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: const Text(
+                        'Mijoz kvitansiyalari ushbu printerdan chiqadi',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      value: isMain,
+                      onChanged: (val) => setDialogState(() => isMain = val),
+                    ),
                   ],
                 ),
               ),
@@ -412,6 +456,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     port: int.tryParse(portController.text) ?? 9100,
                     printerName: selectedPrinterName,
                     categoryIds: selectedCategoryIds,
+                    isMain: isMain,
                   );
                   await context.read<PrinterProvider>().savePrinter(newPrinter);
                   if (context.mounted) Navigator.pop(context);

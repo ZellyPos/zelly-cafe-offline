@@ -110,6 +110,30 @@ class BrandSettingsScreen extends StatelessWidget {
                 "Tavsiya etiladi: 800x1200 o'lchamdagi vertikal rasm",
                 style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
               ),
+              const SizedBox(height: 32),
+              const Divider(),
+              const SizedBox(height: 16),
+              const Text(
+                "Umumiy Sozlamalar",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: const Text(
+                  "Ombor qismini yoqish",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text(
+                  "Kirim/chiqim tranzaksiyalari va Ombor bo'limi yoqiladi. O'chirilganida sotuv vaqtida mahsulot tarqalmaydi.",
+                  style: TextStyle(fontSize: 12),
+                ),
+                value: provider.enableInventory,
+                onChanged: (val) {
+                  provider.setEnableInventory(val);
+                },
+                activeThumbColor: const Color(0xFF1E293B),
+                contentPadding: EdgeInsets.zero,
+              ),
             ],
           ),
         ),

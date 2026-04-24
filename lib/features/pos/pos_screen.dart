@@ -45,6 +45,7 @@ class _PosScreenState extends State<PosScreen> {
   Timer? _refreshTimer;
   late PageController _pageController;
   late ScrollController _categoryScrollController;
+  bool _readyToPop = false;
 
   @override
   void initState() {
@@ -55,7 +56,8 @@ class _PosScreenState extends State<PosScreen> {
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) setState(() {});
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final connectivity = context.read<ConnectivityProvider>();
       final cartProvider = context.read<CartProvider>();
 
@@ -68,16 +70,34 @@ class _PosScreenState extends State<PosScreen> {
       // Validate table access for waiters
       _validateTableAccess(connectivity);
 
-      cartProvider.loadTableOrder(
+      await cartProvider.loadTableOrder(
         widget.table?.id,
         widget.table?.locationId,
         connectivity,
         widget.orderType,
       );
 
-      final waiterProvider = context.read<WaiterProvider>();
-      if (waiterProvider.waiters.isEmpty) {
-        waiterProvider.loadWaiters();
+      // Ofisiant o'z logini bilan kirganida, yangi orderni o'z ID si bilan
+      // yaratilishini ta'minlash. Aks holda default "Kassa" ID bilan yaratiladi
+      // va ofisiant stolga qayta kira olmay qoladi.
+      if (mounted) {
+        final role = connectivity.currentUser?['role'] ?? 'admin';
+        if (role == 'waiter' && cartProvider.activeWaiterId == null) {
+          final rawId = connectivity.currentUser?['id'];
+          if (rawId != null) {
+            final int? waiterId = rawId is int
+                ? rawId
+                : int.tryParse(rawId.toString());
+            if (waiterId != null) {
+              cartProvider.setWaiter(waiterId);
+            }
+          }
+        }
+
+        final waiterProvider = context.read<WaiterProvider>();
+        if (waiterProvider.waiters.isEmpty) {
+          waiterProvider.loadWaiters();
+        }
       }
     });
   }
@@ -158,12 +178,22 @@ class _PosScreenState extends State<PosScreen> {
     final bool isCompact = size.width <= 1100 || size.height <= 800;
 
     return PopScope(
-      canPop: true,
-      onPopInvoked: (didPop) {
-        if (didPop) {
-          final cartProvider = context.read<CartProvider>();
-          final connectivity = context.read<ConnectivityProvider>();
-          cartProvider.discardUnconfirmedChanges(connectivity, context);
+      canPop: _readyToPop,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop || _readyToPop) return;
+        final cartProvider = context.read<CartProvider>();
+        final connectivity = context.read<ConnectivityProvider>();
+        final role = connectivity.currentUser?['role'] ?? 'admin';
+        final navigator = Navigator.of(context);
+        if (role == 'waiter') {
+          // Ofisiant chiqishda itemlarni DBga kafolatlangan saqlash
+          await cartProvider.persistCartState(connectivity);
+        } else {
+          await cartProvider.discardUnconfirmedChanges(connectivity, context);
+        }
+        if (mounted) {
+          setState(() => _readyToPop = true);
+          navigator.pop();
         }
       },
       child: Scaffold(
@@ -217,12 +247,6 @@ class _PosScreenState extends State<PosScreen> {
                     context.read<ConnectivityProvider>().currentUser?['role'] ??
                     'admin';
                 if (role == 'waiter') {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(AppStrings.orderSaved),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
                   Navigator.pop(context);
                 } else {
                   _showPaymentDialog(context);
@@ -294,7 +318,21 @@ class _PosScreenState extends State<PosScreen> {
             iconSize: 22,
           ),
           IconButton(
-            onPressed: () => _showMergeTableDialog(context),
+            onPressed: () {
+              final cartProvider = context.read<CartProvider>();
+              if (cartProvider.hasPermission(context, 'perm_manage_tables')) {
+                _showMergeTableDialog(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Stollarni boshqarish uchun ruxsatingiz yo\'q',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
             icon: const Icon(
               Icons.merge_type_rounded,
               color: Color(0xFF64748B),
@@ -303,9 +341,15 @@ class _PosScreenState extends State<PosScreen> {
             iconSize: 22,
           ),
           const Spacer(),
-          // Waiter Info
+          // Waiter Info — faqat admin/kassir o'zgartira oladi
           InkWell(
-            onTap: () => _showWaiterSelectionDialog(context),
+            onTap: () {
+              final role =
+                  context.read<ConnectivityProvider>().currentUser?['role'] ??
+                  'admin';
+              if (role == 'waiter') return; // ofisant o'zgartira olmaydi
+              _showWaiterSelectionDialog(context);
+            },
             borderRadius: BorderRadius.circular(12),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -517,7 +561,7 @@ class _PosScreenState extends State<PosScreen> {
       controller: _categoryScrollController,
       scrollDirection: Axis.horizontal,
       itemCount: categories.length,
-      separatorBuilder: (_, __) => const SizedBox(width: 8),
+      separatorBuilder: (_, _) => const SizedBox(width: 8),
       itemBuilder: (context, index) {
         final cat = categories[index];
         final isSelected = selectedCategory == cat;
@@ -578,14 +622,15 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  void _showPaymentDialog(BuildContext context) async {
+  void _showPaymentDialog(BuildContext context) {
     final cartProvider = context.read<CartProvider>();
-    // Waiter is no longer mandatory; defaults to "Kassa"
+    final productProvider = context.read<ProductProvider>();
+    final connectivityProvider = context.read<ConnectivityProvider>();
 
-    final double charge = await cartProvider.calculateRoomChargeForUI(context);
+    final double charge = cartProvider.calculateRoomChargeFromTable(
+      widget.table,
+    );
     final double serviceFee = cartProvider.calculateWaiterServiceFee(context);
-
-    if (!context.mounted) return;
 
     showDialog(
       context: context,
@@ -597,11 +642,9 @@ class _PosScreenState extends State<PosScreen> {
     ).then((success) {
       if (success == true) {
         // Refresh products to update stock quantities
-        context.read<ProductProvider>().loadProducts(
-          connectivity: context.read<ConnectivityProvider>(),
-        );
+        productProvider.loadProducts(connectivity: connectivityProvider);
 
-        if (cartProvider.lastPrintError != null) {
+        if (cartProvider.lastPrintError != null && context.mounted) {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
@@ -620,17 +663,12 @@ class _PosScreenState extends State<PosScreen> {
               ],
             ),
           );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(AppStrings.paymentSuccess),
-              backgroundColor: AppTheme.secondaryColor,
-            ),
-          );
-          // Auto-return to home screen
-          if (context.mounted && Navigator.canPop(context)) {
-            Navigator.pop(context);
-          }
+        }
+        // Auto-return to home screen only for Dine-in
+        if (widget.orderType == 0 &&
+            context.mounted &&
+            Navigator.canPop(context)) {
+          Navigator.pop(context);
         }
       }
     });
@@ -658,6 +696,14 @@ class _PosScreenState extends State<PosScreen> {
               Navigator.pop(context); // Close dialog
               final cartProvider = context.read<CartProvider>();
               final connectivity = context.read<ConnectivityProvider>();
+
+              // Check permission before cancelling
+              if (!await cartProvider.checkPermission(
+                context,
+                'perm_cancel_order',
+              )) {
+                return;
+              }
 
               final success = await cartProvider.cancelOrder(connectivity);
 
@@ -896,13 +942,13 @@ class _PosScreenState extends State<PosScreen> {
         context,
         qty,
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${product.name} savatga qo\'shildi ($qty ta)'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 1),
-        ),
-      );
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(
+      //     content: Text('${product.name} savatga qo\'shildi ($qty ta)'),
+      //     backgroundColor: Colors.green,
+      //     duration: const Duration(seconds: 1),
+      //   ),
+      // );
     }
   }
 
@@ -933,12 +979,35 @@ class _PosScreenState extends State<PosScreen> {
         );
       }).toList();
 
-      // Calculate additional charges
-      final double charge = await cartProvider.calculateRoomChargeForUI(
-        context,
+      // Calculate additional charges (sinxron — table obyektidan)
+      final double charge = cartProvider.calculateRoomChargeFromTable(
+        widget.table,
       );
       final double serviceFee = cartProvider.calculateWaiterServiceFee(context);
       final double grandTotal = cartProvider.totalAmount + charge + serviceFee;
+
+      // Get waiter name for the receipt
+      String? safeWaiterName;
+      if (cartProvider.activeWaiterId != null) {
+        try {
+          safeWaiterName = context
+              .read<WaiterProvider>()
+              .waiters
+              .firstWhere((w) => w.id == cartProvider.activeWaiterId)
+              .name;
+        } catch (_) {}
+      }
+
+      String? safeLocationName;
+      if (widget.table?.locationId != null) {
+        try {
+          safeLocationName = context
+              .read<LocationProvider>()
+              .locations
+              .firstWhere((l) => l.id == widget.table!.locationId)
+              .name;
+        } catch (_) {}
+      }
 
       // Create a temporary order for receipt printing
       final order = Order(
@@ -953,6 +1022,9 @@ class _PosScreenState extends State<PosScreen> {
         waiterId: cartProvider.activeWaiterId,
         status: 0, // Open order
         tableName: widget.table?.name,
+        locationName: safeLocationName,
+        waiterName: safeWaiterName,
+        roomCharge: charge,
         foodTotal: cartProvider.totalAmount,
         roomTotal: charge,
         serviceTotal: serviceFee,
@@ -964,12 +1036,7 @@ class _PosScreenState extends State<PosScreen> {
 
       if (context.mounted) {
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Chek muvaffaqiyatli chiqarildi!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          // No snackbar
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1557,22 +1624,34 @@ class _PosScreenState extends State<PosScreen> {
 
   void _moveOrderToTable(BuildContext context, TableModel newTable) async {
     final cartProvider = context.read<CartProvider>();
+    final connectivity = context.read<ConnectivityProvider>();
     final tableProvider = context.read<TableProvider>();
 
     try {
-      // Move order to new table
-      await cartProvider.moveToTable(newTable.id!, newTable.locationId);
-
-      // Update table statuses
-      await tableProvider.updateTableStatus(
-        widget.table!.id!,
-        0,
-      ); // Old table becomes available
-      await tableProvider.updateTableStatus(
+      // Move order to new table (connectivity passed for client mode)
+      final success = await cartProvider.moveToTable(
         newTable.id!,
-        1,
-      ); // New table becomes occupied
+        newTable.locationId,
+        connectivity,
+      );
 
+      if (!success) {
+        if (context.mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Stolni ko\'chirishda xatolik yuz berdi'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Reload tables to reflect changes
+      await tableProvider.loadTables(connectivity: connectivity);
+
+      if (!context.mounted) return;
       Navigator.pop(context); // Close dialog
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1584,7 +1663,10 @@ class _PosScreenState extends State<PosScreen> {
         ),
       );
 
-      // Navigate to new table (replace current screen)
+      // Mark order preserved so PopScope doesn't cancel the order on navigation
+      cartProvider.markOrderPreserved();
+
+      // Navigate to new table
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -1593,10 +1675,12 @@ class _PosScreenState extends State<PosScreen> {
         ),
       );
     } catch (e) {
-      Navigator.pop(context); // Close dialog
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
-      );
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -1649,6 +1733,7 @@ class _PosScreenState extends State<PosScreen> {
                           ),
                       itemCount: waiters.length,
                       itemBuilder: (context, index) {
+                        final theme = Theme.of(context);
                         final waiter = waiters[index];
                         final isSelected =
                             cartProvider.activeWaiterId == waiter.id;
@@ -1662,12 +1747,14 @@ class _PosScreenState extends State<PosScreen> {
                           child: Container(
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? Colors.blue.shade50
-                                  : Colors.grey.shade100,
+                                  ? const Color(
+                                      0xFF3B82F6,
+                                    ).withValues(alpha: 0.1)
+                                  : theme.colorScheme.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: isSelected
-                                    ? Colors.blue
+                                    ? const Color(0xFF3B82F6)
                                     : Colors.transparent,
                                 width: 2,
                               ),
@@ -1678,7 +1765,11 @@ class _PosScreenState extends State<PosScreen> {
                               children: [
                                 Icon(
                                   Icons.person,
-                                  color: isSelected ? Colors.blue : Colors.grey,
+                                  color: isSelected
+                                      ? const Color(0xFF3B82F6)
+                                      : theme.colorScheme.onSurface.withValues(
+                                          alpha: 0.5,
+                                        ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -1687,15 +1778,15 @@ class _PosScreenState extends State<PosScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: isSelected
-                                          ? Colors.blue
-                                          : Colors.black87,
+                                          ? const Color(0xFF3B82F6)
+                                          : theme.colorScheme.onSurface,
                                     ),
                                   ),
                                 ),
                                 if (isSelected)
                                   const Icon(
                                     Icons.check_circle,
-                                    color: Colors.blue,
+                                    color: Color(0xFF3B82F6),
                                     size: 20,
                                   ),
                               ],

@@ -118,7 +118,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           child: ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: provider.expenses.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final expense = provider.expenses[index];
               final category = provider.categories.firstWhere(

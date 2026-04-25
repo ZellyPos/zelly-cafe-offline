@@ -336,12 +336,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         date: dateStr,
       );
 
-      // Web View URL — global tunnel ustuvor, bo'lmasa local IP
       String? webAppUrl;
-      final globalUrl = settings.globalTunnelUrl;
-      if (globalUrl != null && globalUrl.isNotEmpty) {
-        webAppUrl = '$globalUrl/reports/view';
-      } else if (connectivity.isServerRunning && connectivity.serverIp != null) {
+      if (connectivity.isServerRunning && connectivity.serverIp != null) {
         webAppUrl = 'http://${connectivity.serverIp}:${connectivity.port}/reports/view';
       }
 

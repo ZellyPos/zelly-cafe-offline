@@ -204,7 +204,6 @@ class AppStrings {
   static String get reportsTitle => Translations.get('reports_title', _lang);
   static String get reportsDescription =>
       Translations.get('reports_description', _lang);
-  static String get aiAnalysis => Translations.get('ai_analysis', _lang);
   static String get generalReportAnalysis =>
       Translations.get('general_report_analysis', _lang);
   static String get syncTelegram => Translations.get('sync_telegram', _lang);
@@ -249,7 +248,6 @@ class AppStrings {
   static String get fullName => Translations.get('full_name', _lang);
   static String get phoneNumber => Translations.get('phone_number', _lang);
 
-  static String get staffAnalysis => Translations.get('staff_analysis', _lang);
   static String get searchWaiterHint =>
       Translations.get('search_waiter_hint', _lang);
   static String get allTypes => Translations.get('all_types', _lang);
@@ -277,9 +275,6 @@ class AppStrings {
       Translations.get('digits_only_hint', _lang);
   static String get activeStaff => Translations.get('active_staff', _lang);
 
-  static String get aiMenu => Translations.get('ai_menu', _lang);
-  static String get menuOptimization =>
-      Translations.get('menu_optimization', _lang);
   static String get reorder => Translations.get('reorder', _lang);
   static String get searchProductHint =>
       Translations.get('search_product_hint', _lang);

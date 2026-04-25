@@ -12,8 +12,6 @@ import '../../core/app_strings.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../providers/cart_provider.dart';
-import '../../widgets/ai_action_button.dart';
-import '../../providers/ai_provider.dart';
 
 class ProductsMgmtScreen extends StatefulWidget {
   const ProductsMgmtScreen({super.key});
@@ -65,17 +63,6 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: Row(
               children: [
-                AiActionButton(
-                  onAnalyze: () {
-                    final now = DateTime.now();
-                    // Last 30 days for menu optimization
-                    final from = now.subtract(const Duration(days: 30));
-                    context.read<AiProvider>().getMenuOptimization(from, now);
-                  },
-                  label: AppStrings.aiMenu,
-                  dialogTitle: AppStrings.menuOptimization,
-                ),
-                const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: selectedCategoryFilter == null
                       ? null
@@ -325,8 +312,9 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     if (product.quantity != null)
                       Consumer<CartProvider>(
                         builder: (context, cart, _) {
-                          final inCart =
-                              cart.getProductCartQuantity(product.id!);
+                          final inCart = cart.getProductCartQuantity(
+                            product.id!,
+                          );
                           final displayQty = product.quantity! - inCart;
 
                           return Container(
@@ -587,7 +575,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                                           height: 180,
                                           width: 180,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
+                                          errorBuilder: (_, _, _) =>
                                               const Icon(Icons.error),
                                         );
                                       }

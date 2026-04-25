@@ -302,7 +302,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 16),
       itemCount: _orders.length,
-      separatorBuilder: (_, __) => const Divider(),
+      separatorBuilder: (_, _) => const Divider(),
       itemBuilder: (context, index) {
         final order = _orders[index];
         final isDineIn = order['order_type'] == 0;
@@ -371,7 +371,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
               ? _buildEmptyState("To'lovlar tariyxda yo'q")
               : ListView.separated(
                   itemCount: _payments.length,
-                  separatorBuilder: (_, __) => const Divider(),
+                  separatorBuilder: (_, _) => const Divider(),
                   itemBuilder: (context, index) {
                     final p = _payments[index];
                     return ListTile(

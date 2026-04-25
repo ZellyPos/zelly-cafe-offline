@@ -25,7 +25,6 @@ import 'providers/connectivity_provider.dart';
 import 'providers/developer_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/customer_provider.dart';
-import 'providers/ai_provider.dart';
 import 'providers/inventory_provider.dart';
 import 'providers/expense_provider.dart';
 import 'features/login/login_screen.dart';
@@ -93,7 +92,6 @@ void main() async {
           ChangeNotifierProvider(
             create: (_) => CustomerProvider()..loadCustomers(),
           ),
-          ChangeNotifierProvider(create: (_) => AiProvider()),
           ChangeNotifierProvider(
             create: (_) => InventoryProvider()..loadIngredients(),
           ),

@@ -725,9 +725,7 @@ class CartProvider extends ChangeNotifier {
     }
     _syncItems(connectivity, context);
     notifyListeners();
-
-    // Auto-confirm if user lacks permission
-    _checkAutoConfirm(context);
+    Future.microtask(() => _checkAutoConfirm(context));
   }
 
   void removeItem(
@@ -744,7 +742,7 @@ class CartProvider extends ChangeNotifier {
       }
       _syncItems(connectivity, context);
       notifyListeners();
-      _checkAutoConfirm(context);
+      Future.microtask(() => _checkAutoConfirm(context));
     }
   }
 
@@ -775,7 +773,7 @@ class CartProvider extends ChangeNotifier {
       }
       _syncItems(connectivity, context);
       notifyListeners();
-      _checkAutoConfirm(context);
+      Future.microtask(() => _checkAutoConfirm(context));
     }
   }
 
@@ -816,7 +814,7 @@ class CartProvider extends ChangeNotifier {
 
       _syncItems(connectivity, context);
       notifyListeners();
-      _checkAutoConfirm(context);
+      Future.microtask(() => _checkAutoConfirm(context));
     }
   }
 
@@ -1006,9 +1004,9 @@ class CartProvider extends ChangeNotifier {
             paymentType: paymentType,
             createdAt: now,
             orderType: orderType,
-            tableId: tableId,
+            tableId: resolvedTableId,
             waiterId: resolvedWaiterId,
-            locationId: locationId,
+            locationId: resolvedLocationId,
             status: 1,
             paidAmount: paidAmount,
             change: change,
@@ -1126,21 +1124,31 @@ class CartProvider extends ChangeNotifier {
           return false;
         }
       } else {
-        // Local or Server mode: Process inventory locally if enabled
+        // Local or Server mode
         if (context.mounted &&
             context.read<AppSettingsProvider>().enableInventory) {
+          // Full inventory system (recipes, ingredients, audit log)
           try {
             await InventoryService.instance.processOrderPaid(populatedOrder);
           } catch (e) {
             debugPrint("Inventory processing error: $e");
           }
+        } else {
+          // Basic stock tracking: always decrement products.quantity in DB
+          final db = await DatabaseHelper.instance.database;
+          for (final item in orderItems) {
+            await db.rawUpdate(
+              'UPDATE products '
+              'SET quantity = MAX(0, COALESCE(quantity, 0) - ?) '
+              'WHERE id = ? AND quantity IS NOT NULL',
+              [item.qty, item.productId],
+            );
+          }
         }
       }
 
-      // 2. Optimistic Stock Update (UI only)
+      // 2. Reload products — DB is now correct in both paths
       if (context.mounted) {
-        context.read<ProductProvider>().decrementQuantities(orderItems);
-        // Sync back from server/DB for consistency
         context.read<ProductProvider>().loadProducts(
           connectivity: connectivity,
         );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/database_helper.dart';
+import '../core/services/telegram_bot_service.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -10,7 +11,6 @@ class AppSettingsProvider extends ChangeNotifier {
   String _restaurantName = 'ZELLY';
   String? _telegramBotToken;
   String? _telegramChatId;
-  String? _globalTunnelUrl;
   ThemeMode _themeMode = ThemeMode.light;
   bool _autoConfirmOrder = false;
   bool _enableInventory = false;
@@ -20,7 +20,6 @@ class AppSettingsProvider extends ChangeNotifier {
   String get restaurantName => _restaurantName;
   String? get telegramBotToken => _telegramBotToken;
   String? get telegramChatId => _telegramChatId;
-  String? get globalTunnelUrl => _globalTunnelUrl;
   ThemeMode get themeMode => _themeMode;
   bool get autoConfirmOrder => _autoConfirmOrder;
   bool get enableInventory => _enableInventory;
@@ -99,49 +98,20 @@ class AppSettingsProvider extends ChangeNotifier {
       _enableInventory = inventoryRes.first['value'] == 'true';
     }
 
-    final tunnelRes = await db.queryByColumn(
-      'settings',
-      'key',
-      'global_tunnel_url',
-    );
-    if (tunnelRes.isNotEmpty) {
-      _globalTunnelUrl = tunnelRes.first['value'];
-    }
-
+    _startBot();
     notifyListeners();
   }
 
-  Future<void> setGlobalTunnelUrl(String? url) async {
-    final db = DatabaseHelper.instance;
-    final cleanUrl = url?.trim();
-    final existing = await db.queryByColumn(
-      'settings',
-      'key',
-      'global_tunnel_url',
-    );
-    if (cleanUrl == null || cleanUrl.isEmpty) {
-      // URL o'chirildi
-      if (existing.isNotEmpty) {
-        await db.delete('settings', 'key = ?', ['global_tunnel_url']);
-      }
-      _globalTunnelUrl = null;
+  void _startBot() {
+    final token = _telegramBotToken;
+    if (token != null && token.isNotEmpty) {
+      TelegramBotService.instance.start(
+        token: token,
+        restaurantName: _restaurantName,
+      );
     } else {
-      if (existing.isNotEmpty) {
-        await db.update(
-          'settings',
-          {'value': cleanUrl},
-          'key = ?',
-          ['global_tunnel_url'],
-        );
-      } else {
-        await db.insert('settings', {
-          'key': 'global_tunnel_url',
-          'value': cleanUrl,
-        });
-      }
-      _globalTunnelUrl = cleanUrl;
+      TelegramBotService.instance.stop();
     }
-    notifyListeners();
   }
 
   Future<void> setAutoConfirmOrder(bool value) async {
@@ -256,6 +226,7 @@ class AppSettingsProvider extends ChangeNotifier {
       _telegramChatId = chatId;
     }
 
+    _startBot();
     notifyListeners();
   }
 
@@ -277,6 +248,7 @@ class AppSettingsProvider extends ChangeNotifier {
       await db.insert('settings', {'key': 'restaurant_name', 'value': name});
     }
     _restaurantName = name;
+    TelegramBotService.instance.updateRestaurantName(name);
     notifyListeners();
   }
 

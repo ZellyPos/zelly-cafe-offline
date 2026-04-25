@@ -139,7 +139,7 @@ class ProductCardWidget extends StatelessWidget {
                                       color: displayQty <= 5
                                           ? Colors.red
                                           : theme.colorScheme.onSurface
-                                              .withOpacity(0.6),
+                                                .withOpacity(0.6),
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
@@ -151,7 +151,7 @@ class ProductCardWidget extends StatelessWidget {
                                         color: displayQty <= 5
                                             ? Colors.red
                                             : theme.colorScheme.onSurface
-                                                .withOpacity(0.7),
+                                                  .withOpacity(0.7),
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -195,10 +195,14 @@ class ProductCardWidget extends StatelessWidget {
                     return Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _buildPlaceholder(context),
+                      errorBuilder: (_, _, _) => _buildPlaceholder(context),
                     );
-                  } else if (File(imageUrl).existsSync()) {
-                    return Image.file(File(imageUrl), fit: BoxFit.cover);
+                  } else {
+                    return Image.file(
+                      File(imageUrl),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, _) => _buildPlaceholder(context),
+                    );
                   }
                 }
                 return _buildPlaceholder(context);

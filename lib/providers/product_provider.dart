@@ -99,9 +99,11 @@ class ProductProvider extends ChangeNotifier {
   Future<void> _loadSalesCounts() async {
     final db = await DatabaseHelper.instance.database;
     final result = await db.rawQuery('''
-      SELECT product_id, SUM(qty) as total_sold
-      FROM order_items
-      GROUP BY product_id
+      SELECT oi.product_id, SUM(oi.qty) as total_sold
+      FROM order_items oi
+      INNER JOIN orders o ON oi.order_id = o.id
+      WHERE o.created_at >= date('now', '-30 days')
+      GROUP BY oi.product_id
     ''');
 
     _salesCountCache.clear();

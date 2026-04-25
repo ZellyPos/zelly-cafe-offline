@@ -30,6 +30,8 @@ class ReportProvider extends ChangeNotifier {
   final bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  Future<Map<String, dynamic>>? _dashboardStatsFuture;
+
   void updateFilter({
     DateTime? startDate,
     DateTime? endDate,
@@ -58,11 +60,16 @@ class ReportProvider extends ChangeNotifier {
     } else if (waiterId != null)
       _filter.waiterId = waiterId;
 
+    _dashboardStatsFuture = null;
     notifyListeners();
   }
 
-  // Dashboard Aggregates
-  Future<Map<String, dynamic>> getDashboardStats() async {
+  // Dashboard Aggregates — cached per filter, invalidated on updateFilter()
+  Future<Map<String, dynamic>> getDashboardStats() {
+    return _dashboardStatsFuture ??= _fetchDashboardStats();
+  }
+
+  Future<Map<String, dynamic>> _fetchDashboardStats() async {
     final db = await DatabaseHelper.instance.database;
     final start = _filter.startDate.toIso8601String().split('T')[0];
     final end = _filter.endDate.toIso8601String().split('T')[0];

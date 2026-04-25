@@ -5,8 +5,6 @@ import '../../models/waiter.dart';
 import '../../core/app_strings.dart';
 import './waiter_profile_screen.dart';
 import '../../providers/connectivity_provider.dart';
-import '../../widgets/ai_action_button.dart';
-import '../../providers/ai_provider.dart';
 
 class WaitersMgmtScreen extends StatefulWidget {
   const WaitersMgmtScreen({super.key});
@@ -65,16 +63,6 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: Row(
               children: [
-                AiActionButton(
-                  onAnalyze: () {
-                    final now = DateTime.now();
-                    final from = now.subtract(const Duration(days: 30));
-                    context.read<AiProvider>().getWaiterAnalysis(from, now);
-                  },
-                  label: AppStrings.aiAnalysis,
-                  dialogTitle: AppStrings.staffAnalysis,
-                ),
-                const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: () => _showWaiterDialog(context),
                   icon: const Icon(Icons.add),

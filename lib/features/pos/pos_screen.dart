@@ -54,7 +54,7 @@ class _PosScreenState extends State<PosScreen> {
     _categoryScrollController = ScrollController();
     _loadSortPreference();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (mounted) setState(() {});
+      if (mounted && widget.table?.pricingType == 1) setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;

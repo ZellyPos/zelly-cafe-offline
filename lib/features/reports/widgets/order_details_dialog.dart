@@ -137,7 +137,7 @@ class OrderDetailsDialog extends StatelessWidget {
         final items = snapshot.data!;
         return ListView.separated(
           itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(),
+          separatorBuilder: (_, _) => const Divider(),
           itemBuilder: (context, index) {
             final item = items[index];
             final double price = (item['price'] as num).toDouble();

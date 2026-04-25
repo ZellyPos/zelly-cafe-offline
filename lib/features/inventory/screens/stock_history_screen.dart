@@ -51,7 +51,7 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: movements.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final mov = movements[index];
               final typeStr = mov['type'];

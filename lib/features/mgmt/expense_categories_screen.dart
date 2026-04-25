@@ -35,7 +35,7 @@ class ExpenseCategoriesScreen extends StatelessWidget {
           : ListView.separated(
               padding: const EdgeInsets.all(24),
               itemCount: expenseProvider.categories.length,
-              separatorBuilder: (_, __) => const Divider(),
+              separatorBuilder: (_, _) => const Divider(),
               itemBuilder: (context, index) {
                 final category = expenseProvider.categories[index];
                 return ListTile(

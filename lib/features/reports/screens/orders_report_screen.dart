@@ -148,7 +148,7 @@ class OrdersReportScreen extends StatelessWidget {
                               vertical: 8,
                             ),
                             itemCount: orders.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final order = orders[index];

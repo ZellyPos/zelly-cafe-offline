@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/table_provider.dart';
 import '../../providers/location_provider.dart';
+import '../../models/location.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../models/table.dart';
 import '../../core/theme.dart';
@@ -43,8 +44,8 @@ class _TablesScreenState extends State<TablesScreen> {
       );
     });
 
-    // Polling interval: 1 second for real-time updates (silent)
-    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    // Polling interval: 5 seconds for real-time updates (silent)
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (mounted) {
         // Silent update - no loading indicator, no setState
         context.read<TableProvider>().loadTables(
@@ -64,13 +65,15 @@ class _TablesScreenState extends State<TablesScreen> {
   @override
   Widget build(BuildContext context) {
     final tableProvider = context.watch<TableProvider>();
-    final locationProvider = context.watch<LocationProvider>();
-    final connectivity = context.watch<ConnectivityProvider>();
-    final currentUser = connectivity.currentUser;
-    final role = currentUser?['role'] ?? 'admin';
+    final locations = context.select<LocationProvider, List<Location>>(
+      (p) => p.locations,
+    );
+    final role = context.select<ConnectivityProvider, String>(
+      (p) => p.currentUser?['role'] ?? 'admin',
+    );
 
-    if (_selectedLocationId == null && locationProvider.locations.isNotEmpty) {
-      _selectedLocationId = locationProvider.locations.first.id;
+    if (_selectedLocationId == null && locations.isNotEmpty) {
+      _selectedLocationId = locations.first.id;
     }
 
     // Filter by location first
@@ -111,7 +114,7 @@ class _TablesScreenState extends State<TablesScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: _buildLocationTabs(context, locationProvider),
+                    child: _buildLocationTabs(context, locations),
                   ),
                   const SizedBox(width: 16),
                   _buildViewToggle(context),
@@ -181,9 +184,9 @@ class _TablesScreenState extends State<TablesScreen> {
 
   Widget _buildLocationTabs(
     BuildContext context,
-    LocationProvider locationProvider,
+    List<Location> locations,
   ) {
-    if (locationProvider.locations.isEmpty) return const SizedBox.shrink();
+    if (locations.isEmpty) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
     return Container(
@@ -196,9 +199,9 @@ class _TablesScreenState extends State<TablesScreen> {
       padding: const EdgeInsets.all(4),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: locationProvider.locations.length,
+        itemCount: locations.length,
         itemBuilder: (context, index) {
-          final loc = locationProvider.locations[index];
+          final loc = locations[index];
           final isSelected = _selectedLocationId == loc.id;
           return Padding(
             padding: const EdgeInsets.only(right: 4),

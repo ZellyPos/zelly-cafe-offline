@@ -63,6 +63,23 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
             padding: const EdgeInsets.only(right: 16.0),
             child: Row(
               children: [
+                OutlinedButton.icon(
+                  onPressed: () => _showBulkDialog(context),
+                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  label: const Text('Ommaviy o\'zgartirish'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF6C5CE7),
+                    side: const BorderSide(color: Color(0xFF6C5CE7)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
                 ElevatedButton.icon(
                   onPressed: () => _showWaiterDialog(context),
                   icon: const Icon(Icons.add),
@@ -408,6 +425,521 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     }
   }
 
+  void _showBulkDialog(BuildContext context) {
+    final waiterProvider = context.read<WaiterProvider>();
+    final nonKassa = waiterProvider.waiters.where((w) => w.name != 'Kassa').toList();
+    if (nonKassa.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Xodimlar mavjud emas')),
+      );
+      return;
+    }
+
+    int selectedType = 1;
+    int? bulkFilter;
+    final valueController = TextEditingController();
+    bool isLoading = false;
+    final Map<String, bool?> permStates = {}; // null=unchanged, true=add, false=remove
+
+    const perms = [
+      {'id': 'perm_confirm_order', 'label': 'Buyurtmani tasdiqlash'},
+      {'id': 'delete_item', 'label': 'Taomni o\'chirish'},
+      {'id': 'reduce_item', 'label': 'Miqdorni kamaytirish'},
+      {'id': 'print_receipt', 'label': 'Chek chiqarish'},
+      {'id': 'perm_edit_price', 'label': 'Narxni o\'zgartirish'},
+      {'id': 'perm_manage_tables', 'label': 'Stol almashtirish'},
+      {'id': 'perm_checkout', 'label': 'Hisob-kitob qilish'},
+      {'id': 'perm_view_reports', 'label': 'Hisobotlarni ko\'rish'},
+      {'id': 'perm_manage_expenses', 'label': 'Xarajatlarni boshqarish'},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => DefaultTabController(
+        length: 2,
+        child: StatefulBuilder(
+          builder: (ctx, setS) {
+            final theme = Theme.of(ctx);
+            final isDark = theme.brightness == Brightness.dark;
+            final affected = bulkFilter == null
+                ? nonKassa.length
+                : nonKassa.where((w) => w.type == bulkFilter).length;
+
+            Widget filterChips() => Row(
+              children: [
+                _bulkChip(ctx, label: 'Barchasi', selected: bulkFilter == null, onTap: () => setS(() => bulkFilter = null)),
+                const SizedBox(width: 8),
+                _bulkChip(ctx, label: 'Foizlilar', selected: bulkFilter == 1, onTap: () => setS(() => bulkFilter = 1)),
+                const SizedBox(width: 8),
+                _bulkChip(ctx, label: 'Fiksedlar', selected: bulkFilter == 0, onTap: () => setS(() => bulkFilter = 0)),
+              ],
+            );
+
+            Widget affectedBanner() => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6C5CE7).withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF6C5CE7).withValues(alpha: 0.15)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF6C5CE7)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$affected ta xodimga qo\'llanadi',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF6C5CE7)),
+                  ),
+                ],
+              ),
+            );
+
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              child: Container(
+                width: 480,
+                constraints: const BoxConstraints(maxHeight: 680),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 32,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF6C5CE7),
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.tune_rounded, color: Colors.white, size: 22),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Ommaviy o\'zgartirish',
+                              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // TabBar
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF6C5CE7).withValues(alpha: 0.08)
+                            : const Color(0xFF6C5CE7).withValues(alpha: 0.04),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: const Color(0xFF6C5CE7).withValues(alpha: 0.15),
+                          ),
+                        ),
+                      ),
+                      child: TabBar(
+                        tabs: const [
+                          Tab(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.percent_rounded, size: 15),
+                                SizedBox(width: 6),
+                                Text('Komissiya'),
+                              ],
+                            ),
+                          ),
+                          Tab(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.lock_outline_rounded, size: 15),
+                                SizedBox(width: 6),
+                                Text('Ruxsatlar'),
+                              ],
+                            ),
+                          ),
+                        ],
+                        labelColor: const Color(0xFF6C5CE7),
+                        unselectedLabelColor: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                        indicatorColor: const Color(0xFF6C5CE7),
+                        indicatorWeight: 2.5,
+                        labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                        unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        dividerColor: Colors.transparent,
+                      ),
+                    ),
+
+                    // Tab content
+                    Flexible(
+                      child: TabBarView(
+                        children: [
+                          // ─── Tab 1: Komissiya ───
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Kimga qo\'llansin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                                const SizedBox(height: 8),
+                                filterChips(),
+                                const SizedBox(height: 18),
+                                Text('Yangi hisoblash turi', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => setS(() => selectedType = 1),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 150),
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          decoration: BoxDecoration(
+                                            color: selectedType == 1
+                                                ? const Color(0xFF6C5CE7).withValues(alpha: 0.1)
+                                                : theme.colorScheme.surfaceContainerHighest,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: selectedType == 1 ? const Color(0xFF6C5CE7) : Colors.transparent, width: 1.5),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              Icon(Icons.percent_rounded, size: 22, color: selectedType == 1 ? const Color(0xFF6C5CE7) : theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+                                              const SizedBox(height: 4),
+                                              Text('Foiz (%)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: selectedType == 1 ? const Color(0xFF6C5CE7) : theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () => setS(() => selectedType = 0),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 150),
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          decoration: BoxDecoration(
+                                            color: selectedType == 0
+                                                ? const Color(0xFFE17055).withValues(alpha: 0.1)
+                                                : theme.colorScheme.surfaceContainerHighest,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: selectedType == 0 ? const Color(0xFFE17055) : Colors.transparent, width: 1.5),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              Icon(Icons.attach_money_rounded, size: 22, color: selectedType == 0 ? const Color(0xFFE17055) : theme.colorScheme.onSurface.withValues(alpha: 0.4)),
+                                              const SizedBox(height: 4),
+                                              Text('Fiksed (so\'m)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: selectedType == 0 ? const Color(0xFFE17055) : theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: valueController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: InputDecoration(
+                                    labelText: selectedType == 1 ? 'Foiz miqdori (masalan: 10)' : 'Fiksed summa (masalan: 50000)',
+                                    suffixText: selectedType == 1 ? '%' : 'so\'m',
+                                    prefixIcon: Icon(
+                                      selectedType == 1 ? Icons.percent_rounded : Icons.attach_money_rounded,
+                                      color: selectedType == 1 ? const Color(0xFF6C5CE7) : const Color(0xFFE17055),
+                                      size: 20,
+                                    ),
+                                    filled: true,
+                                    fillColor: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF8FAFC),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: selectedType == 1 ? const Color(0xFF6C5CE7) : const Color(0xFFE17055), width: 1.5),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                affectedBanner(),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 48,
+                                  child: ElevatedButton.icon(
+                                    onPressed: isLoading ? null : () async {
+                                      final val = double.tryParse(valueController.text.trim());
+                                      if (val == null || val <= 0) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
+                                          const SnackBar(content: Text('To\'g\'ri qiymat kiriting'), backgroundColor: Colors.red),
+                                        );
+                                        return;
+                                      }
+                                      setS(() => isLoading = true);
+                                      final err = await waiterProvider.bulkUpdateCommission(type: selectedType, value: val, onlyCurrentType: bulkFilter);
+                                      if (!ctx.mounted) return;
+                                      setS(() => isLoading = false);
+                                      if (err != null) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
+                                      } else {
+                                        Navigator.pop(ctx);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('$affected ta xodim yangilandi'), backgroundColor: Colors.green),
+                                        );
+                                      }
+                                    },
+                                    icon: isLoading
+                                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                        : const Icon(Icons.check_rounded, size: 18),
+                                    label: const Text('QO\'LLASH', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF6C5CE7),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      elevation: 0,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // ─── Tab 2: Ruxsatlar ───
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Kimga qo\'llansin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                                const SizedBox(height: 8),
+                                filterChips(),
+                                const SizedBox(height: 18),
+                                Row(
+                                  children: [
+                                    Text('Ruxsatlarni tanlang', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                                    const Spacer(),
+                                    // legend
+                                    Row(
+                                      children: [
+                                        Icon(Icons.add_circle_rounded, size: 13, color: const Color(0xFF00B894).withValues(alpha: 0.8)),
+                                        const SizedBox(width: 3),
+                                        Text('Qo\'sh', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
+                                        const SizedBox(width: 10),
+                                        Icon(Icons.remove_circle_rounded, size: 13, color: const Color(0xFFE17055).withValues(alpha: 0.8)),
+                                        const SizedBox(width: 3),
+                                        Text('O\'chir', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: 0.4))),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.07)),
+                                  ),
+                                  child: Column(
+                                    children: perms.asMap().entries.map((entry) {
+                                      final i = entry.key;
+                                      final perm = entry.value;
+                                      final id = perm['id']!;
+                                      final state = permStates[id];
+                                      final isLast = i == perms.length - 1;
+                                      final isFirst = i == 0;
+
+                                      final Color stateColor = state == true
+                                          ? const Color(0xFF00B894)
+                                          : state == false
+                                              ? const Color(0xFFE17055)
+                                              : theme.colorScheme.onSurface.withValues(alpha: 0.25);
+                                      final IconData stateIcon = state == true
+                                          ? Icons.add_circle_rounded
+                                          : state == false
+                                              ? Icons.remove_circle_rounded
+                                              : Icons.radio_button_unchecked_rounded;
+
+                                      return ClipRRect(
+                                        borderRadius: BorderRadius.vertical(
+                                          top: isFirst ? const Radius.circular(14) : Radius.zero,
+                                          bottom: isLast ? const Radius.circular(14) : Radius.zero,
+                                        ),
+                                        child: InkWell(
+                                          onTap: () => setS(() {
+                                            if (state == null) {
+                                              permStates[id] = true;
+                                            } else if (state == true) {
+                                              permStates[id] = false;
+                                            } else {
+                                              permStates.remove(id);
+                                            }
+                                          }),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                                            decoration: BoxDecoration(
+                                              color: state == true
+                                                  ? const Color(0xFF00B894).withValues(alpha: 0.05)
+                                                  : state == false
+                                                      ? const Color(0xFFE17055).withValues(alpha: 0.05)
+                                                      : Colors.transparent,
+                                              border: isLast ? null : Border(
+                                                bottom: BorderSide(color: theme.colorScheme.onSurface.withValues(alpha: 0.06)),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                AnimatedSwitcher(
+                                                  duration: const Duration(milliseconds: 180),
+                                                  child: Icon(stateIcon, key: ValueKey(state), size: 20, color: stateColor),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Text(
+                                                    perm['label']!,
+                                                    style: TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: theme.colorScheme.onSurface,
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (state != null)
+                                                  AnimatedContainer(
+                                                    duration: const Duration(milliseconds: 150),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                    decoration: BoxDecoration(
+                                                      color: stateColor.withValues(alpha: 0.12),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: Text(
+                                                      state == true ? 'QO\'SHILADI' : 'O\'CHIRILADI',
+                                                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: stateColor),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(Icons.touch_app_outlined, size: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.35)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Bosing: o\'zgarmaydi → qo\'shiladi → o\'chiriladi',
+                                      style: TextStyle(fontSize: 10.5, color: theme.colorScheme.onSurface.withValues(alpha: 0.35)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                affectedBanner(),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 48,
+                                  child: ElevatedButton.icon(
+                                    onPressed: isLoading ? null : () async {
+                                      final toAdd = permStates.entries.where((e) => e.value == true).map((e) => e.key).toList();
+                                      final toRemove = permStates.entries.where((e) => e.value == false).map((e) => e.key).toList();
+                                      if (toAdd.isEmpty && toRemove.isEmpty) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
+                                          const SnackBar(content: Text('Hech qanday o\'zgartirish tanlanmadi')),
+                                        );
+                                        return;
+                                      }
+                                      setS(() => isLoading = true);
+                                      final err = await waiterProvider.bulkUpdatePermissions(add: toAdd, remove: toRemove, onlyCurrentType: bulkFilter);
+                                      if (!ctx.mounted) return;
+                                      setS(() => isLoading = false);
+                                      if (err != null) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
+                                      } else {
+                                        Navigator.pop(ctx);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('$affected ta xodim ruxsatlari yangilandi'), backgroundColor: Colors.green),
+                                        );
+                                      }
+                                    },
+                                    icon: isLoading
+                                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                        : const Icon(Icons.check_rounded, size: 18),
+                                    label: const Text('RUXSATLARNI QO\'LLASH', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF00B894),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      elevation: 0,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _bulkChip(BuildContext context, {
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFF6C5CE7).withValues(alpha: 0.1)
+              : theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? const Color(0xFF6C5CE7) : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected
+                ? const Color(0xFF6C5CE7)
+                : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showWaiterDialog(BuildContext context, {Waiter? waiter}) {
     final nameController = TextEditingController(text: waiter?.name ?? '');
     final valueController = TextEditingController(
@@ -427,6 +959,8 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
       {'id': 'perm_edit_price', 'label': 'Narxni o\'zgartirish'},
       {'id': 'perm_manage_tables', 'label': 'Stol almashtirish'},
       {'id': 'perm_checkout', 'label': 'Hisob-kitob qilish'},
+      {'id': 'perm_view_reports', 'label': 'Hisobotlarni ko\'rish'},
+      {'id': 'perm_manage_expenses', 'label': 'Xarajatlarni boshqarish'},
     ];
 
     showDialog(
@@ -446,17 +980,17 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
               hintText: hint,
               prefixIcon: Icon(
                 icon,
-                color: theme.colorScheme.primary.withOpacity(0.7),
+                color: theme.colorScheme.primary.withValues(alpha: 0.7),
               ),
               filled: true,
               fillColor: isDark
-                  ? Colors.white.withOpacity(0.05)
+                  ? Colors.white.withValues(alpha: 0.05)
                   : Colors.grey.shade50,
               labelStyle: TextStyle(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
               hintStyle: TextStyle(
-                color: theme.colorScheme.onSurface.withOpacity(0.4),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -486,7 +1020,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                 borderRadius: BorderRadius.circular(28),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -499,7 +1033,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(28),
                       ),
@@ -631,7 +1165,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                               ),
                               decoration: BoxDecoration(
                                 color: isDark
-                                    ? Colors.white.withOpacity(0.05)
+                                    ? Colors.white.withValues(alpha: 0.05)
                                     : Colors.grey.shade50,
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -666,7 +1200,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                             Container(
                               decoration: BoxDecoration(
                                 color: isDark
-                                    ? Colors.white.withOpacity(0.05)
+                                    ? Colors.white.withValues(alpha: 0.05)
                                     : Colors.grey.shade50,
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -738,7 +1272,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                         Expanded(
                           flex: 2,
                           child: ElevatedButton(
-                            onPressed: () {
+                            onPressed: () async {
                               if (nameController.text.isEmpty && !isKassa) {
                                 return;
                               }
@@ -758,20 +1292,28 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                                 isActive: isActive,
                                 permissions: selectedPermissions,
                               );
-                              if (waiter == null) {
-                                context.read<WaiterProvider>().addWaiter(
-                                  newWaiter,
-                                  connectivity: context
-                                      .read<ConnectivityProvider>(),
-                                );
-                              } else {
-                                context.read<WaiterProvider>().updateWaiter(
-                                  newWaiter,
-                                  connectivity: context
-                                      .read<ConnectivityProvider>(),
-                                );
+                              final connectivity =
+                                  context.read<ConnectivityProvider>();
+                              final waiterProv =
+                                  context.read<WaiterProvider>();
+                              final error = waiter == null
+                                  ? await waiterProv.addWaiter(newWaiter,
+                                      connectivity: connectivity)
+                                  : await waiterProv.updateWaiter(newWaiter,
+                                      connectivity: connectivity);
+                              if (error != null) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(error),
+                                      backgroundColor: Colors.red,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                                return;
                               }
-                              Navigator.pop(context);
+                              if (context.mounted) Navigator.pop(context);
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: theme.colorScheme.primary,

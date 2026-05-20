@@ -121,6 +121,7 @@ class ActiveOrderInfo {
   final String? waiterName;
   final double totalAmount;
   final DateTime? openedAt;
+  final bool billRequested;
 
   ActiveOrderInfo({
     required this.orderId,
@@ -128,5 +129,6 @@ class ActiveOrderInfo {
     this.waiterName,
     required this.totalAmount,
     this.openedAt,
+    this.billRequested = false,
   });
 }

@@ -100,12 +100,14 @@ class AnalyticsService {
     final db = await _dbHelper.database;
     final results = await db.rawQuery(
       '''
-      SELECT 
+      SELECT
         o.waiter_id,
         COALESCE(w.name, 'Kassa') as waiter_name,
         COUNT(o.id) as orders_count,
         SUM(o.grand_total) as revenue,
-        SUM(o.service_total) as service_total
+        SUM(o.service_total) as service_total,
+        COALESCE(w.type, 0) as waiter_type,
+        COALESCE(w.value, 0.0) as waiter_value
       FROM orders o
       LEFT JOIN waiters w ON o.waiter_id = w.id
       WHERE o.status = 1 AND o.created_at BETWEEN ? AND ?
@@ -185,6 +187,71 @@ class AnalyticsService {
     );
 
     final stats = results.map((m) => LocationPerformance.fromMap(m)).toList();
+    _cache[cacheKey] = stats;
+    return stats;
+  }
+
+  /// Kategoriyalar bo'yicha sotuvlar
+  Future<List<CategorySalesStats>> getCategoryBreakdown({
+    required DateTime start,
+    required DateTime end,
+    bool useCache = true,
+  }) async {
+    final cacheKey =
+        'category_${start.toIso8601String()}_${end.toIso8601String()}';
+    if (useCache && _cache.containsKey(cacheKey)) {
+      return _cache[cacheKey] as List<CategorySalesStats>;
+    }
+    final db = await _dbHelper.database;
+    final results = await db.rawQuery(
+      '''
+      SELECT COALESCE(p.category, 'Boshqa') as category,
+             SUM(oi.qty) as qty,
+             SUM(oi.qty * oi.price) as revenue
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      JOIN orders o ON oi.order_id = o.id
+      WHERE o.status = 1 AND o.created_at BETWEEN ? AND ?
+      GROUP BY p.category ORDER BY revenue DESC
+    ''',
+      [start.toIso8601String(), end.toIso8601String()],
+    );
+    final stats = results.map((m) => CategorySalesStats.fromMap(m)).toList();
+    _cache[cacheKey] = stats;
+    return stats;
+  }
+
+  /// Soatlik faollik (0-23 soat)
+  Future<List<HourlySalesStats>> getHourlyBreakdown({
+    required DateTime start,
+    required DateTime end,
+    bool useCache = true,
+  }) async {
+    final cacheKey =
+        'hourly_${start.toIso8601String()}_${end.toIso8601String()}';
+    if (useCache && _cache.containsKey(cacheKey)) {
+      return _cache[cacheKey] as List<HourlySalesStats>;
+    }
+    final db = await _dbHelper.database;
+    final results = await db.rawQuery(
+      '''
+      SELECT CAST(strftime('%H', created_at) AS INTEGER) as hour,
+             COUNT(*) as orders_count,
+             SUM(grand_total) as revenue
+      FROM orders WHERE status = 1 AND created_at BETWEEN ? AND ?
+      GROUP BY hour ORDER BY hour ASC
+    ''',
+      [start.toIso8601String(), end.toIso8601String()],
+    );
+    final map = {for (var r in results) (r['hour'] as int): r};
+    final stats = List.generate(24, (h) {
+      final r = map[h];
+      return HourlySalesStats(
+        hour: h,
+        ordersCount: r != null ? (r['orders_count'] as num).toInt() : 0,
+        revenue: r != null ? (r['revenue'] as num).toDouble() : 0.0,
+      );
+    });
     _cache[cacheKey] = stats;
     return stats;
   }

@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
+import 'package:shelf_web_socket/shelf_web_socket.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../database_helper.dart';
 import '../utils/price_formatter.dart';
 import 'package:path/path.dart' as p;
@@ -11,6 +13,8 @@ import 'package:path_provider/path_provider.dart';
 import '../../models/customer.dart';
 import '../../models/order.dart';
 import '../services/inventory_service.dart';
+import '../printing_service.dart';
+import 'websocket_manager.dart';
 
 class ApiServer {
   static HttpServer? _server;
@@ -48,6 +52,14 @@ class ApiServer {
   }
 
   static void _setupRoutes() {
+    // 0. WebSocket real-time channel
+    _router.get(
+      '/ws',
+      webSocketHandler((WebSocketChannel channel, String? protocol) {
+        WebSocketManager.instance.addClient(channel);
+      }),
+    );
+
     // 1. Auth
     _router.post('/auth/login', (Request request) async {
       final payload = jsonDecode(await request.readAsString());
@@ -193,6 +205,7 @@ class ApiServer {
           o.id as order_id,
           o.total as order_total,
           o.waiter_id,
+          o.bill_requested,
           w.name as waiter_name,
           o.opened_at
         FROM tables t
@@ -466,14 +479,12 @@ class ApiServer {
 
         final orderId = DateTime.now().millisecondsSinceEpoch.toString();
 
-        final now = DateTime.now();
-        final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
-        final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
+        final dayStart = await DatabaseHelper.instance.getDayStartTime();
 
         int nextNo = 1;
         final res = await db.rawQuery(
-          'SELECT MAX(daily_number) as max_no FROM orders WHERE created_at BETWEEN ? AND ?',
-          [todayStart, todayEnd],
+          'SELECT MAX(daily_number) as max_no FROM orders WHERE created_at >= ?',
+          [dayStart.toIso8601String()],
         );
         if (res.isNotEmpty && res.first['max_no'] != null) {
           nextNo = (res.first['max_no'] as int) + 1;
@@ -501,6 +512,10 @@ class ApiServer {
               whereArgs: [tableId],
             );
           }
+        });
+
+        WebSocketManager.instance.broadcast('tables_updated', {
+          'table_id': ?tableId,
         });
 
         return Response.ok(jsonEncode({
@@ -714,6 +729,8 @@ class ApiServer {
         print('API [POST] /orders/$id/items: Order total updated to $grandTotal');
       });
 
+      WebSocketManager.instance.broadcast('order_updated', {'order_id': id});
+
       return Response.ok(jsonEncode({'status': 'success'}));
     });
 
@@ -770,6 +787,8 @@ class ApiServer {
           whereArgs: [newTableId],
         );
       });
+
+      WebSocketManager.instance.broadcast('tables_updated');
 
       return Response.ok(jsonEncode({'status': 'success'}));
     });
@@ -933,6 +952,8 @@ class ApiServer {
         await InventoryService.instance.processOrderPaid(orderObj, txn);
       });
 
+      WebSocketManager.instance.broadcast('tables_updated');
+
       return Response.ok(jsonEncode({'status': 'success'}));
     });
 
@@ -991,8 +1012,12 @@ class ApiServer {
             where: 'id = ?',
             whereArgs: [tableId],
           );
-          print('API [DELETE] /orders/$id/cancel: Table #$tableId detached. Affected: $count');
+          debugPrint('API [DELETE] /orders/$id/cancel: Table #$tableId detached. Affected: $count');
         }
+      });
+
+      WebSocketManager.instance.broadcast('tables_updated', {
+        'table_id': ?tableId,
       });
 
       return Response.ok(jsonEncode({'status': 'success'}));
@@ -1138,6 +1163,326 @@ class ApiServer {
         return Response.ok(bytes, headers: {'Content-Type': contentType});
       }
       return Response.notFound('Image not found');
+    });
+
+    // Remote print job — client devices POST here so server prints on its printers
+    _router.post('/print_job', (Request request) async {
+      try {
+        final body = await request.readAsString();
+        final Map<String, dynamic> payload =
+            Map<String, dynamic>.from(jsonDecode(body) as Map);
+        final order = Order.fromPrintPayload(payload);
+        await PrintingService.printDividedOrder(order: order);
+        return Response.ok(jsonEncode({'ok': true}),
+            headers: {'Content-Type': 'application/json'});
+      } catch (e) {
+        debugPrint('[print_job] Error: $e');
+        return Response.internalServerError(
+            body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    // Bill requested — client devices POST here to mark order as bill_requested
+    _router.post('/orders/<id>/bill_requested', (Request request, String id) async {
+      try {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'orders',
+          {'bill_requested': 1},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+        WebSocketManager.instance.broadcast('tables_updated', {});
+        return Response.ok(jsonEncode({'ok': true}),
+            headers: {'Content-Type': 'application/json'});
+      } catch (e) {
+        return Response.internalServerError(
+            body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    // ── Report API endpoints (client devices fetch from server) ─────────────
+
+    _router.get('/reports/stats', (Request request) async {
+      try {
+        final q = request.url.queryParameters;
+        final start = q['start'] ?? DateTime.now().toIso8601String();
+        final end = q['end'] ??
+            DateTime(DateTime.now().year, DateTime.now().month,
+                    DateTime.now().day, 23, 59, 59)
+                .toIso8601String();
+        final orderType = q['order_type'] != null ? int.tryParse(q['order_type']!) : null;
+        final locationId = q['location_id'] != null ? int.tryParse(q['location_id']!) : null;
+        final waiterId = q['waiter_id'] != null ? int.tryParse(q['waiter_id']!) : null;
+
+        final db = await DatabaseHelper.instance.database;
+        final args = <dynamic>[start, end];
+        var extra = '';
+        if (orderType != null) { extra += ' AND o.order_type = ?'; args.add(orderType); }
+        if (locationId != null) { extra += ' AND o.location_id = ?'; args.add(locationId); }
+        if (waiterId != null) { extra += ' AND o.waiter_id = ?'; args.add(waiterId); }
+
+        final baseWhere = 'o.status = 1 AND o.created_at >= ? AND o.created_at <= ?$extra';
+
+        final orders = await db.rawQuery('''
+          SELECT COUNT(*) as count,
+            SUM(total) as total, AVG(total) as avg_check,
+            SUM(CASE WHEN payment_type='Cash' OR payment_type='Naqd' THEN total ELSE 0 END) as cash_total,
+            SUM(CASE WHEN payment_type='Card' OR payment_type='Karta' THEN total ELSE 0 END) as card_total,
+            SUM(CASE WHEN payment_type='Terminal' THEN total ELSE 0 END) as terminal_total,
+            SUM(CASE WHEN order_type=0 THEN total ELSE 0 END) as dine_in_total,
+            SUM(CASE WHEN order_type=1 THEN total ELSE 0 END) as takeaway_total
+          FROM orders o WHERE $baseWhere
+        ''', List.from(args));
+
+        final topQty = await db.rawQuery('''
+          SELECT p.name, SUM(oi.qty) as qty FROM order_items oi
+          JOIN products p ON oi.product_id=p.id JOIN orders o ON oi.order_id=o.id
+          WHERE $baseWhere GROUP BY p.id ORDER BY qty DESC LIMIT 5
+        ''', List.from(args));
+
+        final topRevenue = await db.rawQuery('''
+          SELECT p.name, SUM(oi.qty*oi.price) as revenue FROM order_items oi
+          JOIN products p ON oi.product_id=p.id JOIN orders o ON oi.order_id=o.id
+          WHERE $baseWhere GROUP BY p.id ORDER BY revenue DESC LIMIT 5
+        ''', List.from(args));
+
+        return Response.ok(
+          jsonEncode({'metrics': orders.first, 'topQty': topQty, 'topRevenue': topRevenue}),
+          headers: {'Content-Type': 'application/json'},
+        );
+      } catch (e) {
+        return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    _router.get('/reports/orders', (Request request) async {
+      try {
+        final q = request.url.queryParameters;
+        final start = q['start'] ?? DateTime.now().toIso8601String();
+        final end = q['end'] ??
+            DateTime(DateTime.now().year, DateTime.now().month,
+                    DateTime.now().day, 23, 59, 59)
+                .toIso8601String();
+        final orderType = q['order_type'] != null ? int.tryParse(q['order_type']!) : null;
+        final locationId = q['location_id'] != null ? int.tryParse(q['location_id']!) : null;
+        final waiterId = q['waiter_id'] != null ? int.tryParse(q['waiter_id']!) : null;
+
+        final db = await DatabaseHelper.instance.database;
+        final args = <dynamic>[start, end];
+        var extra = '';
+        if (orderType != null) { extra += ' AND o.order_type = ?'; args.add(orderType); }
+        if (locationId != null) { extra += ' AND o.location_id = ?'; args.add(locationId); }
+        if (waiterId != null) { extra += ' AND o.waiter_id = ?'; args.add(waiterId); }
+
+        final rows = await db.rawQuery('''
+          SELECT o.*, l.name as location_name, t.name as table_name, w.name as waiter_name
+          FROM orders o
+          LEFT JOIN locations l ON o.location_id=l.id
+          LEFT JOIN tables t ON o.table_id=t.id
+          LEFT JOIN waiters w ON o.waiter_id=w.id
+          WHERE o.created_at >= ? AND o.created_at <= ?$extra
+          ORDER BY o.created_at DESC
+        ''', args);
+
+        return Response.ok(jsonEncode(rows),
+            headers: {'Content-Type': 'application/json'});
+      } catch (e) {
+        return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    _router.get('/reports/products', (Request request) async {
+      try {
+        final q = request.url.queryParameters;
+        final start = q['start'] ?? DateTime.now().toIso8601String();
+        final end = q['end'] ??
+            DateTime(DateTime.now().year, DateTime.now().month,
+                    DateTime.now().day, 23, 59, 59)
+                .toIso8601String();
+        final orderType = q['order_type'] != null ? int.tryParse(q['order_type']!) : null;
+        final locationId = q['location_id'] != null ? int.tryParse(q['location_id']!) : null;
+        final waiterId = q['waiter_id'] != null ? int.tryParse(q['waiter_id']!) : null;
+
+        final db = await DatabaseHelper.instance.database;
+        final args = <dynamic>[start, end];
+        var extra = '';
+        if (orderType != null) { extra += ' AND o.order_type = ?'; args.add(orderType); }
+        if (locationId != null) { extra += ' AND o.location_id = ?'; args.add(locationId); }
+        if (waiterId != null) { extra += ' AND o.waiter_id = ?'; args.add(waiterId); }
+
+        final rows = await db.rawQuery('''
+          SELECT p.name, p.category, SUM(oi.qty) as total_qty,
+            SUM(oi.qty*oi.price) as total_revenue, p.quantity as current_stock
+          FROM order_items oi
+          JOIN products p ON oi.product_id=p.id JOIN orders o ON oi.order_id=o.id
+          WHERE o.status=1 AND o.created_at>=? AND o.created_at<=?$extra
+          GROUP BY p.id, p.name, p.quantity ORDER BY total_revenue DESC
+        ''', args);
+
+        return Response.ok(jsonEncode(rows),
+            headers: {'Content-Type': 'application/json'});
+      } catch (e) {
+        return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    _router.get('/reports/waiters', (Request request) async {
+      try {
+        final q = request.url.queryParameters;
+        final start = q['start'] ?? DateTime.now().toIso8601String();
+        final end = q['end'] ??
+            DateTime(DateTime.now().year, DateTime.now().month,
+                    DateTime.now().day, 23, 59, 59)
+                .toIso8601String();
+        final orderType = q['order_type'] != null ? int.tryParse(q['order_type']!) : null;
+        final locationId = q['location_id'] != null ? int.tryParse(q['location_id']!) : null;
+
+        final db = await DatabaseHelper.instance.database;
+        final args = <dynamic>[start, end];
+        var extra = '';
+        if (orderType != null) { extra += ' AND o.order_type = ?'; args.add(orderType); }
+        if (locationId != null) { extra += ' AND o.location_id = ?'; args.add(locationId); }
+
+        final rows = await db.rawQuery('''
+          SELECT w.name, w.type as waiter_type, w.value as waiter_value,
+            COUNT(o.id) as order_count, SUM(COALESCE(o.total,0)) as total_sales
+          FROM waiters w
+          LEFT JOIN orders o ON w.id=o.waiter_id
+            AND o.status=1 AND o.created_at>=? AND o.created_at<=?$extra
+          GROUP BY w.id, w.name, w.type, w.value
+          HAVING order_count > 0
+        ''', args);
+
+        return Response.ok(jsonEncode(rows),
+            headers: {'Content-Type': 'application/json'});
+      } catch (e) {
+        return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    _router.get('/reports/locations', (Request request) async {
+      try {
+        final q = request.url.queryParameters;
+        final start = q['start'] ?? DateTime.now().toIso8601String();
+        final end = q['end'] ??
+            DateTime(DateTime.now().year, DateTime.now().month,
+                    DateTime.now().day, 23, 59, 59)
+                .toIso8601String();
+
+        final db = await DatabaseHelper.instance.database;
+        final rows = await db.rawQuery('''
+          SELECT l.name, COUNT(o.id) as order_count, SUM(o.total) as total_revenue
+          FROM locations l JOIN orders o ON l.id=o.location_id
+          WHERE o.status=1 AND o.created_at>=? AND o.created_at<=?
+          GROUP BY l.id ORDER BY total_revenue DESC
+        ''', [start, end]);
+
+        return Response.ok(jsonEncode(rows),
+            headers: {'Content-Type': 'application/json'});
+      } catch (e) {
+        return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    _router.get('/reports/tables', (Request request) async {
+      try {
+        final q = request.url.queryParameters;
+        final start = q['start'] ?? DateTime.now().toIso8601String();
+        final end = q['end'] ??
+            DateTime(DateTime.now().year, DateTime.now().month,
+                    DateTime.now().day, 23, 59, 59)
+                .toIso8601String();
+
+        final db = await DatabaseHelper.instance.database;
+        final rows = await db.rawQuery('''
+          SELECT t.name as table_name, l.name as location_name,
+            COUNT(o.id) as order_count, SUM(o.total) as total_revenue
+          FROM tables t JOIN locations l ON t.location_id=l.id
+          JOIN orders o ON t.id=o.table_id
+          WHERE o.status=1 AND o.created_at>=? AND o.created_at<=?
+          GROUP BY t.id ORDER BY total_revenue DESC
+        ''', [start, end]);
+
+        return Response.ok(jsonEncode(rows),
+            headers: {'Content-Type': 'application/json'});
+      } catch (e) {
+        return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    _router.get('/reports/zreport', (Request request) async {
+      try {
+        final q = request.url.queryParameters;
+        final start = q['start'] ?? DateTime.now().toIso8601String();
+        final end = q['end'] ??
+            DateTime(DateTime.now().year, DateTime.now().month,
+                    DateTime.now().day, 23, 59, 59)
+                .toIso8601String();
+
+        final db = await DatabaseHelper.instance.database;
+
+        final summary = await db.rawQuery('''
+          SELECT COUNT(*) as count, SUM(total) as total,
+            SUM(CASE WHEN payment_type='Cash' OR payment_type='Naqd' THEN total ELSE 0 END) as cash_total,
+            SUM(CASE WHEN payment_type='Card' OR payment_type='Karta' THEN total ELSE 0 END) as card_total,
+            SUM(CASE WHEN payment_type='Terminal' THEN total ELSE 0 END) as terminal_total,
+            MIN(created_at) as first_order, MAX(created_at) as last_order
+          FROM orders WHERE status=1 AND created_at>=? AND created_at<=?
+        ''', [start, end]);
+
+        final waiterSales = await db.rawQuery('''
+          SELECT COALESCE(w.name,'Admin/Saboy') as name, SUM(o.total) as sales
+          FROM orders o LEFT JOIN waiters w ON o.waiter_id=w.id
+          WHERE o.status=1 AND o.created_at>=? AND o.created_at<=?
+          GROUP BY o.waiter_id
+        ''', [start, end]);
+
+        final categorySales = await db.rawQuery('''
+          SELECT p.category, SUM(oi.qty) as qty, SUM(oi.qty*oi.price) as total
+          FROM order_items oi JOIN products p ON oi.product_id=p.id
+          JOIN orders o ON oi.order_id=o.id
+          WHERE o.status=1 AND o.created_at>=? AND o.created_at<=?
+          GROUP BY p.category ORDER BY total DESC
+        ''', [start, end]);
+
+        final topProducts = await db.rawQuery('''
+          SELECT p.name, SUM(oi.qty) as qty, SUM(oi.qty*oi.price) as revenue
+          FROM order_items oi JOIN products p ON oi.product_id=p.id
+          JOIN orders o ON oi.order_id=o.id
+          WHERE o.status=1 AND o.created_at>=? AND o.created_at<=?
+          GROUP BY p.id ORDER BY revenue DESC LIMIT 10
+        ''', [start, end]);
+
+        return Response.ok(
+          jsonEncode({
+            'summary': summary.first,
+            'waiterSales': waiterSales,
+            'categorySales': categorySales,
+            'topProducts': topProducts,
+          }),
+          headers: {'Content-Type': 'application/json'},
+        );
+      } catch (e) {
+        return Response.internalServerError(body: jsonEncode({'error': e.toString()}));
+      }
+    });
+
+    // Remote receipt print — client devices POST here to print main receipt on server
+    _router.post('/print_receipt', (Request request) async {
+      try {
+        final body = await request.readAsString();
+        final Map<String, dynamic> payload =
+            Map<String, dynamic>.from(jsonDecode(body) as Map);
+        final order = Order.fromPrintPayload(payload);
+        await PrintingService.printReceipt(order: order);
+        return Response.ok(jsonEncode({'ok': true}),
+            headers: {'Content-Type': 'application/json'});
+      } catch (e) {
+        debugPrint('[print_receipt] Error: $e');
+        return Response.internalServerError(
+            body: jsonEncode({'error': e.toString()}));
+      }
     });
   }
 }

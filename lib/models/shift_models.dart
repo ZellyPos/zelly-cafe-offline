@@ -149,4 +149,29 @@ class ShiftSummary {
     this.totalOutMovements = 0,
     this.expectedCashBalance = 0,
   });
+
+  double get totalSales => totalCashSales + totalCardSales + totalDebtSales;
+}
+
+/// Smena yopilganda to'liq hisobot (chop etish + ko'rsatish uchun)
+class ShiftReport {
+  final Shift shift;
+  final ShiftSummary summary;
+  final int orderCount;
+  final double countedCash;
+  final double difference;
+  final String? openedByName;
+  final String? closedByName;
+  final List<CashMovement> movements;
+
+  ShiftReport({
+    required this.shift,
+    required this.summary,
+    required this.orderCount,
+    required this.countedCash,
+    required this.difference,
+    this.openedByName,
+    this.closedByName,
+    this.movements = const [],
+  });
 }

@@ -199,20 +199,35 @@ class CartPanelWidget extends StatelessWidget {
     final isCancelled = item.quantity == 0;
     return InkWell(
       onTap: () async {
-        if (!await cartProvider.checkPermission(context, 'perm_edit_price')) {
+        final isFullyUnsaved = item.printedQuantity == 0;
+
+        // Sync permission check before any await — no context-across-gap issue
+        if (!isFullyUnsaved &&
+            !cartProvider.hasPermission(context, 'perm_edit_price')) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Narxni tahrirlash uchun ruxsatingiz yo\'q'),
+            backgroundColor: Colors.red,
+          ));
           return;
         }
+
         final result = await showDialog(
           context: context,
           builder: (context) => QuantityDialog(product: item.product),
         );
+        if (!context.mounted) return;
+
         if (result != null && result is Map) {
           final double newQty = result['quantity'];
           final double newPrice = result['price'];
 
-          if (newQty < item.quantity) {
+          if (newQty < item.quantity && newQty < item.printedQuantity) {
             final permission = newQty == 0 ? 'delete_item' : 'reduce_item';
-            if (!await cartProvider.checkPermission(context, permission)) {
+            if (!cartProvider.hasPermission(context, permission)) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Ushbu amal uchun ruxsatingiz yo\'q ($permission)'),
+                backgroundColor: Colors.red,
+              ));
               return;
             }
           }
@@ -280,15 +295,28 @@ class CartPanelWidget extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildQtyBtn(context, Icons.remove_rounded, () async {
-                      final currentQty = item.quantity;
-                      final permission = currentQty <= 1
-                          ? 'perm_delete_item'
-                          : 'perm_delete_item';
-                      if (!await cartProvider.checkPermission(
-                        context,
-                        permission,
-                      )) {
-                        return;
+                      // Fully unsaved items (never printed) → allow without permission
+                      final isFullyUnsaved = item.printedQuantity == 0;
+                      if (!isFullyUnsaved) {
+                        final permission = item.quantity <= 1
+                            ? 'delete_item'
+                            : 'reduce_item';
+                        final allowed = cartProvider.hasPermission(
+                          context,
+                          permission,
+                        );
+                        if (!allowed) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(
+                              item.quantity <= 1
+                                  ? 'Taomni o\'chirish uchun ruxsatingiz yo\'q'
+                                  : 'Miqdorni kamaytirish uchun ruxsatingiz yo\'q',
+                            ),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                          ));
+                          return;
+                        }
                       }
                       cartProvider.updateQuantity(
                         item.product.id!,
@@ -486,7 +514,31 @@ class CartPanelWidget extends StatelessWidget {
               ),
             ),
           ),
-        // Waiter: show temporary receipt button only
+        // Waiter: save (send to kitchen) + temporary receipt buttons
+        if (!isEmpty && isWaiter && cartProvider.hasUnconfirmedChanges) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton.icon(
+              onPressed: () =>
+                  cartProvider.confirmTableOrder(context, connectivity, true),
+              icon: const Icon(Icons.send_rounded, size: 20),
+              label: const Text(
+                'SAQLASH',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         if (!isEmpty && isWaiter)
           SizedBox(
             width: double.infinity,

@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 44,
+      version: 50,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -46,6 +46,21 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE users ADD COLUMN permissions TEXT');
         } catch (e2) {
           print('Failsafe: Error adding permissions column: $e2');
+        }
+      }
+    }
+
+    // Final failsafe for orders.bill_requested column
+    try {
+      await db.rawQuery('SELECT bill_requested FROM orders LIMIT 1');
+    } catch (e) {
+      if (e.toString().contains('no such column')) {
+        try {
+          await db.execute(
+            'ALTER TABLE orders ADD COLUMN bill_requested INTEGER DEFAULT 0',
+          );
+        } catch (e2) {
+          print('Failsafe: Error adding bill_requested column: $e2');
         }
       }
     }
@@ -878,6 +893,179 @@ class DatabaseHelper {
         print('Error upgrading database to v44: $e');
       }
     }
+
+    if (oldVersion < 45) {
+      // shifts.closed_at NOT NULL → NULL ga o'zgartirish
+      // SQLite ALTER COLUMN yo'q → jadval qayta yaratiladi
+      try {
+        await db.execute('ALTER TABLE shifts RENAME TO shifts_old');
+        await db.execute('''
+          CREATE TABLE shifts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opened_at TEXT NOT NULL,
+            closed_at TEXT,
+            opened_by INTEGER NOT NULL,
+            closed_by INTEGER,
+            opening_cash REAL DEFAULT 0,
+            counted_cash REAL,
+            difference REAL,
+            notes TEXT,
+            status INTEGER DEFAULT 0,
+            FOREIGN KEY (opened_by) REFERENCES users (id),
+            FOREIGN KEY (closed_by) REFERENCES users (id)
+          )
+        ''');
+        await db.execute('''
+          INSERT INTO shifts
+            (id, opened_at, closed_at, opened_by, closed_by,
+             opening_cash, counted_cash, difference, notes, status)
+          SELECT
+            id, opened_at, closed_at, opened_by, closed_by,
+            opening_cash, counted_cash, difference, notes, status
+          FROM shifts_old
+        ''');
+        await db.execute('DROP TABLE shifts_old');
+      } catch (e) {
+        print('Error upgrading database to v45: $e');
+      }
+    }
+
+    if (oldVersion < 46) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS couriers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT
+          )
+        ''');
+        final orderInfo = await db.rawQuery('PRAGMA table_info(orders)');
+        final cols = orderInfo.map((c) => c['name'] as String).toSet();
+        if (!cols.contains('customer_name')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN customer_name TEXT');
+        }
+        if (!cols.contains('customer_phone')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN customer_phone TEXT');
+        }
+        if (!cols.contains('delivery_address')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN delivery_address TEXT');
+        }
+        if (!cols.contains('delivery_status')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN delivery_status INTEGER DEFAULT 0');
+        }
+        if (!cols.contains('courier_id')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN courier_id INTEGER');
+        }
+        if (!cols.contains('delivery_fee')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN delivery_fee REAL DEFAULT 0');
+        }
+        if (!cols.contains('delivery_note')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN delivery_note TEXT');
+        }
+        if (!cols.contains('zone_id')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN zone_id INTEGER');
+        }
+      } catch (e) {
+        print('Error upgrading database to v46: $e');
+      }
+    }
+
+    if (oldVersion < 47) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS delivery_zones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            fee REAL DEFAULT 0,
+            color TEXT DEFAULT '#6366F1',
+            is_active INTEGER DEFAULT 1
+          )
+        ''');
+      } catch (e) {
+        print('Error upgrading database to v47: $e');
+      }
+    }
+
+    if (oldVersion < 48) {
+      try {
+        final orderInfo = await db.rawQuery('PRAGMA table_info(orders)');
+        final cols = orderInfo.map((c) => c['name'] as String).toSet();
+        if (!cols.contains('zone_id')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN zone_id INTEGER');
+        }
+        if (!cols.contains('courier_id')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN courier_id INTEGER');
+        }
+        if (!cols.contains('delivery_fee')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN delivery_fee REAL DEFAULT 0');
+        }
+        if (!cols.contains('delivery_note')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN delivery_note TEXT');
+        }
+        if (!cols.contains('customer_name')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN customer_name TEXT');
+        }
+        if (!cols.contains('customer_phone')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN customer_phone TEXT');
+        }
+        if (!cols.contains('delivery_address')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN delivery_address TEXT');
+        }
+        if (!cols.contains('delivery_status')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN delivery_status INTEGER DEFAULT 0');
+        }
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS couriers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS delivery_zones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            fee REAL DEFAULT 0,
+            color TEXT DEFAULT '#6366F1',
+            is_active INTEGER DEFAULT 1
+          )
+        ''');
+      } catch (e) {
+        print('Error upgrading database to v48: $e');
+      }
+    }
+
+    if (oldVersion < 49) {
+      try {
+        final info = await db.rawQuery('PRAGMA table_info(orders)');
+        final cols = info.map((c) => c['name'] as String).toSet();
+        if (!cols.contains('bill_requested')) {
+          await db.execute(
+            'ALTER TABLE orders ADD COLUMN bill_requested INTEGER DEFAULT 0',
+          );
+        }
+      } catch (e) {
+        print('Error upgrading database to v49: $e');
+      }
+    }
+
+    if (oldVersion < 50) {
+      try {
+        final info = await db.rawQuery('PRAGMA table_info(orders)');
+        final cols = info.map((c) => c['name'] as String).toSet();
+        if (!cols.contains('bill_requested')) {
+          await db.execute(
+            'ALTER TABLE orders ADD COLUMN bill_requested INTEGER DEFAULT 0',
+          );
+        }
+      } catch (e) {
+        print('Error upgrading database to v50: $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -945,7 +1133,15 @@ CREATE TABLE IF NOT EXISTS orders (
   grand_total REAL NOT NULL DEFAULT 0,
   shift_id INTEGER,
   daily_number INTEGER,
-  note TEXT
+  note TEXT,
+  customer_name TEXT,
+  customer_phone TEXT,
+  delivery_address TEXT,
+  delivery_status INTEGER DEFAULT 0,
+  courier_id INTEGER,
+  delivery_fee REAL DEFAULT 0,
+  delivery_note TEXT,
+  zone_id INTEGER
 )
 ''');
 
@@ -1206,7 +1402,7 @@ CREATE TABLE IF NOT EXISTS users (
       CREATE TABLE IF NOT EXISTS shifts (
         id $idType,
         opened_at $textType,
-        closed_at $textType,
+        closed_at TEXT,
         opened_by INTEGER NOT NULL,
         closed_by INTEGER,
         opening_cash REAL DEFAULT 0,
@@ -1276,6 +1472,28 @@ CREATE TABLE IF NOT EXISTS users (
       )
     ''');
 
+    // Couriers table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS couriers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT
+      )
+    ''');
+
+    // Delivery zones table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS delivery_zones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        fee REAL DEFAULT 0,
+        color TEXT DEFAULT '#6366F1',
+        is_active INTEGER DEFAULT 1
+      )
+    ''');
+
     // Initial time records
     await db.insert('security_logs', {
       'key': 'last_wall_time',
@@ -1327,6 +1545,35 @@ CREATE TABLE IF NOT EXISTS users (
   ) async {
     final db = await database;
     return await db.delete(table, where: where, whereArgs: whereArgs);
+  }
+
+  /// Buyurtma raqami hisoblash uchun kun boshlanish nuqtasini qaytaradi.
+  /// Settings da `day_reset_time` (HH:mm) bo'lsa, shu vaqtdan boshlab hisoblanadi.
+  /// Hozirgi vaqt reset vaqtidan oldin bo'lsa — kechagi reset vaqti qaytariladi.
+  /// Sozlanmagan bo'lsa — bugungi yarim tun.
+  Future<DateTime> getDayStartTime() async {
+    final db = await database;
+    final now = DateTime.now();
+    final rows = await db.query(
+      'settings',
+      where: "key = 'day_reset_time'",
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      final timeStr = rows.first['value'] as String? ?? '';
+      final parts = timeStr.split(':');
+      if (parts.length == 2) {
+        final hour = int.tryParse(parts[0]) ?? 0;
+        final minute = int.tryParse(parts[1]) ?? 0;
+        final todayReset = DateTime(now.year, now.month, now.day, hour, minute);
+        if (!now.isBefore(todayReset)) {
+          return todayReset;
+        } else {
+          return todayReset.subtract(const Duration(days: 1));
+        }
+      }
+    }
+    return DateTime(now.year, now.month, now.day);
   }
 
   Future<String> getDatabasePath() async {

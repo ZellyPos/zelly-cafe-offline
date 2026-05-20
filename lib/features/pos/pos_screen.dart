@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_onscreen_keyboard/flutter_onscreen_keyboard.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/product_provider.dart';
@@ -8,6 +9,8 @@ import '../../providers/category_provider.dart';
 import '../../core/theme.dart';
 import '../../core/app_strings.dart';
 import '../../core/printing_service.dart';
+import '../../core/database_helper.dart';
+import '../../core/server/websocket_manager.dart';
 import '../../providers/waiter_provider.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../providers/table_provider.dart';
@@ -19,6 +22,7 @@ import '../../models/waiter.dart';
 import 'widgets/payment_dialog.dart';
 import 'widgets/quantity_dialog.dart';
 import 'widgets/product_grid.dart';
+import 'widgets/product_card.dart';
 import 'widgets/cart_panel.dart';
 
 enum ProductSortMode {
@@ -32,8 +36,9 @@ enum ProductSortMode {
 class PosScreen extends StatefulWidget {
   final int orderType; // 0 = Dine-in, 1 = Saboy
   final TableModel? table;
+  final String? orderId; // load a specific existing order (e.g. saboy)
 
-  const PosScreen({super.key, this.orderType = 0, this.table});
+  const PosScreen({super.key, this.orderType = 0, this.table, this.orderId});
 
   @override
   State<PosScreen> createState() => _PosScreenState();
@@ -42,16 +47,23 @@ class PosScreen extends StatefulWidget {
 class _PosScreenState extends State<PosScreen> {
   String selectedCategory = AppStrings.all;
   ProductSortMode _currentSort = ProductSortMode.custom;
+  String _categoryLayout = 'top'; // 'top' or 'left'
   Timer? _refreshTimer;
   late PageController _pageController;
   late ScrollController _categoryScrollController;
+  late ScrollController _leftCategoryScrollController;
   bool _readyToPop = false;
+
+  // Search
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
     _categoryScrollController = ScrollController();
+    _leftCategoryScrollController = ScrollController();
     _loadSortPreference();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted && widget.table?.pricingType == 1) setState(() {});
@@ -75,6 +87,7 @@ class _PosScreenState extends State<PosScreen> {
         widget.table?.locationId,
         connectivity,
         widget.orderType,
+        widget.orderId,
       );
 
       // Ofisiant o'z logini bilan kirganida, yangi orderni o'z ID si bilan
@@ -134,28 +147,51 @@ class _PosScreenState extends State<PosScreen> {
     _refreshTimer?.cancel();
     _pageController.dispose();
     _categoryScrollController.dispose();
+    _leftCategoryScrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
+  void _startSearch() => setState(() => _isSearching = true);
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() => _isSearching = false);
+  }
+
   void _scrollToCategory(int index) {
-    if (_categoryScrollController.hasClients) {
-      _categoryScrollController.animateTo(
-        index * 100.0, // Approximate width per chip + separator
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+    if (_categoryLayout == 'left') {
+      if (_leftCategoryScrollController.hasClients) {
+        _leftCategoryScrollController.animateTo(
+          index * 52.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    } else {
+      if (_categoryScrollController.hasClients) {
+        _categoryScrollController.animateTo(
+          index * 100.0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
     }
   }
 
   Future<void> _loadSortPreference() async {
     final prefs = await SharedPreferences.getInstance();
     final savedSort = prefs.getString('pos_product_sort');
-    if (savedSort != null) {
+    final savedLayout = prefs.getString('pos_category_layout');
+    if (mounted) {
       setState(() {
-        _currentSort = ProductSortMode.values.firstWhere(
-          (e) => e.toString() == savedSort,
-          orElse: () => ProductSortMode.custom,
-        );
+        if (savedSort != null) {
+          _currentSort = ProductSortMode.values.firstWhere(
+            (e) => e.toString() == savedSort,
+            orElse: () => ProductSortMode.custom,
+          );
+        }
+        if (savedLayout != null) _categoryLayout = savedLayout;
       });
     }
   }
@@ -163,6 +199,11 @@ class _PosScreenState extends State<PosScreen> {
   Future<void> _saveSortPreference(ProductSortMode sort) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('pos_product_sort', sort.toString());
+  }
+
+  Future<void> _saveCategoryLayout(String layout) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pos_category_layout', layout);
   }
 
   @override
@@ -187,7 +228,8 @@ class _PosScreenState extends State<PosScreen> {
         final navigator = Navigator.of(context);
         if (role == 'waiter') {
           // Ofisiant chiqishda itemlarni DBga kafolatlangan saqlash
-          await cartProvider.persistCartState(connectivity);
+          final tableProvider = context.read<TableProvider>();
+          await cartProvider.persistCartState(connectivity, tableProvider);
         } else {
           await cartProvider.discardUnconfirmedChanges(connectivity, context);
         }
@@ -210,27 +252,48 @@ class _PosScreenState extends State<PosScreen> {
                   else if (widget.orderType == 1)
                     _buildSaboyHeader(context),
 
-                  // Category Bar
-                  _buildCategoryBar(
-                    context,
-                    categories,
-                    categoryProvider,
-                    isCompact,
-                  ),
+                  // Search bar (replaces category bar when searching)
+                  if (_isSearching)
+                    _buildSearchBar(context)
+                  // Top category bar (only in 'top' mode, not searching)
+                  else if (_categoryLayout == 'top')
+                    _buildCategoryBar(
+                      context,
+                      categories,
+                      categoryProvider,
+                      isCompact,
+                    ),
 
-                  // Products Grid
+                  // Products area
                   Expanded(
-                    child: ProductGridWidget(
-                      pageController: _pageController,
-                      categories: categories,
-                      selectedCategory: selectedCategory,
-                      currentSort: _currentSort,
-                      isCompact: isCompact,
-                      onPageChanged: (index) {
-                        setState(() => selectedCategory = categories[index]);
-                        _scrollToCategory(index);
-                      },
-                      onShowQuantityDialog: _showQuantityDialog,
+                    child: Row(
+                      children: [
+                        if (_categoryLayout == 'left' && !_isSearching)
+                          _buildLeftCategoryPanel(
+                            context,
+                            categories,
+                            categoryProvider,
+                          ),
+                        Expanded(
+                          child: _isSearching
+                              ? _buildSearchResults(context, isCompact)
+                              : ProductGridWidget(
+                                  pageController: _pageController,
+                                  categories: categories,
+                                  selectedCategory: selectedCategory,
+                                  currentSort: _currentSort,
+                                  isCompact: isCompact,
+                                  onPageChanged: (index) {
+                                    setState(
+                                      () =>
+                                          selectedCategory = categories[index],
+                                    );
+                                    _scrollToCategory(index);
+                                  },
+                                  onShowQuantityDialog: _showQuantityDialog,
+                                ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -400,6 +463,10 @@ class _PosScreenState extends State<PosScreen> {
           const SizedBox(width: 16),
           _buildTimerInfo(context, cartProvider, isCompact),
           const SizedBox(width: 16),
+          _buildSearchButton(),
+          const SizedBox(width: 8),
+          _buildLayoutToggle(),
+          const SizedBox(width: 8),
           _buildSortButton(context),
         ],
       ),
@@ -445,6 +512,10 @@ class _PosScreenState extends State<PosScreen> {
             ),
           ),
           const Spacer(),
+          _buildSearchButton(),
+          const SizedBox(width: 8),
+          _buildLayoutToggle(),
+          const SizedBox(width: 8),
           _buildSortButton(context),
         ],
       ),
@@ -517,6 +588,363 @@ class _PosScreenState extends State<PosScreen> {
           const SizedBox(width: 16),
           Expanded(
             child: _buildCategoryList(categories, categoryProvider, isCompact),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Search ──────────────────────────────────────────────────────────────────
+
+  Widget _buildSearchButton() {
+    return Tooltip(
+      message: 'Qidirish',
+      child: InkWell(
+        onTap: _startSearch,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: _isSearching
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: _isSearching
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).dividerColor.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Icon(
+            Icons.search_rounded,
+            size: 18,
+            color: _isSearching
+                ? Theme.of(context).colorScheme.primary
+                : const Color(0xFF64748B),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.scaffoldBackgroundColor,
+        border: Border(
+          bottom: BorderSide(color: theme.dividerColor.withValues(alpha: 0.2)),
+        ),
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: _clearSearch,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.dividerColor.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Icon(
+                Icons.arrow_back_rounded,
+                size: 20,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: OnscreenKeyboardTextField(
+              controller: _searchController,
+              autofocus: true,
+              onChanged: (v) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Taom nomini yozing...',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: theme.dividerColor.withValues(alpha: 0.3),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: theme.dividerColor.withValues(alpha: 0.3),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+                filled: true,
+                fillColor: theme.colorScheme.surface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchResults(BuildContext context, bool isCompact) {
+    final query = _searchController.text.toLowerCase().trim();
+    return Consumer<ProductProvider>(
+      builder: (context, productProvider, _) {
+        final products = productProvider.products
+            .where(
+              (p) =>
+                  p.isActive &&
+                  (query.isEmpty ||
+                      p.name.toLowerCase().contains(query) ||
+                      (p.category.toLowerCase().contains(query) ?? false)),
+            )
+            .toList();
+
+        if (products.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.search_off_rounded,
+                  size: 64,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.15),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '"$query" topilmadi',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.4),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final crossAxisCount = MediaQuery.of(context).size.width >= 1600
+            ? 6
+            : (MediaQuery.of(context).size.width >= 1200 ? 5 : 4);
+
+        return GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: isCompact ? 0.9 : 1.1,
+            crossAxisSpacing: isCompact ? 8 : 12,
+            mainAxisSpacing: isCompact ? 8 : 12,
+          ),
+          itemCount: products.length,
+          itemBuilder: (context, index) => ProductCardWidget(
+            product: products[index],
+            isCompact: isCompact,
+            onShowQuantityDialog: _showQuantityDialog,
+          ),
+        );
+      },
+    );
+  }
+
+  // ─── Layout toggle button ────────────────────────────────────────────────────
+
+  Widget _buildLayoutToggle() {
+    final isLeft = _categoryLayout == 'left';
+    return Tooltip(
+      message: isLeft ? 'Kategoriyalar tepada' : 'Kategoriyalar chapda',
+      child: InkWell(
+        onTap: () {
+          final next = isLeft ? 'top' : 'left';
+          setState(() => _categoryLayout = next);
+          _saveCategoryLayout(next);
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isLeft
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.1)
+                : Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isLeft
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).dividerColor.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Icon(
+            isLeft ? Icons.view_sidebar_outlined : Icons.view_stream_outlined,
+            size: 18,
+            color: isLeft
+                ? Theme.of(context).colorScheme.primary
+                : const Color(0xFF64748B),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Left category panel ─────────────────────────────────────────────────────
+
+  Widget _buildLeftCategoryPanel(
+    BuildContext context,
+    List<String> categories,
+    CategoryProvider categoryProvider,
+  ) {
+    final theme = Theme.of(context);
+    return Container(
+      width: 160,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          right: BorderSide(color: theme.dividerColor.withValues(alpha: 0.2)),
+        ),
+      ),
+      child: Column(
+        children: [
+          // All-categories grid button at top
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 10, 8, 6),
+            child: InkWell(
+              onTap: () =>
+                  _showCategoryModal(context, categories, categoryProvider),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.grid_view_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Barchasi',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          // Category list
+          Expanded(
+            child: ListView.builder(
+              controller: _leftCategoryScrollController,
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              itemCount: categories.length,
+              itemBuilder: (context, index) {
+                final cat = categories[index];
+                final isSelected = selectedCategory == cat;
+
+                Color? catColor;
+                if (cat != AppStrings.all) {
+                  try {
+                    final category = categoryProvider.categories.firstWhere(
+                      (c) => c.name == cat,
+                    );
+                    if (category.color != null) {
+                      catColor = Color(
+                        int.parse(category.color!.replaceFirst('#', '0xFF')),
+                      );
+                    }
+                  } catch (_) {}
+                }
+
+                final effectiveColor = catColor ?? theme.colorScheme.primary;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() => selectedCategory = cat);
+                      _pageController.animateToPage(
+                        index,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeInOut,
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? effectiveColor.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border(
+                          left: BorderSide(
+                            color: isSelected
+                                ? effectiveColor
+                                : Colors.transparent,
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                      child: Text(
+                        cat,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: isSelected
+                              ? FontWeight.w800
+                              : FontWeight.w700,
+                          color: isSelected
+                              ? effectiveColor
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.65,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -1031,8 +1459,45 @@ class _PosScreenState extends State<PosScreen> {
         grandTotal: grandTotal,
       );
 
-      // Print the receipt
-      final success = await PrintingService.printReceipt(order: order);
+      // Print the receipt — client rejimida serverga yuboriladi
+      final connectivity = context.read<ConnectivityProvider>();
+      bool success;
+      if (connectivity.mode == ConnectivityMode.client) {
+        try {
+          await connectivity.postRemoteData(
+              '/print_receipt', order.toPrintPayload());
+          success = true;
+        } catch (_) {
+          success = false;
+        }
+      } else {
+        success = await PrintingService.printReceipt(order: order);
+      }
+
+      if (success) {
+        final orderId = context.read<CartProvider>().activeOrderId;
+        final tableProvider = context.read<TableProvider>();
+        if (orderId != null && mounted) {
+          if (connectivity.mode == ConnectivityMode.client) {
+            await connectivity.postRemoteData(
+              '/orders/$orderId/bill_requested',
+              {'bill_requested': 1},
+            );
+          } else {
+            final db = await DatabaseHelper.instance.database;
+            await db.update(
+              'orders',
+              {'bill_requested': 1},
+              where: 'id = ?',
+              whereArgs: [orderId],
+            );
+          }
+          WebSocketManager.instance.broadcast('tables_updated', {
+            'table_id': widget.table?.id,
+          });
+          tableProvider.loadTables();
+        }
+      }
 
       if (context.mounted) {
         if (success) {
@@ -1694,6 +2159,9 @@ class _PosScreenState extends State<PosScreen> {
           ),
           child: Container(
             width: 500,
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.72,
+            ),
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1717,85 +2185,87 @@ class _PosScreenState extends State<PosScreen> {
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 16),
-                Consumer<WaiterProvider>(
-                  builder: (context, waiterProvider, _) {
-                    final waiters = waiterProvider.waiters;
-                    final cartProvider = context.read<CartProvider>();
+                Flexible(
+                  child: Consumer<WaiterProvider>(
+                    builder: (context, waiterProvider, _) {
+                      final waiters = waiterProvider.waiters;
+                      final cartProvider = context.read<CartProvider>();
 
-                    return GridView.builder(
-                      shrinkWrap: true,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 2.5,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                      itemCount: waiters.length,
-                      itemBuilder: (context, index) {
-                        final theme = Theme.of(context);
-                        final waiter = waiters[index];
-                        final isSelected =
-                            cartProvider.activeWaiterId == waiter.id;
-
-                        return InkWell(
-                          onTap: () {
-                            cartProvider.setWaiter(waiter.id, context);
-                            Navigator.pop(context);
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? const Color(
-                                      0xFF3B82F6,
-                                    ).withValues(alpha: 0.1)
-                                  : theme.colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isSelected
-                                    ? const Color(0xFF3B82F6)
-                                    : Colors.transparent,
-                                width: 2,
-                              ),
+                      return GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 2.5,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
                             ),
-                            alignment: Alignment.center,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.person,
+                        itemCount: waiters.length,
+                        itemBuilder: (context, index) {
+                          final theme = Theme.of(context);
+                          final waiter = waiters[index];
+                          final isSelected =
+                              cartProvider.activeWaiterId == waiter.id;
+
+                          return InkWell(
+                            onTap: () {
+                              cartProvider.setWaiter(waiter.id, context);
+                              Navigator.pop(context);
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(
+                                        0xFF3B82F6,
+                                      ).withValues(alpha: 0.1)
+                                    : theme.colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
                                   color: isSelected
                                       ? const Color(0xFF3B82F6)
-                                      : theme.colorScheme.onSurface.withValues(
-                                          alpha: 0.5,
-                                        ),
+                                      : Colors.transparent,
+                                  width: 2,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    waiter.name,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected
-                                          ? const Color(0xFF3B82F6)
-                                          : theme.colorScheme.onSurface,
+                              ),
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.person,
+                                    color: isSelected
+                                        ? const Color(0xFF3B82F6)
+                                        : theme.colorScheme.onSurface
+                                              .withValues(alpha: 0.5),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      waiter.name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected
+                                            ? const Color(0xFF3B82F6)
+                                            : theme.colorScheme.onSurface,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                if (isSelected)
-                                  const Icon(
-                                    Icons.check_circle,
-                                    color: Color(0xFF3B82F6),
-                                    size: 20,
-                                  ),
-                              ],
+                                  if (isSelected)
+                                    const Icon(
+                                      Icons.check_circle,
+                                      color: Color(0xFF3B82F6),
+                                      size: 20,
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    );
-                  },
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),

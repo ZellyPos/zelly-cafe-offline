@@ -22,18 +22,12 @@ class TelegramBotService {
 
   void start({required String token, String restaurantName = 'ZELLY'}) {
     if (token.isEmpty) return;
-    if (_isRunning && _token == token) {
-      _restaurantName = restaurantName;
-      return;
-    }
-    stop();
     _token = token;
     _restaurantName = restaurantName;
+    if (_isRunning && (_pollingTimer?.isActive ?? false)) return;
+    _pollingTimer?.cancel();
     _isRunning = true;
-    _pollingTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) => _poll(),
-    );
+    _schedulePoll();
     debugPrint('TelegramBot: polling started');
   }
 
@@ -42,6 +36,14 @@ class TelegramBotService {
     _pollingTimer = null;
     _isRunning = false;
     debugPrint('TelegramBot: stopped');
+  }
+
+  void _schedulePoll() {
+    if (!_isRunning) return;
+    _pollingTimer = Timer(const Duration(seconds: 3), () async {
+      await _poll();
+      _schedulePoll();
+    });
   }
 
   void updateRestaurantName(String name) => _restaurantName = name;
@@ -92,12 +94,84 @@ class TelegramBotService {
     final chatId = msg['chat']['id'] as int;
     final text = (msg['text'] as String? ?? '').trim();
 
+    // Persist chatId so proactive notifications reach this user
+    await _saveKnownChat(chatId);
+
     if (text.startsWith('/start') || text.startsWith('/menu')) {
       await _sendMainMenu(chatId);
     } else if (text == '/hisobot') {
       await _sendGeneralReport(chatId);
     } else {
       await _sendMainMenu(chatId);
+    }
+  }
+
+  // ─── Known chats persistence ───────────────────────────────────────────────
+
+  Future<void> _saveKnownChat(int chatId) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final rows = await db.query('settings', where: 'key = ?', whereArgs: ['telegram_notify_chats']);
+      final existing = rows.isNotEmpty ? (rows.first['value'] as String? ?? '') : '';
+      final ids = existing.isEmpty ? <String>[] : existing.split(',');
+      final idStr = chatId.toString();
+      if (!ids.contains(idStr)) {
+        ids.add(idStr);
+        await db.rawInsert(
+          'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+          ['telegram_notify_chats', ids.join(',')],
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<List<int>> _getKnownChats() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final rows = await db.query('settings', where: 'key = ?', whereArgs: ['telegram_notify_chats']);
+      if (rows.isEmpty) return [];
+      final val = rows.first['value'] as String? ?? '';
+      return val.split(',').where((s) => s.isNotEmpty).map(int.parse).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ─── Proactive notifications ───────────────────────────────────────────────
+
+  Future<void> notifyNewDelivery({
+    required String customerName,
+    required String phone,
+    required String address,
+    required double total,
+    required double deliveryFee,
+    required int dailyNumber,
+    required String itemsSummary,
+    String? note,
+  }) async {
+    if (_token == null || _token!.isEmpty) return;
+    final chats = await _getKnownChats();
+    if (chats.isEmpty) return;
+
+    final sb = StringBuffer();
+    sb.writeln('🚀 <b>Yangi yetkazib berish buyurtmasi!</b>');
+    sb.writeln('📋 Buyurtma #$dailyNumber');
+    sb.writeln('');
+    sb.writeln('👤 <b>$customerName</b>');
+    if (phone.isNotEmpty) sb.writeln('📞 $phone');
+    sb.writeln('📍 $address');
+    if (note != null && note.isNotEmpty) sb.writeln('📝 $note');
+    sb.writeln('');
+    sb.writeln('🍽 $itemsSummary');
+    sb.writeln('');
+    if (deliveryFee > 0) {
+      sb.writeln('🚗 Yetkazish: ${PriceFormatter.format(deliveryFee)}');
+    }
+    sb.writeln('💰 Jami: <b>${PriceFormatter.format(total)}</b>');
+
+    final text = sb.toString();
+    for (final chatId in chats) {
+      await _sendMsg(chatId, text);
     }
   }
 

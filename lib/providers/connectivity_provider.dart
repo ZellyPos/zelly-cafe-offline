@@ -6,6 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database_helper.dart';
 import 'package:http/http.dart' as http;
 import '../core/server/api_server.dart';
+import '../core/server/websocket_manager.dart';
+import '../core/services/ws_client_service.dart';
+import '../models/order.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -35,6 +38,14 @@ class ConnectivityProvider extends ChangeNotifier {
   bool get isSuccess => _isSuccess;
   String? get lastError => _lastError;
 
+  /// Exposes server-pushed events to UI listeners (client mode only).
+  Stream<Map<String, dynamic>> get wsEvents => WsClientService.instance.events;
+
+  /// Broadcast an event to all connected WS clients (server/local mode).
+  void broadcastEvent(String event, [Map<String, dynamic>? data]) {
+    WebSocketManager.instance.broadcast(event, data);
+  }
+
   ConnectivityProvider() {
     loadSettings();
   }
@@ -47,6 +58,8 @@ class ConnectivityProvider extends ChangeNotifier {
 
     if (_mode == ConnectivityMode.server) {
       startServer();
+    } else if (_mode == ConnectivityMode.client && _clientBaseUrl != null) {
+      WsClientService.instance.connect(_clientBaseUrl!);
     }
 
     final appDocDir = await getApplicationSupportDirectory();
@@ -61,9 +74,16 @@ class ConnectivityProvider extends ChangeNotifier {
     await prefs.setInt('connectivity_mode', mode.index);
 
     if (mode == ConnectivityMode.server) {
+      WsClientService.instance.disconnect();
       startServer();
+    } else if (mode == ConnectivityMode.client) {
+      stopServer();
+      if (_clientBaseUrl != null) {
+        WsClientService.instance.connect(_clientBaseUrl!);
+      }
     } else {
       stopServer();
+      WsClientService.instance.disconnect();
     }
     notifyListeners();
   }
@@ -125,6 +145,9 @@ class ConnectivityProvider extends ChangeNotifier {
     _clientBaseUrl = url;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('client_base_url', url);
+    if (_mode == ConnectivityMode.client && url.isNotEmpty) {
+      WsClientService.instance.connect(url);
+    }
     notifyListeners();
   }
 
@@ -170,13 +193,9 @@ class ConnectivityProvider extends ChangeNotifier {
 
   bool shouldFetchRemote({bool forceRemote = false}) {
     if (forceRemote) return true;
-    if (_mode == ConnectivityMode.client) return true;
-    if (_currentUser != null &&
-        _currentUser!['role'] != 'admin' &&
-        _currentUser!['role'] != 'cashier') {
-      return true;
-    }
-    return false;
+    // Only client-mode devices fetch from a remote server.
+    // Server/local devices always read their own DB regardless of logged-in role.
+    return _mode == ConnectivityMode.client;
   }
 
   void setCurrentUser(Map<String, dynamic>? user) {
@@ -324,6 +343,28 @@ class ConnectivityProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Delete Remote Data Error: $e');
       return false;
+    }
+  }
+
+  /// Sends a print job to the server (client mode) or prints locally.
+  /// Returns an error message on failure, null on success.
+  Future<String?> requestPrint(Order order) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_clientBaseUrl/print_job'),
+            body: jsonEncode(order.toPrintPayload()),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_authToken',
+            },
+          )
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) return null;
+      return 'Server chop etishda xatolik: ${response.statusCode}';
+    } catch (e) {
+      debugPrint('requestPrint error: $e');
+      return 'Printer serverga ulanishda xatolik: $e';
     }
   }
 

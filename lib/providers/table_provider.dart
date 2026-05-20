@@ -56,11 +56,12 @@ class TableProvider extends ChangeNotifier {
       } else {
         final db = await DatabaseHelper.instance.database;
         data = await db.rawQuery('''
-      SELECT t.*, 
-             o.id as order_id, 
-             o.waiter_id, 
-             o.opened_at, 
-             o.total as order_total, 
+      SELECT t.*,
+             o.id as order_id,
+             o.waiter_id,
+             o.opened_at,
+             o.total as order_total,
+             o.bill_requested,
              w.name as waiter_name
       FROM tables t
       LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
@@ -79,6 +80,7 @@ class TableProvider extends ChangeNotifier {
             openedAt: item['opened_at'] != null
                 ? DateTime.parse(item['opened_at'] as String)
                 : null,
+            billRequested: (item['bill_requested'] as int? ?? 0) == 1,
           );
         }
         return TableModel.fromMap(item, activeOrder: activeOrder);
@@ -101,6 +103,45 @@ class TableProvider extends ChangeNotifier {
       await DatabaseHelper.instance.insert('tables', table.toMap());
     }
     await loadTables(connectivity: connectivity);
+  }
+
+  /// Creates multiple tables at once (from [start] to [end] inclusive).
+  /// Returns the number of tables successfully created.
+  Future<int> addTablesBulk({
+    required String prefix,
+    required int start,
+    required int end,
+    required int locationId,
+    int pricingType = 0,
+    double hourlyRate = 0,
+    double fixedAmount = 0,
+    double servicePercentage = 0,
+    ConnectivityProvider? connectivity,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final total = end - start + 1;
+    int done = 0;
+    for (int i = start; i <= end; i++) {
+      final name = prefix.isEmpty ? '$i' : '$prefix $i';
+      final table = TableModel(
+        name: name,
+        locationId: locationId,
+        status: 0,
+        pricingType: pricingType,
+        hourlyRate: hourlyRate,
+        fixedAmount: fixedAmount,
+        servicePercentage: servicePercentage,
+      );
+      if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+        await connectivity.postRemoteData('/tables', table.toMap());
+      } else {
+        await DatabaseHelper.instance.insert('tables', table.toMap());
+      }
+      done++;
+      onProgress?.call(done, total);
+    }
+    await loadTables(connectivity: connectivity);
+    return done;
   }
 
   Future<void> updateTable(
@@ -213,11 +254,12 @@ class TableProvider extends ChangeNotifier {
     try {
       final db = await DatabaseHelper.instance.database;
       String query = '''
-        SELECT t.*, 
-               o.id as order_id, 
-               o.waiter_id, 
-               o.opened_at, 
-               o.total as order_total, 
+        SELECT t.*,
+               o.id as order_id,
+               o.waiter_id,
+               o.opened_at,
+               o.total as order_total,
+               o.bill_requested,
                w.name as waiter_name
         FROM tables t
         LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
@@ -243,6 +285,7 @@ class TableProvider extends ChangeNotifier {
             openedAt: item['opened_at'] != null
                 ? DateTime.parse(item['opened_at'] as String)
                 : null,
+            billRequested: (item['bill_requested'] as int? ?? 0) == 1,
           );
         }
         return TableModel.fromMap(item, activeOrder: activeOrder);
@@ -250,6 +293,34 @@ class TableProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint("Error getting tables for location: $e");
       return [];
+    }
+  }
+
+  Future<String?> bulkUpdatePricing({
+    required int pricingType,
+    required double value,
+    int? onlyLocationId,
+    int? onlyCurrentPricingType,
+  }) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final conditions = <String>[];
+      if (onlyLocationId != null) conditions.add('location_id = $onlyLocationId');
+      if (onlyCurrentPricingType != null) conditions.add('pricing_type = $onlyCurrentPricingType');
+      final where = conditions.isEmpty ? '1=1' : conditions.join(' AND ');
+
+      final double hourlyRate = pricingType == 1 ? value : 0;
+      final double fixedAmount = pricingType == 2 ? value : 0;
+      final double servicePercentage = pricingType == 3 ? value : 0;
+
+      await db.rawUpdate(
+        'UPDATE tables SET pricing_type = ?, hourly_rate = ?, fixed_amount = ?, service_percentage = ? WHERE $where',
+        [pricingType, hourlyRate, fixedAmount, servicePercentage],
+      );
+      await loadTables();
+      return null;
+    } catch (e) {
+      return 'Xatolik: $e';
     }
   }
 }

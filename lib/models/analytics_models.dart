@@ -59,6 +59,8 @@ class WaiterPerformance {
   final int ordersCount;
   final double revenue;
   final double serviceTotal;
+  final int waiterType;   // 0=fixed, 1=percent
+  final double waiterValue;
 
   WaiterPerformance({
     required this.waiterId,
@@ -66,7 +68,15 @@ class WaiterPerformance {
     required this.ordersCount,
     required this.revenue,
     required this.serviceTotal,
+    this.waiterType = 0,
+    this.waiterValue = 0,
   });
+
+  /// Hisoblangan komissiya (foiz yoki fiksed)
+  double get commission {
+    if (waiterType == 1) return revenue * (waiterValue / 100);
+    return ordersCount * waiterValue;
+  }
 
   factory WaiterPerformance.fromMap(Map<String, dynamic> map) {
     return WaiterPerformance(
@@ -75,6 +85,8 @@ class WaiterPerformance {
       ordersCount: (map['orders_count'] as num?)?.toInt() ?? 0,
       revenue: (map['revenue'] as num?)?.toDouble() ?? 0.0,
       serviceTotal: (map['service_total'] as num?)?.toDouble() ?? 0.0,
+      waiterType: (map['waiter_type'] as num?)?.toInt() ?? 0,
+      waiterValue: (map['waiter_value'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
@@ -144,4 +156,38 @@ class PaymentTypeStats {
       percentage: total > 0 ? (amount / total) * 100 : 0.0,
     );
   }
+}
+
+/// CategorySalesStats - Kategoriyalar bo'yicha sotuvlar
+class CategorySalesStats {
+  final String category;
+  final double qty;
+  final double revenue;
+
+  CategorySalesStats({
+    required this.category,
+    required this.qty,
+    required this.revenue,
+  });
+
+  factory CategorySalesStats.fromMap(Map<String, dynamic> map) {
+    return CategorySalesStats(
+      category: map['category'] as String? ?? 'Boshqa',
+      qty: (map['qty'] as num?)?.toDouble() ?? 0.0,
+      revenue: (map['revenue'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+/// HourlySalesStats - Soatlik faollik statistikasi
+class HourlySalesStats {
+  final int hour;
+  final int ordersCount;
+  final double revenue;
+
+  HourlySalesStats({
+    required this.hour,
+    required this.ordersCount,
+    required this.revenue,
+  });
 }

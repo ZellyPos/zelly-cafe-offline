@@ -42,7 +42,9 @@ class OrderItem {
       id: map['id'],
       orderId: map['order_id'],
       productId: map['product_id'],
-      productName: productName,
+      productName: productName.isNotEmpty
+          ? productName
+          : (map['product_name'] as String? ?? ''),
       qty: (map['qty'] as num).toDouble(),
       unit: map['unit'],
       price: (map['price'] as num).toDouble(),
@@ -60,7 +62,7 @@ class Order {
   final List<OrderItem> items;
 
   // New Restaurant Mode fields
-  final int orderType; // 0 = dine_in, 1 = takeaway
+  final int orderType; // 0 = dine_in, 1 = takeaway, 2 = delivery
   final int? tableId;
   final int? locationId;
   final int? waiterId;
@@ -90,6 +92,22 @@ class Order {
   // Order note / comment
   final String? note;
 
+  // Shift linkage
+  final int? shiftId;
+
+  // Delivery fields (orderType == 2)
+  final String? customerName;
+  final String? customerPhone;
+  final String? deliveryAddress;
+  final int deliveryStatus; // 0=yangi, 1=tayyorlanmoqda, 2=yo'lda, 3=yetkazildi, 4=bekor
+  final int? courierId;
+  final double deliveryFee;
+  final String? deliveryNote;
+  final int? zoneId;
+
+  // Bill request flag — set when waiter prints temp receipt
+  final bool billRequested;
+
   Order({
     required this.id,
     required this.total,
@@ -115,6 +133,16 @@ class Order {
     this.grandTotal = 0,
     this.dailyNumber,
     this.note,
+    this.shiftId,
+    this.customerName,
+    this.customerPhone,
+    this.deliveryAddress,
+    this.deliveryStatus = 0,
+    this.courierId,
+    this.deliveryFee = 0,
+    this.deliveryNote,
+    this.zoneId,
+    this.billRequested = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -140,7 +168,41 @@ class Order {
       'grand_total': grandTotal,
       'daily_number': dailyNumber,
       'note': note,
+      'shift_id': shiftId,
+      'customer_name': customerName,
+      'customer_phone': customerPhone,
+      'delivery_address': deliveryAddress,
+      'delivery_status': deliveryStatus,
+      'courier_id': courierId,
+      'delivery_fee': deliveryFee,
+      'delivery_note': deliveryNote,
+      'zone_id': zoneId,
+      'bill_requested': billRequested ? 1 : 0,
     };
+  }
+
+  /// Full payload for remote print jobs — includes display fields and items.
+  Map<String, dynamic> toPrintPayload() {
+    return {
+      ...toMap(),
+      'table_name': tableName,
+      'waiter_name': waiterName,
+      'location_name': locationName,
+      'items': items
+          .map((i) => {
+                ...i.toMap(),
+                'product_name': i.productName,
+              })
+          .toList(),
+    };
+  }
+
+  factory Order.fromPrintPayload(Map<String, dynamic> map) {
+    final rawItems = map['items'] as List<dynamic>? ?? [];
+    final items = rawItems
+        .map((i) => OrderItem.fromMap(Map<String, dynamic>.from(i as Map)))
+        .toList();
+    return Order.fromMap(map, items: items);
   }
 
   factory Order.fromMap(
@@ -176,6 +238,16 @@ class Order {
       grandTotal: (map['grand_total'] as num?)?.toDouble() ?? 0.0,
       dailyNumber: map['daily_number'] as int?,
       note: map['note'] as String?,
+      shiftId: map['shift_id'] as int?,
+      customerName: map['customer_name'] as String?,
+      customerPhone: map['customer_phone'] as String?,
+      deliveryAddress: map['delivery_address'] as String?,
+      deliveryStatus: (map['delivery_status'] as num?)?.toInt() ?? 0,
+      courierId: map['courier_id'] as int?,
+      deliveryFee: (map['delivery_fee'] as num?)?.toDouble() ?? 0,
+      deliveryNote: map['delivery_note'] as String?,
+      zoneId: map['zone_id'] as int?,
+      billRequested: (map['bill_requested'] as int? ?? 0) == 1,
     );
   }
 }

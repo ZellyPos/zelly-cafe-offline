@@ -32,6 +32,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     final reportProvider = context.watch<ReportProvider>();
+    final connectivity = context.read<ConnectivityProvider>();
+    reportProvider.setConnectivity(connectivity);
 
     final theme = Theme.of(context);
 
@@ -61,14 +63,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 // but for now, let's use what we have or placeholder totals.
 
                 return GridView.builder(
-                  padding: EdgeInsets.all(
-                    MediaQuery.of(context).size.width <= 1100 ? 12 : 24,
-                  ),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: _getCrossAxisCount(context),
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: _getChildAspectRatio(context),
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.9,
                   ),
                   itemCount: 7,
                   itemBuilder: (context, index) {
@@ -159,39 +159,52 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildHeader(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isSmall = MediaQuery.of(context).size.width <= 800;
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        isSmall ? 16 : 32,
-        isSmall ? 24 : 48,
-        isSmall ? 16 : 32,
-        isSmall ? 12 : 24,
+      padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFE2E8F0),
+          ),
+        ),
       ),
-      color: Theme.of(context).colorScheme.surface,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.indigo.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.analytics_rounded,
+                color: Colors.indigo, size: 18),
+          ),
+          const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 AppStrings.reportsTitle,
                 style: TextStyle(
-                  fontSize: isSmall ? 20 : 28,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
               Text(
                 AppStrings.reportsDescription,
                 style: TextStyle(
-                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                  fontSize: 14,
+                  color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                  fontSize: 11,
                 ),
               ),
             ],
           ),
-          Row(children: [_buildTelegramSyncButton(context)]),
+          const Spacer(),
+          _buildTelegramSyncButton(context),
         ],
       ),
     );
@@ -200,16 +213,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildTelegramSyncButton(BuildContext context) {
     return ElevatedButton.icon(
       onPressed: () => _handleTelegramSync(context),
-      icon: const Icon(Icons.send_rounded, size: 20),
-      label: Text(AppStrings.syncTelegram),
+      icon: const Icon(Icons.send_rounded, size: 15),
+      label: Text(AppStrings.syncTelegram,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF229ED9), // Telegram Blue
+        backgroundColor: const Color(0xFF229ED9),
         foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(
-          horizontal: MediaQuery.of(context).size.width <= 800 ? 12 : 24,
-          vertical: MediaQuery.of(context).size.width <= 800 ? 12 : 16,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 0,
       ),
     );
   }
@@ -398,19 +410,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isSmall = MediaQuery.of(context).size.width <= 800;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: EdgeInsets.all(isSmall ? 14 : 18),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
+          border: Border(
+            top: BorderSide(color: color.withValues(alpha: 0.4), width: 3),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 20,
+              color: color.withValues(alpha: 0.06),
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
@@ -418,38 +432,58 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: isSmall ? 20 : 24),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 16),
+                ),
+                const Spacer(),
+                Icon(Icons.arrow_forward_ios_rounded,
+                    size: 12, color: color.withValues(alpha: 0.4)),
+              ],
             ),
             const Spacer(),
             Text(
               title,
               style: TextStyle(
-                fontSize: isSmall ? 15 : 17,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: theme.colorScheme.onSurface,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               subtitle,
               style: TextStyle(
-                color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                fontSize: isSmall ? 11 : 12,
+                color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                fontSize: 10,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 16),
-            Text(
-              metric,
-              style: TextStyle(
-                fontSize: isSmall ? 13 : 14,
-                fontWeight: FontWeight.w600,
-                color: color,
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                metric,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -462,19 +496,4 @@ class _ReportsScreenState extends State<ReportsScreen> {
     Navigator.of(context).push(MaterialPageRoute(builder: (context) => screen));
   }
 
-  int _getCrossAxisCount(BuildContext context) {
-    double width = MediaQuery.of(context).size.width;
-    if (width > 1400) return 4;
-    if (width > 900) return 3;
-    if (width > 600) return 2;
-    return 1;
-  }
-
-  double _getChildAspectRatio(BuildContext context) {
-    double width = MediaQuery.of(context).size.width;
-    if (width > 1200) return 1.5;
-    if (width > 900) return 1.4;
-    if (width > 600) return 1.6;
-    return 2.5;
-  }
 }

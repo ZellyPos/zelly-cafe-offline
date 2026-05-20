@@ -37,6 +37,19 @@ class ReceiptSettings {
   final bool headerBold;
   final bool totalBold; // Also larger
 
+  // ─── Kitchen receipt settings ───────────────────────────────────────
+  final String kitchenHeaderText;   // e.g. 'OSHXONA CHEKI'
+  final bool kitchenShowOrderNumber;
+  final bool kitchenShowTime;
+  final bool kitchenShowTable;
+  final bool kitchenShowWaiter;
+  final bool kitchenShowNote;
+  final bool kitchenFontLarge;      // mahsulot nomini size2 qilish
+  final bool kitchenGroupByCategory;
+  final bool kitchenShowTotal;
+  final bool kitchenCutPaper;
+  final int kitchenFeedLines;
+
   ReceiptSettings({
     this.restaurantName = 'ZELLY',
     this.showRestaurantName = true,
@@ -64,6 +77,17 @@ class ReceiptSettings {
     this.layoutType = 'table',
     this.headerBold = true,
     this.totalBold = true,
+    this.kitchenHeaderText = 'OSHXONA CHEKI',
+    this.kitchenShowOrderNumber = true,
+    this.kitchenShowTime = true,
+    this.kitchenShowTable = true,
+    this.kitchenShowWaiter = true,
+    this.kitchenShowNote = true,
+    this.kitchenFontLarge = true,
+    this.kitchenGroupByCategory = false,
+    this.kitchenShowTotal = true,
+    this.kitchenCutPaper = true,
+    this.kitchenFeedLines = 3,
   });
 
   Map<String, String> toMap() {
@@ -94,6 +118,17 @@ class ReceiptSettings {
       'receipt_layout_type': layoutType,
       'receipt_header_bold': headerBold.toString(),
       'receipt_total_bold': totalBold.toString(),
+      'kitchen_header_text': kitchenHeaderText,
+      'kitchen_show_order_number': kitchenShowOrderNumber.toString(),
+      'kitchen_show_time': kitchenShowTime.toString(),
+      'kitchen_show_table': kitchenShowTable.toString(),
+      'kitchen_show_waiter': kitchenShowWaiter.toString(),
+      'kitchen_show_note': kitchenShowNote.toString(),
+      'kitchen_font_large': kitchenFontLarge.toString(),
+      'kitchen_group_by_category': kitchenGroupByCategory.toString(),
+      'kitchen_show_total': kitchenShowTotal.toString(),
+      'kitchen_cut_paper': kitchenCutPaper.toString(),
+      'kitchen_feed_lines': kitchenFeedLines.toString(),
     };
   }
 
@@ -137,6 +172,17 @@ class ReceiptSettings {
       layoutType: map['receipt_layout_type'] ?? 'table',
       headerBold: parseBool(map['receipt_header_bold'], true),
       totalBold: parseBool(map['receipt_total_bold'], true),
+      kitchenHeaderText: map['kitchen_header_text'] ?? 'OSHXONA CHEKI',
+      kitchenShowOrderNumber: parseBool(map['kitchen_show_order_number'], true),
+      kitchenShowTime: parseBool(map['kitchen_show_time'], true),
+      kitchenShowTable: parseBool(map['kitchen_show_table'], true),
+      kitchenShowWaiter: parseBool(map['kitchen_show_waiter'], true),
+      kitchenShowNote: parseBool(map['kitchen_show_note'], true),
+      kitchenFontLarge: parseBool(map['kitchen_font_large'], true),
+      kitchenGroupByCategory: parseBool(map['kitchen_group_by_category'], false),
+      kitchenShowTotal: parseBool(map['kitchen_show_total'], true),
+      kitchenCutPaper: parseBool(map['kitchen_cut_paper'], true),
+      kitchenFeedLines: int.tryParse(map['kitchen_feed_lines']?.toString() ?? '3') ?? 3,
     );
   }
 
@@ -167,6 +213,17 @@ class ReceiptSettings {
     String? layoutType,
     bool? headerBold,
     bool? totalBold,
+    String? kitchenHeaderText,
+    bool? kitchenShowOrderNumber,
+    bool? kitchenShowTime,
+    bool? kitchenShowTable,
+    bool? kitchenShowWaiter,
+    bool? kitchenShowNote,
+    bool? kitchenFontLarge,
+    bool? kitchenGroupByCategory,
+    bool? kitchenShowTotal,
+    bool? kitchenCutPaper,
+    int? kitchenFeedLines,
   }) {
     return ReceiptSettings(
       restaurantName: restaurantName ?? this.restaurantName,
@@ -195,6 +252,17 @@ class ReceiptSettings {
       layoutType: layoutType ?? this.layoutType,
       headerBold: headerBold ?? this.headerBold,
       totalBold: totalBold ?? this.totalBold,
+      kitchenHeaderText: kitchenHeaderText ?? this.kitchenHeaderText,
+      kitchenShowOrderNumber: kitchenShowOrderNumber ?? this.kitchenShowOrderNumber,
+      kitchenShowTime: kitchenShowTime ?? this.kitchenShowTime,
+      kitchenShowTable: kitchenShowTable ?? this.kitchenShowTable,
+      kitchenShowWaiter: kitchenShowWaiter ?? this.kitchenShowWaiter,
+      kitchenShowNote: kitchenShowNote ?? this.kitchenShowNote,
+      kitchenFontLarge: kitchenFontLarge ?? this.kitchenFontLarge,
+      kitchenGroupByCategory: kitchenGroupByCategory ?? this.kitchenGroupByCategory,
+      kitchenShowTotal: kitchenShowTotal ?? this.kitchenShowTotal,
+      kitchenCutPaper: kitchenCutPaper ?? this.kitchenCutPaper,
+      kitchenFeedLines: kitchenFeedLines ?? this.kitchenFeedLines,
     );
   }
 }

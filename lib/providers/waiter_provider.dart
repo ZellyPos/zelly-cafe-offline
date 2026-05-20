@@ -50,33 +50,124 @@ class WaiterProvider with ChangeNotifier {
     }
   }
 
-  Future<void> addWaiter(
+  Future<String?> addWaiter(
     Waiter waiter, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/waiters', waiter.toMap());
-    } else {
-      await DatabaseHelper.instance.insert('waiters', waiter.toMap());
+    try {
+      if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+        final ok = await connectivity.postRemoteData('/waiters', waiter.toMap());
+        if (!ok) return 'Serverga qo\'shishda xatolik yuz berdi';
+      } else {
+        final duplicate = await _findPinDuplicate(waiter.pinCode, excludeId: null);
+        if (duplicate != null) {
+          return 'Bu PIN kod (${waiter.pinCode}) allaqachon "$duplicate" xodimiga biriktirilgan';
+        }
+        await DatabaseHelper.instance.insert('waiters', waiter.toMap());
+      }
+      await loadWaiters(connectivity: connectivity);
+      return null;
+    } catch (e) {
+      return 'Xatolik: $e';
     }
-    await loadWaiters(connectivity: connectivity);
   }
 
-  Future<void> updateWaiter(
+  Future<String?> updateWaiter(
     Waiter waiter, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/waiters', waiter.toMap());
-    } else {
-      await DatabaseHelper.instance.update(
-        'waiters',
-        waiter.toMap(),
-        'id = ?',
-        [waiter.id!],
-      );
+    try {
+      if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+        final ok = await connectivity.postRemoteData('/waiters', waiter.toMap());
+        if (!ok) return 'Serverda yangilashda xatolik yuz berdi';
+      } else {
+        final duplicate = await _findPinDuplicate(waiter.pinCode, excludeId: waiter.id);
+        if (duplicate != null) {
+          return 'Bu PIN kod (${waiter.pinCode}) allaqachon "$duplicate" xodimiga biriktirilgan';
+        }
+        await DatabaseHelper.instance.update(
+          'waiters',
+          waiter.toMap(),
+          'id = ?',
+          [waiter.id!],
+        );
+      }
+      await loadWaiters(connectivity: connectivity);
+      return null;
+    } catch (e) {
+      return 'Xatolik: $e';
     }
-    await loadWaiters(connectivity: connectivity);
+  }
+
+  Future<String?> bulkUpdateCommission({
+    required int type,
+    required double value,
+    int? onlyCurrentType,
+  }) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final where = onlyCurrentType != null
+          ? "name != 'Kassa' AND type = $onlyCurrentType"
+          : "name != 'Kassa'";
+      await db.rawUpdate(
+        "UPDATE waiters SET type = ?, value = ? WHERE $where",
+        [type, value],
+      );
+      await loadWaiters();
+      return null;
+    } catch (e) {
+      return 'Xatolik: $e';
+    }
+  }
+
+  Future<String?> bulkUpdatePermissions({
+    required List<String> add,    // qo'shiladigan ruxsatlar
+    required List<String> remove, // o'chiriladigan ruxsatlar
+    int? onlyCurrentType,         // null=hammasi, 0=fixed, 1=percent
+  }) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final where = onlyCurrentType != null
+          ? "name != 'Kassa' AND type = $onlyCurrentType"
+          : "name != 'Kassa'";
+      final rows = await db.rawQuery(
+        "SELECT id, permissions FROM waiters WHERE $where",
+      );
+      final batch = db.batch();
+      for (final row in rows) {
+        final raw = (row['permissions'] as String?) ?? '';
+        final perms = raw.isEmpty
+            ? <String>[]
+            : raw.split(',').where((s) => s.isNotEmpty).toList();
+        for (final p in add) {
+          if (!perms.contains(p)) perms.add(p);
+        }
+        perms.removeWhere((p) => remove.contains(p));
+        batch.rawUpdate(
+          "UPDATE waiters SET permissions = ? WHERE id = ?",
+          [perms.join(','), row['id']],
+        );
+      }
+      await batch.commit(noResult: true);
+      await loadWaiters();
+      return null;
+    } catch (e) {
+      return 'Xatolik: $e';
+    }
+  }
+
+  /// PIN duplikatini tekshiradi. Mavjud bo'lsa xodim nomini qaytaradi.
+  Future<String?> _findPinDuplicate(String? pin, {required int? excludeId}) async {
+    if (pin == null || pin.isEmpty) return null;
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query(
+      'waiters',
+      where: excludeId != null ? 'pin_code = ? AND id != ?' : 'pin_code = ?',
+      whereArgs: excludeId != null ? [pin, excludeId] : [pin],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['name']?.toString() ?? 'Boshqa xodim';
   }
 
   Future<bool> deleteWaiter(
@@ -135,8 +226,8 @@ class WaiterProvider with ChangeNotifier {
     // 2. Get orders summary (only status=1)
     final ordersRes = await db.rawQuery(
       '''
-      SELECT COUNT(*) as count, SUM(total) as total 
-      FROM orders 
+      SELECT COUNT(*) as count, SUM(grand_total) as total
+      FROM orders
       WHERE waiter_id = ? AND status = 1 AND created_at BETWEEN ? AND ?
     ''',
       [waiterId, startStr, endStr],

@@ -58,6 +58,58 @@ class ShiftRepository {
     return List.generate(maps.length, (i) => CashMovement.fromMap(maps[i]));
   }
 
+  // --- Tarix ---
+
+  /// Smena tarixini olish (eng yangi birinchi)
+  Future<List<Shift>> getShiftHistory({int limit = 60}) async {
+    final db = await _dbHelper.database;
+    final maps = await db.query(
+      'shifts',
+      orderBy: 'opened_at DESC',
+      limit: limit,
+    );
+    return maps.map((m) => Shift.fromMap(m)).toList();
+  }
+
+  /// Smena buyurtmalar sonini olish
+  Future<int> getShiftOrderCount(int shiftId) async {
+    final db = await _dbHelper.database;
+    final res = await db.rawQuery(
+      'SELECT COUNT(*) as cnt FROM orders WHERE shift_id = ? AND status = 1',
+      [shiftId],
+    );
+    return (res.first['cnt'] as int?) ?? 0;
+  }
+
+  /// Smena ochgan va yopgan foydalanuvchi ismlarini olish
+  Future<Map<String, String?>> getShiftUserNames(
+    int openedBy,
+    int? closedBy,
+  ) async {
+    final db = await _dbHelper.database;
+    String? openedName;
+    String? closedName;
+
+    final openedRes = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [openedBy],
+    );
+    if (openedRes.isNotEmpty) openedName = openedRes.first['name'] as String?;
+
+    if (closedBy != null) {
+      final closedRes = await db.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [closedBy],
+      );
+      if (closedRes.isNotEmpty) {
+        closedName = closedRes.first['name'] as String?;
+      }
+    }
+    return {'opened': openedName, 'closed': closedName};
+  }
+
   // --- Hisobotlar (Agregatsiya) ---
 
   /// Smena bo'yicha sotuvlar summasini olish

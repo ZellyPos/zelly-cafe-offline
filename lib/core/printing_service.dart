@@ -12,7 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import '../core/database_helper.dart';
 import 'windows_printing_helper.dart';
-import 'app_strings.dart';
+
 
 class PrintingService {
   // Constant constraints for 80mm Font A
@@ -124,50 +124,56 @@ class PrintingService {
     required List<OrderItem> items,
   }) async {
     try {
+      final ks = await _loadReceiptSettings();
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
       bytes += [27, 116, 17]; // ESC t 17 (CP866)
 
-      // HEADER
-      if (order.orderType == 1) {
-        bytes += generator.text(
-          _cleanText('SABOY'),
-          styles: const PosStyles(
-            bold: true,
-            height: PosTextSize.size2,
-            width: PosTextSize.size2,
-            align: PosAlign.left,
-          ),
-        );
-      } else {
-        bytes += generator.text(
-          _cleanText('OSHXONA CHEKI'),
-          styles: const PosStyles(
-            bold: true,
-            height: PosTextSize.size2,
-            align: PosAlign.left,
-          ),
-        );
-      }
+      // ── HEADER ─────────────────────────────────────────────────────
+      final headerText = order.orderType == 1
+          ? 'SABOY'
+          : _cleanText(ks.kitchenHeaderText.isNotEmpty
+              ? ks.kitchenHeaderText
+              : 'OSHXONA CHEKI');
+
+      bytes += generator.text(
+        headerText,
+        styles: const PosStyles(
+          bold: true,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+          align: PosAlign.left,
+        ),
+      );
       bytes += generator.feed(1);
 
-      if (order.dailyNumber != null) {
+      // Buyurtma raqami
+      if (ks.kitchenShowOrderNumber) {
+        if (order.dailyNumber != null) {
+          bytes += generator.text(
+            _cleanText('Buyurtma №: ${order.dailyNumber}'),
+            styles: const PosStyles(align: PosAlign.left, bold: true),
+          );
+        }
         bytes += generator.text(
-          _cleanText('Buyurtma №: ${order.dailyNumber}'),
-          styles: const PosStyles(align: PosAlign.left, bold: true),
+          _cleanText('Kod: #${order.id.substring(0, 8).toUpperCase()}'),
         );
       }
 
-      bytes += generator.text('Buyurtma: #${order.id.substring(0, 8)}');
-      bytes += generator.text(
-        'Sana: ${DateFormat('dd.MM.yyyy HH:mm').format(order.createdAt)}',
-      );
+      // Vaqt
+      if (ks.kitchenShowTime) {
+        bytes += generator.text(
+          _cleanText(
+              'Sana: ${DateFormat('dd.MM.yyyy HH:mm').format(order.createdAt)}'),
+        );
+      }
 
+      // Stol (dine-in uchun)
       if (order.orderType == 0) {
-        if (order.tableName != null) {
+        if (ks.kitchenShowTable && order.tableName != null) {
           bytes += generator.text(
-            'STOL: ${order.tableName}',
+            _cleanText('STOL: ${order.tableName}'),
             styles: const PosStyles(
               bold: true,
               height: PosTextSize.size2,
@@ -175,73 +181,82 @@ class PrintingService {
             ),
           );
         }
-        if (order.waiterName != null) {
-          bytes += generator.text('Ofitsiant: ${order.waiterName}');
+        if (ks.kitchenShowWaiter && order.waiterName != null) {
+          bytes += generator.text(
+              _cleanText('Ofitsiant: ${order.waiterName}'));
         }
       }
+
+      // Izoh
+      if (ks.kitchenShowNote && order.note != null && order.note!.isNotEmpty) {
+        bytes += generator.text('');
+        bytes += generator.text(
+          _cleanText('Izoh: ${order.note}'),
+          styles: const PosStyles(bold: true),
+        );
+      }
+
       bytes += generator.hr();
 
-      // ITEMS
-      for (var item in items) {
-        final double qtyToPrint = item.qty;
-        final bool isCancellation = qtyToPrint < 0;
-        final String qtyStr =
-            "${qtyToPrint.abs().toStringAsFixed(item.unit == 'kg' ? 2 : 0)} ${AppStrings.getUnitLabel(item.unit)}";
-        final String labelPrefix = isCancellation ? '[BEKOR QILINDI] ' : '';
-
-        bytes += generator.text(
-          '$labelPrefix$qtyStr x ${item.productName}',
-          styles: PosStyles(
-            bold: true,
-            height: PosTextSize.size2,
-            reverse: isCancellation,
-          ),
-        );
-        if (item.bundleItemsJson != null) {
-          final List<dynamic> components = jsonDecode(item.bundleItemsJson!);
-          for (var comp in components) {
-            bytes += generator.text('  - ${comp['product_name']}');
+      // ── MAHSULOTLAR ────────────────────────────────────────────────
+      if (ks.kitchenGroupByCategory) {
+        // Kategoriyaga guruhlash
+        final Map<String, List<OrderItem>> grouped = {};
+        for (final item in items) {
+          final cat = item.unit ?? 'Boshqa';
+          grouped.putIfAbsent(cat, () => []).add(item);
+        }
+        for (final entry in grouped.entries) {
+          bytes += generator.text(
+            _cleanText('[ ${entry.key.toUpperCase()} ]'),
+            styles: const PosStyles(bold: true),
+          );
+          for (final item in entry.value) {
+            bytes += _kitchenItemBytes(generator, item, ks.kitchenFontLarge);
           }
         }
-        bytes += generator.feed(1);
+      } else {
+        for (final item in items) {
+          bytes += _kitchenItemBytes(generator, item, ks.kitchenFontLarge);
+        }
       }
 
       bytes += generator.hr();
 
-      // Breakdown
-      final double foodTotal = order.foodTotal > 0
-          ? order.foodTotal
-          : (order.total - order.roomCharge - order.serviceTotal);
+      if (ks.kitchenShowTotal) {
+        // ── JAMI ─────────────────────────────────────────────────────
+        final double foodTotal = order.foodTotal > 0
+            ? order.foodTotal
+            : (order.total - order.roomCharge - order.serviceTotal);
 
-      bytes += generator.text(
-        _format2Col('Taomlar:', PriceFormatter.format(foodTotal)),
-      );
-
-      if (order.serviceTotal > 0) {
         bytes += generator.text(
-          _format2Col('Xizmat haqi:', PriceFormatter.format(order.serviceTotal)),
+            _format2Col('Taomlar:', PriceFormatter.format(foodTotal)));
+
+        if (order.serviceTotal > 0) {
+          bytes += generator.text(
+            _format2Col('Xizmat haqi:', PriceFormatter.format(order.serviceTotal)),
+          );
+        }
+        if (order.roomTotal > 0) {
+          bytes += generator.text(
+            _format2Col('Xona/Stol:', PriceFormatter.format(order.roomTotal)),
+          );
+        }
+
+        bytes += generator.hr();
+        bytes += generator.text(
+          'JAMI: ${PriceFormatter.format(order.total)}',
+          styles: const PosStyles(
+            bold: true,
+            align: PosAlign.right,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          ),
         );
       }
 
-      if (order.roomTotal > 0) {
-        bytes += generator.text(
-          _format2Col('Xona/Stol:', PriceFormatter.format(order.roomTotal)),
-        );
-      }
-
-      bytes += generator.hr();
-
-      bytes += generator.text(
-        'JAMI: ${PriceFormatter.format(order.total)}',
-        styles: const PosStyles(
-          bold: true,
-          align: PosAlign.right,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
-        ),
-      );
-      bytes += generator.feed(3);
-      bytes += generator.cut();
+      bytes += generator.feed(ks.kitchenFeedLines);
+      if (ks.kitchenCutPaper) bytes += generator.cut();
 
       return await _sendToPrinter(settings, bytes);
     } catch (e) {
@@ -297,6 +312,40 @@ class PrintingService {
       debugPrint('Error loading receipt settings from DB: $e');
     }
     return ReceiptSettings();
+  }
+
+  static List<int> _kitchenItemBytes(
+    Generator generator,
+    OrderItem item,
+    bool fontLarge,
+  ) {
+    final List<int> bytes = [];
+    final double qty = item.qty;
+    final bool isCancellation = qty < 0;
+    final String qtyStr =
+        qty.abs().toStringAsFixed(item.unit == 'kg' ? 2 : 0);
+    final String prefix = isCancellation ? '[BEKOR] ' : '';
+
+    bytes.addAll(generator.text(
+      _cleanText('$prefix${item.productName} $qtyStr'),
+      styles: PosStyles(
+        bold: true,
+        height: fontLarge ? PosTextSize.size2 : PosTextSize.size1,
+        reverse: isCancellation,
+      ),
+    ));
+
+    if (item.bundleItemsJson != null) {
+      final List<dynamic> components = jsonDecode(item.bundleItemsJson!);
+      for (var comp in components) {
+        bytes.addAll(generator.text(
+          _cleanText('  + ${comp['product_name']}'),
+        ));
+      }
+    }
+
+    bytes.addAll(generator.feed(1));
+    return bytes;
   }
 
   static Future<List<String>> getUsbPrinters() async {
@@ -722,6 +771,42 @@ class PrintingService {
             rSettings.horizontalMargin,
           ),
         );
+      } else if (order.orderType == 2) {
+        // Delivery
+        bytes += generator.text(
+          'YETKAZIB BERISH',
+          styles: const PosStyles(
+            align: PosAlign.left,
+            bold: true,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          ),
+        );
+        if (order.customerName?.isNotEmpty == true) {
+          bytes += generator.text(
+            _padLine('Mijoz: ${_cleanText(order.customerName!)}',
+                rSettings.horizontalMargin),
+            styles: const PosStyles(bold: true),
+          );
+        }
+        if (order.customerPhone?.isNotEmpty == true) {
+          bytes += generator.text(
+            _padLine('Tel: ${order.customerPhone!}', rSettings.horizontalMargin),
+          );
+        }
+        if (order.deliveryAddress?.isNotEmpty == true) {
+          bytes += generator.text(
+            _padLine('Manzil: ${_cleanText(order.deliveryAddress!)}',
+                rSettings.horizontalMargin),
+            styles: const PosStyles(bold: true),
+          );
+        }
+        if (order.deliveryNote?.isNotEmpty == true) {
+          bytes += generator.text(
+            _padLine('Izoh: ${_cleanText(order.deliveryNote!)}',
+                rSettings.horizontalMargin),
+          );
+        }
       } else {
         bytes += generator.text(
           'SABOY',
@@ -749,7 +834,7 @@ class PrintingService {
 
         for (var item in order.items) {
           final qtyStr =
-              "${item.qty.toStringAsFixed(item.unit == 'kg' ? 2 : 0)} ${AppStrings.getUnitLabel(item.unit)}";
+              item.qty.toStringAsFixed(item.unit == 'kg' ? 2 : 0);
           final totalStr = PriceFormatter.format(item.qty * item.price);
 
           if (rSettings.layoutType == 'table') {
@@ -833,7 +918,17 @@ class PrintingService {
         );
       }
 
-      if (order.roomTotal > 0 || order.serviceTotal > 0) {
+      if (order.deliveryFee > 0) {
+        bytes += generator.text(
+          _format2Col(
+            'Yetkazish:',
+            PriceFormatter.format(order.deliveryFee),
+            margin: rSettings.horizontalMargin,
+          ),
+        );
+      }
+
+      if (order.roomTotal > 0 || order.serviceTotal > 0 || order.deliveryFee > 0) {
         bytes += generator.hr();
       }
 

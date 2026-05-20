@@ -22,6 +22,8 @@ class ProductCardWidget extends StatelessWidget {
     required this.onShowQuantityDialog,
   });
 
+  static const _accent = Color(0xFF6366F1);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -38,148 +40,121 @@ class ProductCardWidget extends StatelessWidget {
       }
     });
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.borderRadius),
-        boxShadow: AppTheme.softShadow,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            context.read<CartProvider>().addItem(
-              product,
-              context.read<ConnectivityProvider>(),
-              context,
-            );
-          },
-          onLongPress: () => onShowQuantityDialog(context, product),
-          borderRadius: BorderRadius.circular(AppTheme.borderRadius),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildImage(context, categoryColor),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      product.name,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: isCompact ? 14 : 16,
-                        height: 1.1,
-                        color: theme.colorScheme.onSurface,
-                        letterSpacing: -0.3,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "${PriceFormatter.format(product.price)} so'm",
-                                style: TextStyle(
-                                  color: const Color(0xFF10B981),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: isCompact ? 13 : 15,
-                                ),
-                              ),
-                              Text(
-                                "/ ${AppStrings.getUnitLabel(product.unit)}",
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.4),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (product.quantity != null)
-                          Consumer<CartProvider>(
-                            builder: (context, cart, _) {
-                              final inCart = product.id != null
-                                  ? cart.getProductCartQuantity(product.id!)
-                                  : 0.0;
-                              final displayQty = product.quantity! - inCart;
+    return Consumer<CartProvider>(
+      builder: (context, cart, _) {
+        final qtyInCart = product.id != null
+            ? cart.getProductCartQuantity(product.id!)
+            : 0.0;
+        final inCart = qtyInCart > 0;
 
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: displayQty <= 5
-                                      ? Colors.red.withOpacity(0.1)
-                                      : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: displayQty <= 5
-                                        ? Colors.red.withOpacity(0.3)
-                                        : Colors.transparent,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.inventory_2_outlined,
-                                      size: 10,
-                                      color: displayQty <= 5
-                                          ? Colors.red
-                                          : theme.colorScheme.onSurface
-                                                .withOpacity(0.6),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      displayQty <= 0
-                                          ? "Tugadi"
-                                          : "Qoldi: ${displayQty.toStringAsFixed(0)}",
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: displayQty <= 5
-                                            ? Colors.red
-                                            : theme.colorScheme.onSurface
-                                                  .withOpacity(0.7),
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: inCart
+                ? _accent.withValues(alpha: 0.07)
+                : theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+            boxShadow: AppTheme.softShadow,
+            border: Border.all(
+              color: inCart
+                  ? _accent.withValues(alpha: 0.35)
+                  : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => context.read<CartProvider>().addItem(
+                    product,
+                    context.read<ConnectivityProvider>(),
+                    context,
+                  ),
+              onLongPress: () => onShowQuantityDialog(context, product),
+              borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildImage(context, categoryColor, inCart, qtyInCart, theme),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: isCompact ? 14 : 16,
+                            height: 1.1,
+                            color: theme.colorScheme.onSurface,
+                            letterSpacing: -0.3,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "${PriceFormatter.format(product.price)} so'm",
+                                    style: TextStyle(
+                                      color: const Color(0xFF10B981),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: isCompact ? 13 : 15,
+                                    ),
+                                  ),
+                                  Text(
+                                    "/ ${AppStrings.getUnitLabel(product.unit)}",
+                                    style: TextStyle(
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.4),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (product.quantity != null)
+                              _buildStockBadge(
+                                  product.quantity! - qtyInCart, theme),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildImage(BuildContext context, Color? categoryColor) {
+  Widget _buildImage(
+    BuildContext context,
+    Color? categoryColor,
+    bool inCart,
+    double qtyInCart,
+    ThemeData theme,
+  ) {
     return Expanded(
       child: Stack(
         children: [
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: inCart
+                  ? _accent.withValues(alpha: 0.05)
+                  : const Color(0xFFF8FAFC),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(AppTheme.borderRadius),
               ),
@@ -189,26 +164,27 @@ class ProductCardWidget extends StatelessWidget {
               builder: (context) {
                 final connectivity = context.read<ConnectivityProvider>();
                 final imageUrl = connectivity.getImageUrl(product.imagePath);
-
                 if (imageUrl != null) {
                   if (imageUrl.startsWith('http')) {
                     return Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => _buildPlaceholder(context),
+                      errorBuilder: (_, _, _) => _buildPlaceholder(theme),
                     );
                   } else {
                     return Image.file(
                       File(imageUrl),
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, _) => _buildPlaceholder(context),
+                      errorBuilder: (_, _, _) => _buildPlaceholder(theme),
                     );
                   }
                 }
-                return _buildPlaceholder(context);
+                return _buildPlaceholder(theme);
               },
             ),
           ),
+
+          // Kategoriya rangi
           if (categoryColor != null)
             Positioned(
               top: 8,
@@ -222,21 +198,23 @@ class ProductCardWidget extends StatelessWidget {
                   border: Border.all(color: Colors.white, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 4,
                     ),
                   ],
                 ),
               ),
             ),
+
+          // Set belgisi
           if (product.isSet)
             Positioned(
               top: 8,
-              right: 8,
+              right: inCart ? 36 : 8,
               child: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -246,12 +224,84 @@ class ProductCardWidget extends StatelessWidget {
                 ),
               ),
             ),
+
+          // Cartdagi miqdor badge
+          if (inCart)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _accent,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withValues(alpha: 0.4),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  '×${qtyInCart.toStringAsFixed(qtyInCart % 1 == 0 ? 0 : 1)}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildPlaceholder(BuildContext context) {
+  Widget _buildStockBadge(double displayQty, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: displayQty <= 5
+            ? Colors.red.withValues(alpha: 0.1)
+            : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: displayQty <= 5
+              ? Colors.red.withValues(alpha: 0.3)
+              : Colors.transparent,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 10,
+            color: displayQty <= 5
+                ? Colors.red
+                : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            displayQty <= 0
+                ? "Tugadi"
+                : "Qoldi: ${displayQty.toStringAsFixed(0)}",
+            style: TextStyle(
+              fontSize: 10,
+              color: displayQty <= 5
+                  ? Colors.red
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(ThemeData theme) {
     return Center(
       child: Icon(
         Icons.fastfood_rounded,

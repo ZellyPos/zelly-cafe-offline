@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/database_helper.dart';
 import '../../providers/connectivity_provider.dart';
@@ -29,6 +31,24 @@ class _LoginScreenState extends State<LoginScreen> {
   // Waiter login flow
   bool _isWaiterMode = false;
   Waiter? _selectedWaiter;
+
+  // Clock
+  DateTime _now = DateTime.now();
+  Timer? _clockTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
 
   void _handlePinPress(String value) {
     if (value == '⌫') {
@@ -294,6 +314,36 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
                             ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 48,
+                    right: 52,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          DateFormat('HH:mm:ss').format(_now),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 56,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 2,
+                            height: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          DateFormat('dd MMMM yyyy, EEEE').format(_now),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.65),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ],

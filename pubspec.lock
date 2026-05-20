@@ -246,6 +246,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.7+1"
+  flutter_onscreen_keyboard:
+    dependency: "direct main"
+    description:
+      name: flutter_onscreen_keyboard
+      sha256: c7509098a922fa46dbeb36d760ed70c8db441d93a0c11d64d2b1551c9c52b19d
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.6"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -736,6 +744,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.4"
+  shelf_web_socket:
+    dependency: "direct main"
+    description:
+      name: shelf_web_socket
+      sha256: cc36c297b52866d203dbf9332263c94becc2fe0ceaa9681d07b6ef9807023b67
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -893,6 +909,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  web_socket:
+    dependency: transitive
+    description:
+      name: web_socket
+      sha256: "34d64019aa8e36bf9842ac014bb5d2f5586ca73df5e4d9bf5c936975cae6982c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
+  web_socket_channel:
+    dependency: "direct main"
+    description:
+      name: web_socket_channel
+      sha256: d645757fb0f4773d602444000a8131ff5d48c9e47adfe9772652dd1a4f2d45c8
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.3"
   win32:
     dependency: "direct main"
     description:

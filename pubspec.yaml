@@ -21,6 +21,11 @@ version: 1.0.0+1
 environment:
   sdk: ^3.10.3
 
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
 # consider running `flutter pub upgrade --major-versions`. Alternatively,
@@ -43,6 +48,8 @@ dependencies:
   qr_flutter: ^4.1.0
   shelf: ^1.4.1
   shelf_router: ^1.1.4
+  shelf_web_socket: ^2.0.0
+  web_socket_channel: ^3.0.0
   network_info_plus: ^6.0.0
   shared_preferences: ^2.2.2
   http: ^1.2.0
@@ -62,6 +69,7 @@ dependencies:
   printing: ^5.11.1
   share_plus: ^10.1.0
   pointycastle: ^3.9.1
+  flutter_onscreen_keyboard: ^0.4.6
 
 dev_dependencies:
   flutter_test:

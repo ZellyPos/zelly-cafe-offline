@@ -480,7 +480,16 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
           ElevatedButton(
             onPressed: () async {
               final amount = int.tryParse(amountController.text) ?? 0;
-              if (amount <= 0) return;
+              if (amount <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("To'lov summasi 0 dan katta bo'lishi kerak"),
+                    backgroundColor: Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                return;
+              }
 
               await context.read<WaiterProvider>().addSalaryPayment(
                 widget.waiter.id!,

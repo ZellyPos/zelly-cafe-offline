@@ -110,6 +110,32 @@ class ShiftService {
     await _repo.insertCashMovement(movement);
   }
 
+  // --- Hisobot ---
+
+  /// Smena uchun to'liq hisobot yaratish (yopishdan oldin yoki tarixdan)
+  Future<ShiftReport> generateShiftReport({
+    required Shift shift,
+    required double countedCash,
+    required double expectedCash,
+  }) async {
+    final summary = await _repo.getShiftSalesSummary(shift.id!);
+    final orderCount = await _repo.getShiftOrderCount(shift.id!);
+    final movements = await _repo.getShiftMovements(shift.id!);
+    final names = await _repo.getShiftUserNames(shift.openedBy, shift.closedBy);
+    final difference = countedCash - expectedCash;
+
+    return ShiftReport(
+      shift: shift,
+      summary: summary,
+      orderCount: orderCount,
+      countedCash: countedCash,
+      difference: difference,
+      openedByName: names['opened'],
+      closedByName: names['closed'],
+      movements: movements,
+    );
+  }
+
   // --- Xavfsizlik va Tekshiruvlar ---
 
   /// Sotuv bloklanganmi yoki yo'qligini tekshirish

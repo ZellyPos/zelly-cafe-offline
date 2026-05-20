@@ -5,6 +5,8 @@ import '../../providers/table_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../models/location.dart';
 import '../../providers/connectivity_provider.dart';
+import '../../core/services/ws_client_service.dart';
+import '../../core/server/websocket_manager.dart';
 import '../../models/table.dart';
 import '../../core/theme.dart';
 import '../../core/utils/price_formatter.dart';
@@ -13,6 +15,7 @@ import 'pos_screen.dart';
 import 'widgets/floor_plan_viewer.dart';
 import 'widgets/floor_plan_editor.dart';
 import '../login/login_screen.dart';
+import '../delivery/delivery_screen.dart';
 
 class TablesScreen extends StatefulWidget {
   const TablesScreen({super.key});
@@ -23,7 +26,8 @@ class TablesScreen extends StatefulWidget {
 
 class _TablesScreenState extends State<TablesScreen> {
   int? _selectedLocationId;
-  Timer? _refreshTimer;
+  StreamSubscription<Map<String, dynamic>>? _wsSubscription;
+  Timer? _fallbackTimer;
   bool _isFloorPlanView = false;
   bool _isDesignMode = false;
 
@@ -36,18 +40,41 @@ class _TablesScreenState extends State<TablesScreen> {
       _selectedLocationId = locations.first.id;
     }
 
-    // Initial load with loading indicator (after build completes)
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<TableProvider>().loadTables(
         connectivity: connectivity,
         silent: false,
       );
+      _startRealtime(connectivity);
+    });
+  }
+
+  void _startRealtime(ConnectivityProvider connectivity) {
+    final Stream<Map<String, dynamic>> eventStream;
+
+    if (connectivity.mode == ConnectivityMode.client) {
+      // Client device: receive events pushed over the network from the server
+      eventStream = WsClientService.instance.events;
+    } else {
+      // Server / local device: receive in-process broadcasts directly
+      eventStream = WebSocketManager.instance.localEvents;
+    }
+
+    _wsSubscription = eventStream.listen((event) {
+      final type = event['event'] as String?;
+      if (!mounted) return;
+      if (type == 'tables_updated' || type == 'order_updated') {
+        context.read<TableProvider>().loadTables(
+          connectivity: connectivity,
+          silent: true,
+        );
+      }
     });
 
-    // Polling interval: 5 seconds for real-time updates (silent)
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    // Fallback: 30s silent refresh (catches edge cases / reconnects)
+    _fallbackTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
-        // Silent update - no loading indicator, no setState
         context.read<TableProvider>().loadTables(
           connectivity: connectivity,
           silent: true,
@@ -58,7 +85,8 @@ class _TablesScreenState extends State<TablesScreen> {
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _wsSubscription?.cancel();
+    _fallbackTimer?.cancel();
     super.dispose();
   }
 
@@ -125,6 +153,14 @@ class _TablesScreenState extends State<TablesScreen> {
                   ],
                   if (role == 'cashier') ...[
                     _buildLogoutButton(context),
+                    const SizedBox(width: 12),
+                  ],
+                  if (role == 'waiter') ...[
+                    _buildLockButton(context),
+                    const SizedBox(width: 12),
+                  ],
+                  if (role != 'waiter') ...[
+                    _buildDeliveryButton(context),
                     const SizedBox(width: 12),
                   ],
                   _buildSaboyButton(context),
@@ -235,6 +271,32 @@ class _TablesScreenState extends State<TablesScreen> {
     );
   }
 
+  Widget _buildDeliveryButton(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: ElevatedButton.icon(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const DeliveryScreen()),
+          );
+        },
+        icon: const Icon(Icons.delivery_dining_rounded, size: 20),
+        label: const Text(
+          'YETKAZIB BERISH',
+          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF6366F1),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 0,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSaboyButton(BuildContext context) {
     return SizedBox(
       height: 52,
@@ -274,6 +336,7 @@ class _TablesScreenState extends State<TablesScreen> {
     final theme = Theme.of(context);
     final isOccupied = table.status == 1;
     final info = table.activeOrder;
+    final bool billRequested = info?.billRequested ?? false;
     final bool isJoined = joinedWith != null && joinedWith.length > 1;
     final connectivity = context.read<ConnectivityProvider>();
     final role = connectivity.currentUser?['role'] ?? 'admin';
@@ -283,19 +346,23 @@ class _TablesScreenState extends State<TablesScreen> {
         table.activeOrder?.waiterId != null &&
         table.activeOrder?.waiterId != userId;
 
+    const green = Color(0xFF10B981);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
         color: isBlockedForWaiter
-            ? (theme.brightness == Brightness.dark
-                ? const Color(0xFF1A1A2E)
-                : const Color(0xFFF8FAFC))
-            : isOccupied
-                ? (theme.brightness == Brightness.dark
-                    ? const Color(0xFF2D1B1B)
-                    : const Color(0xFFFFF5F5))
-                : theme.cardTheme.color,
+            ? (isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF8FAFC))
+            : billRequested
+                ? (isDark ? const Color(0xFF0D2B1B) : const Color(0xFFF0FFF7))
+                : isOccupied
+                    ? (isDark ? const Color(0xFF2D1B1B) : const Color(0xFFFFF5F5))
+                    : theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppTheme.borderRadius),
         boxShadow: AppTheme.softShadow,
+        border: billRequested
+            ? Border.all(color: green.withValues(alpha: 0.5), width: 1.5)
+            : null,
       ),
       child: Material(
         color: Colors.transparent,
@@ -323,7 +390,23 @@ class _TablesScreenState extends State<TablesScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (isJoined)
+                    if (billRequested)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade600,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.notifications_active_rounded, color: Colors.white, size: 14),
+                            SizedBox(width: 4),
+                            Text('HISOB', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      )
+                    else if (isJoined)
                       _buildJoinBadge()
                     else
                       isBlockedForWaiter
@@ -585,6 +668,7 @@ class _TablesScreenState extends State<TablesScreen> {
       return;
     }
 
+    final tableProvider = context.read<TableProvider>();
     Navigator.of(context)
         .push(
           MaterialPageRoute(
@@ -592,8 +676,41 @@ class _TablesScreenState extends State<TablesScreen> {
           ),
         )
         .then((_) {
-          context.read<TableProvider>().loadTables();
+          if (!mounted) return;
+          tableProvider.loadTables(connectivity: connectivity, silent: true);
         });
+  }
+
+  Widget _buildLockButton(BuildContext context) {
+    return Tooltip(
+      message: 'Qulflash',
+      child: Container(
+        height: 52,
+        width: 52,
+        decoration: BoxDecoration(
+          color: const Color(0xFF475569),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: IconButton(
+          onPressed: () {
+            context.read<ConnectivityProvider>().setCurrentUser(null);
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+              (route) => false,
+            );
+          },
+          icon: const Icon(Icons.lock_rounded, color: Colors.white, size: 22),
+          padding: EdgeInsets.zero,
+        ),
+      ),
+    );
   }
 
   Widget _buildLogoutButton(BuildContext context) {

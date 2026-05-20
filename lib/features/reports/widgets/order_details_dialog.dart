@@ -3,11 +3,83 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../providers/report_provider.dart';
+import '../../../core/printing_service.dart';
+import '../../../models/order.dart';
 
-class OrderDetailsDialog extends StatelessWidget {
+class OrderDetailsDialog extends StatefulWidget {
   final String orderId;
 
   const OrderDetailsDialog({super.key, required this.orderId});
+
+  @override
+  State<OrderDetailsDialog> createState() => _OrderDetailsDialogState();
+}
+
+class _OrderDetailsDialogState extends State<OrderDetailsDialog> {
+  bool _printing = false;
+
+  Future<void> _printReceipt(
+    Map<String, dynamic> order,
+    List<Map<String, dynamic>> items,
+  ) async {
+    setState(() => _printing = true);
+    try {
+      final orderItems = items
+          .map((item) => OrderItem(
+                orderId: widget.orderId,
+                productId: (item['product_id'] as num?)?.toInt() ?? 0,
+                productName: item['product_name'] ?? '',
+                qty: (item['qty'] as num).toDouble(),
+                price: (item['price'] as num).toDouble(),
+                unit: item['unit']?.toString(),
+              ))
+          .toList();
+
+      final o = Order(
+        id: widget.orderId,
+        total: (order['total'] as num?)?.toDouble() ?? 0.0,
+        paymentType: order['payment_type'] ?? '',
+        createdAt: DateTime.tryParse(order['created_at'] ?? '') ?? DateTime.now(),
+        items: orderItems,
+        orderType: (order['order_type'] as num?)?.toInt() ?? 0,
+        tableId: (order['table_id'] as num?)?.toInt(),
+        locationId: (order['location_id'] as num?)?.toInt(),
+        waiterId: (order['waiter_id'] as num?)?.toInt(),
+        status: 1,
+        tableName: order['table_name']?.toString(),
+        locationName: order['location_name']?.toString(),
+        waiterName: order['waiter_name']?.toString(),
+        foodTotal: (order['food_total'] as num?)?.toDouble() ?? 0.0,
+        roomCharge: (order['room_charge'] as num?)?.toDouble() ??
+            (order['room_total'] as num?)?.toDouble() ?? 0.0,
+        serviceTotal: (order['service_total'] as num?)?.toDouble() ?? 0.0,
+        grandTotal: (order['grand_total'] as num?)?.toDouble() ??
+            (order['total'] as num?)?.toDouble() ?? 0.0,
+        paidAmount: (order['paid_amount'] as num?)?.toDouble() ?? 0.0,
+        change: (order['change_amount'] as num?)?.toDouble() ?? 0.0,
+        dailyNumber: (order['daily_number'] as num?)?.toInt(),
+        note: order['note']?.toString(),
+      );
+
+      final success = await PrintingService.printReceipt(order: o);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(success ? 'Chek chiqarildi' : 'Chek chiqarishda xatolik'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Xatolik: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +96,7 @@ class OrderDetailsDialog extends StatelessWidget {
             final bool isCompact = constraints.maxWidth < 550;
 
             return FutureBuilder<Map<String, dynamic>?>(
-              future: context.read<ReportProvider>().getOrderDetails(orderId),
+              future: context.read<ReportProvider>().getOrderDetails(widget.orderId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const SizedBox(
@@ -37,7 +109,7 @@ class OrderDetailsDialog extends StatelessWidget {
                 if (order == null) {
                   return const SizedBox(
                     height: 200,
-                    child: Center(child: Text("Buyurtma topilmadi")),
+                    child: Center(child: Text('Buyurtma topilmadi')),
                   );
                 }
 
@@ -48,16 +120,13 @@ class OrderDetailsDialog extends StatelessWidget {
                     _buildHeader(context, order),
                     const Divider(height: 32),
                     const Text(
-                      "Buyurtma tarkibi:",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                      'Buyurtma tarkibi:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     const SizedBox(height: 16),
-                    Expanded(child: _buildItemsList(context, isCompact)),
+                    Expanded(child: _buildItemsList(context, isCompact, order)),
                     const Divider(height: 32),
-                    _buildFooter(order, isCompact),
+                    _buildFooter(context, order, isCompact),
                   ],
                 );
               },
@@ -69,54 +138,58 @@ class OrderDetailsDialog extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context, Map<String, dynamic> order) {
-    final String id = order['id'].toString().substring(0, 8).toUpperCase();
+    final String id = order['id'].toString().length >= 8
+        ? order['id'].toString().substring(0, 8).toUpperCase()
+        : order['id'].toString().toUpperCase();
+    final String? dailyNo = order['daily_number']?.toString();
+    final String displayId = dailyNo != null ? '№$dailyNo (#$id)' : '#$id';
     final DateTime date = DateTime.parse(order['created_at']);
-    final String type = order['order_type'] == 0 ? "Stol" : "Saboy";
-    final String location = order['location_name'] ?? "-";
-    final String table = order['table_name'] ?? "-";
+    final String type = order['order_type'] == 0 ? 'Stol' : 'Saboy';
+    final String location = order['location_name'] ?? '-';
+    final String table = order['table_name'] ?? '-';
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  "Buyurtma #$id",
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade100,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    type,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.blue.shade800,
-                      fontWeight: FontWeight.bold,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Buyurtma $displayId',
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "${DateFormat('dd.MM.yyyy HH:mm').format(date)} • $location / $table",
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-          ],
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      type,
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue.shade800,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${DateFormat('dd.MM.yyyy HH:mm').format(date)} • $location / $table',
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+            ],
+          ),
         ),
         IconButton(
           onPressed: () => Navigator.pop(context),
@@ -126,9 +199,13 @@ class OrderDetailsDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildItemsList(BuildContext context, bool isCompact) {
+  Widget _buildItemsList(
+    BuildContext context,
+    bool isCompact,
+    Map<String, dynamic> order,
+  ) {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: context.read<ReportProvider>().getOrderItems(orderId),
+      future: context.read<ReportProvider>().getOrderItems(widget.orderId),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -154,20 +231,18 @@ class OrderDetailsDialog extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          item['product_name'] ?? "",
+                          item['product_name'] ?? '',
                           style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: isCompact ? 13 : 14,
-                          ),
+                              fontWeight: FontWeight.w600,
+                              fontSize: isCompact ? 13 : 14),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          "${PriceFormatter.format(price)} x $qty",
+                          '${PriceFormatter.format(price)} x $qty',
                           style: TextStyle(
-                            fontSize: isCompact ? 11 : 12,
-                            color: Colors.grey,
-                          ),
+                              fontSize: isCompact ? 11 : 12,
+                              color: Colors.grey),
                         ),
                       ],
                     ),
@@ -176,11 +251,10 @@ class OrderDetailsDialog extends StatelessWidget {
                   Expanded(
                     flex: 1,
                     child: Text(
-                      "${PriceFormatter.format(total)} so'm",
+                      '${PriceFormatter.format(total)} so\'m',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: isCompact ? 13 : 14,
-                      ),
+                          fontWeight: FontWeight.bold,
+                          fontSize: isCompact ? 13 : 14),
                       textAlign: TextAlign.end,
                     ),
                   ),
@@ -193,49 +267,53 @@ class OrderDetailsDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildFooter(Map<String, dynamic> order, bool isCompact) {
-    final double grandTotal = (order['total'] as num).toDouble();
-    final double foodTotal = (order['food_total'] as num?)?.toDouble() ?? 0.0;
+  Widget _buildFooter(
+    BuildContext context,
+    Map<String, dynamic> order,
+    bool isCompact,
+  ) {
+    final double grandTotal = (order['grand_total'] as num?)?.toDouble() ??
+        (order['total'] as num?)?.toDouble() ?? 0.0;
+    final double foodTotal =
+        (order['food_total'] as num?)?.toDouble() ?? 0.0;
     final double roomTotal =
         (order['room_total'] as num?)?.toDouble() ??
-        (order['room_charge'] as num?)?.toDouble() ??
-        0.0;
+        (order['room_charge'] as num?)?.toDouble() ?? 0.0;
     final double serviceTotal =
         (order['service_total'] as num?)?.toDouble() ?? 0.0;
-    final String paymentType = order['payment_type'] ?? "Kassa";
+    final String paymentType = order['payment_type'] ?? 'Kassa';
 
     return Column(
       children: [
         _buildSummaryRow(
-          "Taomlar:",
+          'Taomlar:',
           PriceFormatter.format(
             foodTotal > 0 ? foodTotal : grandTotal - roomTotal - serviceTotal,
           ),
         ),
         if (roomTotal > 0) ...[
           const SizedBox(height: 4),
-          _buildSummaryRow("Xona/Stol:", PriceFormatter.format(roomTotal)),
+          _buildSummaryRow('Xona/Stol:', PriceFormatter.format(roomTotal)),
         ],
         if (serviceTotal > 0) ...[
           const SizedBox(height: 4),
           _buildSummaryRow(
-            "Ofitsiant xizmati:",
-            PriceFormatter.format(serviceTotal),
-          ),
+              'Ofitsiant xizmati:', PriceFormatter.format(serviceTotal)),
         ],
         const Divider(height: 24),
         _buildSummaryRow(
-          "Jami:",
+          'Jami:',
           PriceFormatter.format(grandTotal),
           isTotal: true,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text("To'lov turi:", style: TextStyle(color: Colors.grey)),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(6),
@@ -243,36 +321,74 @@ class OrderDetailsDialog extends StatelessWidget {
               child: Text(
                 paymentType,
                 style: TextStyle(
-                  color: Colors.blue.shade700,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
+                    color: Colors.blue.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        _buildPrintButton(context, order),
       ],
     );
   }
 
-  Widget _buildSummaryRow(String label, String value, {bool isTotal = false}) {
+  Widget _buildPrintButton(BuildContext context, Map<String, dynamic> order) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: context.read<ReportProvider>().getOrderItems(widget.orderId),
+      builder: (ctx, snap) {
+        final items = snap.data ?? [];
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: (_printing || !snap.hasData)
+                ? null
+                : () => _printReceipt(order, items),
+            icon: _printing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.print_rounded),
+            label: Text(_printing ? 'Chiqarilmoqda...' : 'Chek chiqarish'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade700,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              textStyle: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value,
+      {bool isTotal = false}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
           style: TextStyle(
-            fontSize: isTotal ? 18 : 14,
-            fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-          ),
+              fontSize: isTotal ? 18 : 14,
+              fontWeight:
+                  isTotal ? FontWeight.bold : FontWeight.normal),
         ),
         Text(
           "$value so'm",
           style: TextStyle(
-            fontSize: isTotal ? 22 : 14,
-            fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
-            color: isTotal ? Colors.blue.shade700 : Colors.black,
-          ),
+              fontSize: isTotal ? 22 : 14,
+              fontWeight:
+                  isTotal ? FontWeight.bold : FontWeight.w600,
+              color:
+                  isTotal ? Colors.blue.shade700 : Colors.black),
         ),
       ],
     );

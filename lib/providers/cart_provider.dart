@@ -8,6 +8,7 @@ import '../core/app_strings.dart';
 import '../models/order.dart';
 import '../models/product.dart';
 import '../core/printing_service.dart';
+import '../core/server/websocket_manager.dart';
 import 'table_provider.dart';
 import 'location_provider.dart';
 import 'waiter_provider.dart';
@@ -16,6 +17,7 @@ import 'app_settings_provider.dart';
 import 'product_provider.dart';
 import '../core/services/audit_service.dart';
 import '../core/services/inventory_service.dart';
+import 'shift_provider.dart';
 import '../models/table.dart' as table_model;
 
 class CartItem {
@@ -205,6 +207,7 @@ class CartProvider extends ChangeNotifier {
     int? locationId, [
     ConnectivityProvider? connectivity,
     int orderType = 0,
+    String? orderId,
   ]) async {
     _activeTableId = tableId;
     _activeLocationId = locationId;
@@ -214,6 +217,62 @@ class CartProvider extends ChangeNotifier {
     _activeWaiterId = null;
     _activeOpenedAt = null;
     _isNewOrderSession = false;
+
+    // Load a specific order by ID (e.g. a specific saboy order)
+    if (orderId != null && tableId == null) {
+      final db = await DatabaseHelper.instance.database;
+      final orderRes = await db.query(
+        'orders',
+        where: 'id = ? AND status = 0',
+        whereArgs: [orderId],
+      );
+      if (orderRes.isNotEmpty) {
+        final orderMap = orderRes.first;
+        _activeOrderId = orderMap['id'] as String;
+        _activeWaiterId = orderMap['waiter_id'] as int?;
+        _activeOpenedAt = orderMap['opened_at'] != null
+            ? DateTime.parse(orderMap['opened_at'] as String)
+            : null;
+        final itemsRes = await db.rawQuery(
+          '''
+          SELECT oi.*, p.name as product_name, p.price as product_price,
+                 p.category as product_category, p.quantity as product_quantity,
+                 p.no_service_charge
+          FROM order_items oi
+          JOIN products p ON oi.product_id = p.id
+          WHERE oi.order_id = ?
+        ''',
+          [_activeOrderId],
+        );
+        for (var row in itemsRes) {
+          final product = Product(
+            id: (row['product_id'] as num).toInt(),
+            name: row['product_name'] as String,
+            price: (row['product_price'] as num).toDouble(),
+            category: row['product_category'] as String,
+            quantity: (row['product_quantity'] as num?)?.toDouble(),
+            noServiceCharge: (row['no_service_charge'] as int? ?? 0) == 1,
+          );
+          _items[product.id!] = CartItem(
+            product: product,
+            quantity: (row['qty'] as num).toDouble(),
+            printedQuantity: (row['printed_qty'] as num? ?? 0).toDouble(),
+          );
+        }
+      }
+      // Assign logged-in waiter if not set
+      if (_activeWaiterId == null && connectivity != null) {
+        final role = connectivity.currentUser?['role'] ?? '';
+        if (role == 'waiter') {
+          final rawId = connectivity.currentUser?['id'];
+          if (rawId != null) {
+            _activeWaiterId = rawId is int ? rawId : int.tryParse(rawId.toString());
+          }
+        }
+      }
+      notifyListeners();
+      return;
+    }
 
     if (tableId != null) {
       if (connectivity != null &&
@@ -325,6 +384,20 @@ class CartProvider extends ChangeNotifier {
         }
       }
     }
+
+    // Pre-assign the logged-in waiter so the order is immediately linked to them
+    if (_activeWaiterId == null && connectivity != null) {
+      final role = connectivity.currentUser?['role'] ?? '';
+      if (role == 'waiter') {
+        final rawId = connectivity.currentUser?['id'];
+        if (rawId != null) {
+          _activeWaiterId = rawId is int
+              ? rawId
+              : int.tryParse(rawId.toString());
+        }
+      }
+    }
+
     notifyListeners();
   }
 
@@ -340,9 +413,14 @@ class CartProvider extends ChangeNotifier {
     ConnectivityProvider? connectivity,
     bool showNotification = true,
   ]) async {
-    debugPrint('[confirm] orderId=$_activeOrderId orderType=$_activeOrderType items=${_items.length} unconfirmed=$hasUnconfirmedChanges');
+    // Capture providers synchronously before any await
+    final tableProvider = context.read<TableProvider>();
+    final waiterProvider = context.read<WaiterProvider>();
+    debugPrint(
+      '[confirm] orderId=$_activeOrderId orderType=$_activeOrderType items=${_items.length} unconfirmed=$hasUnconfirmedChanges',
+    );
     if (_activeOrderId == null) {
-      await _ensureOrderExists(connectivity);
+      await _ensureOrderExists(connectivity, true);
       debugPrint('[confirm] after ensureOrder: orderId=$_activeOrderId');
     }
     if (_activeOrderId == null) {
@@ -355,7 +433,12 @@ class CartProvider extends ChangeNotifier {
       return;
     }
     if (!hasUnconfirmedChanges) {
-      if (context.mounted) _showError(context, 'Yangi o\'zgarish yo\'q. Avval mahsulot qo\'shing.');
+      if (context.mounted) {
+        _showError(
+          context,
+          'Yangi o\'zgarish yo\'q. Avval mahsulot qo\'shing.',
+        );
+      }
       return;
     }
 
@@ -379,7 +462,9 @@ class CartProvider extends ChangeNotifier {
     }
 
     if (itemsToPrint.isEmpty) {
-      if (context.mounted) _showError(context, 'Chop etiladigan mahsulot yo\'q.');
+      if (context.mounted) {
+        _showError(context, 'Chop etiladigan mahsulot yo\'q.');
+      }
       return;
     }
 
@@ -406,6 +491,29 @@ class CartProvider extends ChangeNotifier {
     final double foodTotal = totalAmount;
     final double grandTotal = foodTotal + roomCharge + serviceFee;
 
+    // Safe lookups — providers may not be fully loaded yet when SAQLASH is pressed
+    String? tableNameSafe;
+    if (_activeTableId != null) {
+      try {
+        tableNameSafe = tableProvider.tables
+            .firstWhere((t) => t.id == _activeTableId)
+            .name;
+      } catch (_) {}
+    }
+    String? waiterNameSafe;
+    if (_activeWaiterId != null) {
+      try {
+        waiterNameSafe = waiterProvider.waiters
+            .firstWhere((w) => w.id == _activeWaiterId)
+            .name;
+      } catch (_) {
+        // Waiters list not yet loaded — use the logged-in user's name directly
+        waiterNameSafe = connectivity?.currentUser?['role'] == 'waiter'
+            ? connectivity!.currentUser!['name'] as String?
+            : null;
+      }
+    }
+
     final populatedOrder = Order(
       id: _activeOrderId!,
       total: grandTotal,
@@ -422,24 +530,23 @@ class CartProvider extends ChangeNotifier {
       roomTotal: roomCharge,
       serviceTotal: serviceFee,
       grandTotal: grandTotal,
-      tableName: _activeTableId != null
-          ? context
-                .read<TableProvider>()
-                .tables
-                .firstWhere((t) => t.id == _activeTableId)
-                .name
-          : null,
-      waiterName: _activeWaiterId != null
-          ? context
-                .read<WaiterProvider>()
-                .waiters
-                .firstWhere((w) => w.id == _activeWaiterId)
-                .name
-          : null,
+      tableName: tableNameSafe,
+      waiterName: waiterNameSafe,
     );
 
     try {
-      await PrintingService.printDividedOrder(order: populatedOrder);
+      // Client mode → server prints on its own printers; otherwise print locally.
+      if (connectivity != null &&
+          connectivity.mode == ConnectivityMode.client) {
+        final printErr = await connectivity.requestPrint(populatedOrder);
+        if (printErr != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(printErr), backgroundColor: Colors.orange),
+          );
+        }
+      } else {
+        await PrintingService.printDividedOrder(order: populatedOrder);
+      }
 
       // Update in-memory printedQuantity and clean up deleted items
       final List<int> toRemove = [];
@@ -455,32 +562,66 @@ class CartProvider extends ChangeNotifier {
         _items.remove(id);
       }
 
+      // Assign the waiter to the order only now — not when the table was opened
+      if (_activeWaiterId != null && _activeOrderId != null) {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'orders',
+          {'waiter_id': _activeWaiterId},
+          where: 'id = ?',
+          whereArgs: [_activeOrderId],
+        );
+      }
+
       await _syncItems(connectivity, context);
+
+      // Broadcast so TablesScreen refreshes even if it missed the initial broadcast
+      // from _ensureOrderExists (e.g. TablesScreen was not yet subscribed then).
+      if (_activeTableId != null &&
+          (connectivity == null ||
+              connectivity.mode != ConnectivityMode.client)) {
+        WebSocketManager.instance.broadcast('tables_updated', {
+          'table_id': _activeTableId!,
+        });
+      }
+
       notifyListeners();
 
       if (context.mounted && showNotification) {
         // No snackbar
       }
     } catch (e) {
+      debugPrint('confirmOrder error: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Printer xatoligi: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  Future<void> _ensureOrderExists([ConnectivityProvider? connectivity]) async {
+  Future<void> _ensureOrderExists([
+    ConnectivityProvider? connectivity,
+    bool forceCreate = false,
+  ]) async {
     final tableId = _activeTableId;
-    debugPrint('[ensureOrder] tableId=$tableId orderType=$_activeOrderType mode=${connectivity?.mode}');
+    debugPrint(
+      '[ensureOrder] tableId=$tableId orderType=$_activeOrderType mode=${connectivity?.mode}',
+    );
     if (tableId == null && _activeOrderType == 0) {
       debugPrint('[ensureOrder] EARLY RETURN: no table + dine-in');
       return;
     }
     if (_activeOrderId != null) return;
+
+    // Don't create order until SAQLASH is pressed (forceCreate only from confirmTableOrder)
+    if (!forceCreate) {
+      final anyPrinted = _items.values.any((i) => i.printedQuantity > 0);
+      if (!anyPrinted) {
+        debugPrint('[ensureOrder] EARLY RETURN: nothing printed yet, waiting for SAQLASH');
+        return;
+      }
+    }
 
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
       try {
@@ -496,7 +637,9 @@ class CartProvider extends ChangeNotifier {
             'Authorization': 'Bearer ${connectivity.authToken}',
           },
         );
-        debugPrint('[ensureOrder] server status=${response.statusCode} body=${response.body}');
+        debugPrint(
+          '[ensureOrder] server status=${response.statusCode} body=${response.body}',
+        );
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           _activeOrderId = data['order_id'];
@@ -540,59 +683,73 @@ class CartProvider extends ChangeNotifier {
     _activeOpenedAt = DateTime.now();
     _isNewOrderSession = true;
 
-    final db = await DatabaseHelper.instance.database;
-    _activeWaiterId ??= await DatabaseHelper.instance.getDefaultWaiterId();
+    try {
+      final db = await DatabaseHelper.instance.database;
 
-    await db.insert('orders', {
-      'id': newOrderId,
-      'total': 0.0,
-      'payment_type': 'Pending',
-      'created_at': _activeOpenedAt!.toIso8601String(),
-      'opened_at': _activeOpenedAt!.toIso8601String(),
-      'order_type': _activeOrderType,
-      'table_id': tableId,
-      'location_id': _activeLocationId,
-      'waiter_id': _activeWaiterId,
-      'status': 0,
-    });
+      // If a waiter is logged in, use their ID; otherwise fall back to default waiter
+      if (_activeWaiterId == null && connectivity != null) {
+        final role = connectivity.currentUser?['role'] ?? '';
+        if (role == 'waiter') {
+          final rawId = connectivity.currentUser?['id'];
+          if (rawId != null) {
+            _activeWaiterId = rawId is int
+                ? rawId
+                : int.tryParse(rawId.toString());
+          }
+        }
+      }
+      _activeWaiterId ??= await DatabaseHelper.instance.getDefaultWaiterId();
 
-    if (tableId != null) {
+      await db.insert('orders', {
+        'id': newOrderId,
+        'total': 0.0,
+        'payment_type': 'Pending',
+        'created_at': _activeOpenedAt!.toIso8601String(),
+        'opened_at': _activeOpenedAt!.toIso8601String(),
+        'order_type': _activeOrderType,
+        'table_id': tableId,
+        'location_id': _activeLocationId,
+        'waiter_id': null,
+        'status': 0,
+      });
+
+      if (tableId != null) {
+        await db.update(
+          'tables',
+          {'status': 1, 'active_order_id': newOrderId},
+          where: 'id = ?',
+          whereArgs: [tableId],
+        );
+        WebSocketManager.instance.broadcast('tables_updated', {
+          'table_id': tableId,
+        });
+      }
+
+      // Assign daily number
+      final dailyNo = await _getNextDailyNumber();
       await db.update(
-        'tables',
-        {'status': 1, 'active_order_id': newOrderId},
+        'orders',
+        {'daily_number': dailyNo},
         where: 'id = ?',
-        whereArgs: [tableId],
+        whereArgs: [newOrderId],
       );
+    } catch (e) {
+      // If DB operations fail, reset the in-memory state so the next call retries
+      // instead of silently skipping order creation (order ID was set before awaits).
+      debugPrint('[ensureOrder] DB error, resetting state: $e');
+      _activeOrderId = null;
+      _activeOpenedAt = null;
+      _isNewOrderSession = false;
     }
-
-    // Assign daily number
-    final dailyNo = await _getNextDailyNumber();
-    await db.update(
-      'orders',
-      {'daily_number': dailyNo},
-      where: 'id = ?',
-      whereArgs: [newOrderId],
-    );
   }
 
   Future<int> _getNextDailyNumber() async {
     final db = await DatabaseHelper.instance.database;
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
-    final todayEnd = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      23,
-      59,
-      59,
-    ).toIso8601String();
-
+    final dayStart = await DatabaseHelper.instance.getDayStartTime();
     final res = await db.rawQuery(
-      'SELECT MAX(daily_number) as max_no FROM orders WHERE created_at BETWEEN ? AND ?',
-      [todayStart, todayEnd],
+      'SELECT MAX(daily_number) as max_no FROM orders WHERE created_at >= ?',
+      [dayStart.toIso8601String()],
     );
-
     int nextNo = 1;
     if (res.isNotEmpty && res.first['max_no'] != null) {
       nextNo = (res.first['max_no'] as int) + 1;
@@ -616,7 +773,6 @@ class CartProvider extends ChangeNotifier {
       'orders',
       {
         'total': totalAmount + roomTotal + serviceTotal,
-        'waiter_id': _activeWaiterId,
         'food_total': totalAmount,
         'room_charge': roomTotal,
         'room_total': roomTotal,
@@ -633,6 +789,14 @@ class CartProvider extends ChangeNotifier {
     BuildContext? context,
   ]) async {
     if (_activeTableId == null && _activeOrderType == 0) return;
+
+    // Don't write to DB until SAQLASH is pressed — items stay in memory only.
+    // Only skip in standalone/server mode; client mode always syncs to server.
+    if (connectivity?.mode != ConnectivityMode.client) {
+      final anyPrinted = _items.values.any((i) => i.printedQuantity > 0);
+      if (!anyPrinted) return;
+    }
+
     await _ensureOrderExists(connectivity);
     await _syncOrderHeader(context);
 
@@ -822,13 +986,12 @@ class CartProvider extends ChangeNotifier {
     if (context == null) return;
     try {
       final connectivity = context.read<ConnectivityProvider>();
+      // Waiters always use the manual SAQLASH button — never auto-confirm for them
       final role = connectivity.currentUser?['role'] ?? 'admin';
+      if (role == 'waiter') return;
       final autoConfirm = context.read<AppSettingsProvider>().autoConfirmOrder;
 
-      // Waiter always auto-confirms (no manual confirm button shown)
-      if (role == 'waiter' ||
-          autoConfirm ||
-          !hasPermission(context, 'perm_confirm_order')) {
+      if (autoConfirm || !hasPermission(context, 'perm_confirm_order')) {
         await confirmTableOrder(context, connectivity, false);
       }
     } catch (e) {
@@ -895,6 +1058,11 @@ class CartProvider extends ChangeNotifier {
       }
     } catch (_) {}
     final double preServiceFee = calculateWaiterServiceFee(context);
+    // shift_id ni sinxron o'qib olish (async gap oldidan)
+    int? activeShiftId;
+    try {
+      activeShiftId = context.read<ShiftProvider>().activeShift?.id;
+    } catch (_) {}
 
     // Automatic kitchen printing for unconfirmed changes during checkout
     if (hasUnconfirmedChanges) {
@@ -990,6 +1158,7 @@ class CartProvider extends ChangeNotifier {
               'service_total': serviceFee,
               'grand_total': grandTotal,
               'daily_number': preDailyNo,
+              'shift_id': activeShiftId,
               'note': (note != null && note.trim().isNotEmpty)
                   ? note.trim()
                   : null,
@@ -1017,6 +1186,7 @@ class CartProvider extends ChangeNotifier {
             openedAt: now,
             closedAt: now,
             dailyNumber: preDailyNo,
+            shiftId: activeShiftId,
             note: (note != null && note.trim().isNotEmpty) ? note.trim() : null,
           );
           await txn.insert('orders', order.toMap());
@@ -1147,7 +1317,14 @@ class CartProvider extends ChangeNotifier {
         }
       }
 
-      // 2. Reload products — DB is now correct in both paths
+      // 2. Notify other connected devices (server/local mode)
+      if (!isClient) {
+        WebSocketManager.instance.broadcast('tables_updated', {
+          'table_id': ?resolvedTableId,
+        });
+      }
+
+      // 3. Reload products — DB is now correct in both paths
       if (context.mounted) {
         context.read<ProductProvider>().loadProducts(
           connectivity: connectivity,
@@ -1171,6 +1348,14 @@ class CartProvider extends ChangeNotifier {
       _activeOpenedAt = null;
       _items.clear();
       notifyListeners();
+
+      // ShiftProvider live summaryni yangilash
+      if (context.mounted) {
+        try {
+          context.read<ShiftProvider>().refresh();
+        } catch (_) {}
+      }
+
       return true;
     } catch (e) {
       debugPrint("Checkout error: $e");
@@ -1282,10 +1467,47 @@ class CartProvider extends ChangeNotifier {
   }
 
   /// Ofisiant buyurtmadan chiqishda itemlarni DBga saqlash uchun
-  Future<void> persistCartState([ConnectivityProvider? connectivity]) async {
+  Future<void> persistCartState([
+    ConnectivityProvider? connectivity,
+    TableProvider? tableProvider,
+  ]) async {
     if (_items.isEmpty && _activeOrderId == null) return;
+
+    final bool anyPrinted = _items.values.any((item) => item.printedQuantity > 0);
+
+    // Nothing was confirmed via SAQLASH — discard and free the table
+    if (!anyPrinted) {
+      if (_activeOrderId != null) await cancelOrder(connectivity);
+      _items.clear();
+      notifyListeners();
+      tableProvider?.loadTables();
+      return;
+    }
+
     await _ensureOrderExists(connectivity);
     await _syncItems(connectivity);
+
+    // Guarantee the table is marked occupied in DB regardless of any earlier
+    // async race between fire-and-forget _syncItems calls and PopScope.
+    if (_activeTableId != null &&
+        _activeOrderId != null &&
+        (connectivity == null ||
+            connectivity.mode != ConnectivityMode.client)) {
+      try {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'tables',
+          {'status': 1, 'active_order_id': _activeOrderId},
+          where: 'id = ?',
+          whereArgs: [_activeTableId],
+        );
+        WebSocketManager.instance.broadcast('tables_updated', {
+          'table_id': _activeTableId,
+        });
+      } catch (e) {
+        debugPrint('[persistCartState] table status update error: $e');
+      }
+    }
   }
 
   Future<bool> cancelOrder([ConnectivityProvider? connectivity]) async {
@@ -1335,6 +1557,7 @@ class CartProvider extends ChangeNotifier {
             whereArgs: [_activeOrderId],
           );
         });
+        WebSocketManager.instance.broadcast('tables_updated');
       }
 
       // Clear cart state
@@ -1475,6 +1698,9 @@ class CartProvider extends ChangeNotifier {
         );
       }
 
+      // Notify other connected devices
+      WebSocketManager.instance.broadcast('tables_updated');
+
       // Update cart state
       _activeTableId = newTableId;
       _activeLocationId = newLocationId;
@@ -1613,6 +1839,9 @@ class CartProvider extends ChangeNotifier {
           },
         );
       });
+
+      // Notify other connected devices
+      WebSocketManager.instance.broadcast('tables_updated');
 
       // If we are currently on specialized table, reload its order
       if (_activeTableId == sourceTableId || _activeTableId == targetTableId) {

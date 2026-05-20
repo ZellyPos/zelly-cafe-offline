@@ -102,14 +102,14 @@ class AppSettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _startBot() {
+  void _startBot({bool stopIfEmpty = false}) {
     final token = _telegramBotToken;
     if (token != null && token.isNotEmpty) {
       TelegramBotService.instance.start(
         token: token,
         restaurantName: _restaurantName,
       );
-    } else {
+    } else if (stopIfEmpty) {
       TelegramBotService.instance.stop();
     }
   }
@@ -226,7 +226,7 @@ class AppSettingsProvider extends ChangeNotifier {
       _telegramChatId = chatId;
     }
 
-    _startBot();
+    _startBot(stopIfEmpty: true);
     notifyListeners();
   }
 

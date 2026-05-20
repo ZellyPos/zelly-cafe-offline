@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../core/theme.dart';
 import '../../../core/utils/price_formatter.dart';
@@ -27,11 +28,22 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
   bool _shouldPrintReceipt = true;
   final TextEditingController _noteController = TextEditingController();
 
+  static const _printPrefKey = 'payment_should_print_receipt';
+
   @override
   void initState() {
     super.initState();
-    // Auto-fill with total amount by default
     _paidAmountStr = widget.total.toInt().toString();
+    _loadPrintPref();
+  }
+
+  Future<void> _loadPrintPref() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _shouldPrintReceipt = prefs.getBool(_printPrefKey) ?? true;
+      });
+    }
   }
 
   @override
@@ -237,8 +249,11 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog> {
                           "To'lovdan so'ng printerdan chek chiqadi",
                         ),
                         value: _shouldPrintReceipt,
-                        onChanged: (val) =>
-                            setState(() => _shouldPrintReceipt = val),
+                        onChanged: (val) async {
+                          setState(() => _shouldPrintReceipt = val);
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool(_printPrefKey, val);
+                        },
                         contentPadding: EdgeInsets.zero,
                         activeThumbColor: Colors.green,
                       ),

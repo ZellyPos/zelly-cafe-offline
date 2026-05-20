@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../core/database_helper.dart';
+import 'connectivity_provider.dart';
 
 class ReportFilter {
   DateTime startDate;
   DateTime endDate;
-  int? orderType; // 0=Dine-in, 1=Takeaway, null=All
+  int? orderType;
   int? locationId;
   int? waiterId;
 
@@ -19,7 +22,7 @@ class ReportFilter {
 
 class ReportProvider extends ChangeNotifier {
   final ReportFilter _filter = ReportFilter(
-    startDate: DateTime.now().subtract(const Duration(days: 7)),
+    startDate: DateTime.now(),
     endDate: DateTime.now(),
   );
 
@@ -29,6 +32,35 @@ class ReportProvider extends ChangeNotifier {
 
   final bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  ConnectivityProvider? _connectivity;
+  void setConnectivity(ConnectivityProvider c) {
+    _connectivity = c;
+  }
+
+  bool get _isClient =>
+      _connectivity?.mode == ConnectivityMode.client;
+
+  String get _baseUrl => _connectivity?.clientBaseUrl ?? '';
+
+  Map<String, String> get _baseParams => {
+        'start': _filter.startDate.toIso8601String(),
+        'end': _filter.endDate.toIso8601String(),
+        if (_filter.orderType != null) 'order_type': '${_filter.orderType}',
+        if (_filter.locationId != null) 'location_id': '${_filter.locationId}',
+        if (_filter.waiterId != null) 'waiter_id': '${_filter.waiterId}',
+      };
+
+  Future<dynamic> _remoteGet(String path, [Map<String, String>? params]) async {
+    final uri = Uri.parse('$_baseUrl$path').replace(
+      queryParameters: params ?? _baseParams,
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Report fetch failed: ${response.statusCode}');
+  }
 
   Future<Map<String, dynamic>>? _dashboardStatsFuture;
 
@@ -43,57 +75,94 @@ class ReportProvider extends ChangeNotifier {
     bool clearWaiter = false,
   }) {
     if (startDate != null) _filter.startDate = startDate;
-    if (endDate != null) _filter.endDate = endDate;
+    if (endDate != null) {
+      // endDate har doim kun oxiri (23:59:59) bo'lishi kerak
+      _filter.endDate = DateTime(
+        endDate.year,
+        endDate.month,
+        endDate.day,
+        23,
+        59,
+        59,
+      );
+    }
 
     if (clearOrderType) {
       _filter.orderType = null;
-    } else if (orderType != null)
+    } else if (orderType != null) {
       _filter.orderType = orderType;
+    }
 
     if (clearLocation) {
       _filter.locationId = null;
-    } else if (locationId != null)
+    } else if (locationId != null) {
       _filter.locationId = locationId;
+    }
 
     if (clearWaiter) {
       _filter.waiterId = null;
-    } else if (waiterId != null)
+    } else if (waiterId != null) {
       _filter.waiterId = waiterId;
+    }
 
     _dashboardStatsFuture = null;
     notifyListeners();
   }
 
-  // Dashboard Aggregates — cached per filter, invalidated on updateFilter()
+  // ── SQL yordamchi ──────────────────────────────────────────────────────────
+
+  /// Vaqtni hisobga olgan holda to'liq datetime taqqoslash
+  /// created_at >= startDate AND created_at <= endDate
+  String _whereTime(List<dynamic> args) {
+    args
+      ..add(_filter.startDate.toIso8601String())
+      ..add(_filter.endDate.toIso8601String());
+    return "o.created_at >= ? AND o.created_at <= ?";
+  }
+
+  String _whereTimePaid(List<dynamic> args) {
+    args
+      ..add(_filter.startDate.toIso8601String())
+      ..add(_filter.endDate.toIso8601String());
+    return "o.status = 1 AND o.created_at >= ? AND o.created_at <= ?";
+  }
+
+  // ── Dashboard Aggregates ──────────────────────────────────────────────────
+
   Future<Map<String, dynamic>> getDashboardStats() {
     return _dashboardStatsFuture ??= _fetchDashboardStats();
   }
 
   Future<Map<String, dynamic>> _fetchDashboardStats() async {
+    if (_isClient) {
+      final data = await _remoteGet('/reports/stats');
+      return Map<String, dynamic>.from(data as Map);
+    }
     final db = await DatabaseHelper.instance.database;
-    final start = _filter.startDate.toIso8601String().split('T')[0];
-    final end = _filter.endDate.toIso8601String().split('T')[0];
 
-    String whereClause =
-        "o.status = 1 AND date(o.created_at) BETWEEN date(?) AND date(?)";
-    List<dynamic> whereArgs = [start, end];
+    final args1 = <dynamic>[];
+    final whereTime = _whereTimePaid(args1);
 
     if (_filter.orderType != null) {
-      whereClause += " AND o.order_type = ?";
-      whereArgs.add(_filter.orderType);
+      args1.add(_filter.orderType);
     }
     if (_filter.locationId != null) {
-      whereClause += " AND o.location_id = ?";
-      whereArgs.add(_filter.locationId);
-    }
-    if (_filter.waiterId != null) {
-      whereClause += " AND o.waiter_id = ?";
-      whereArgs.add(_filter.waiterId);
+      args1.add(_filter.locationId);
     }
 
+    String extra = '';
+    if (_filter.orderType != null) extra += ' AND o.order_type = ?';
+    if (_filter.locationId != null) extra += ' AND o.location_id = ?';
+    if (_filter.waiterId != null) {
+      extra += ' AND o.waiter_id = ?';
+      args1.add(_filter.waiterId);
+    }
+
+    final whereClause = '$whereTime$extra';
+
     final orders = await db.rawQuery('''
-      SELECT 
-        COUNT(*) as count, 
+      SELECT
+        COUNT(*) as count,
         SUM(total) as total,
         AVG(total) as avg_check,
         SUM(CASE WHEN payment_type = 'Cash' OR payment_type = 'Naqd' THEN total ELSE 0 END) as cash_total,
@@ -103,8 +172,9 @@ class ReportProvider extends ChangeNotifier {
         SUM(CASE WHEN order_type = 1 THEN total ELSE 0 END) as takeaway_total
       FROM orders o
       WHERE $whereClause
-    ''', whereArgs);
+    ''', args1);
 
+    final args2 = List<dynamic>.from(args1);
     final topQty = await db.rawQuery('''
       SELECT p.name, SUM(oi.qty) as qty
       FROM order_items oi
@@ -114,8 +184,9 @@ class ReportProvider extends ChangeNotifier {
       GROUP BY p.id
       ORDER BY qty DESC
       LIMIT 5
-    ''', whereArgs);
+    ''', args2);
 
+    final args3 = List<dynamic>.from(args1);
     final topRevenue = await db.rawQuery('''
       SELECT p.name, SUM(oi.qty * oi.price) as revenue
       FROM order_items oi
@@ -125,7 +196,7 @@ class ReportProvider extends ChangeNotifier {
       GROUP BY p.id
       ORDER BY revenue DESC
       LIMIT 5
-    ''', whereArgs);
+    ''', args3);
 
     return {
       'metrics': orders.first,
@@ -134,26 +205,28 @@ class ReportProvider extends ChangeNotifier {
     };
   }
 
-  // Filtered Orders List
-  Future<List<Map<String, dynamic>>> getOrders() async {
-    final db = await DatabaseHelper.instance.database;
-    final start = _filter.startDate.toIso8601String().split('T')[0];
-    final end = _filter.endDate.toIso8601String().split('T')[0];
+  // ── Orders List ───────────────────────────────────────────────────────────
 
-    String whereClause = "date(o.created_at) BETWEEN date(?) AND date(?)";
-    List<dynamic> whereArgs = [start, end];
+  Future<List<Map<String, dynamic>>> getOrders() async {
+    if (_isClient) {
+      final data = await _remoteGet('/reports/orders');
+      return List<Map<String, dynamic>>.from(data as List);
+    }
+    final db = await DatabaseHelper.instance.database;
+    final args = <dynamic>[];
+    var where = _whereTime(args);
 
     if (_filter.orderType != null) {
-      whereClause += " AND o.order_type = ?";
-      whereArgs.add(_filter.orderType);
+      where += ' AND o.order_type = ?';
+      args.add(_filter.orderType);
     }
     if (_filter.locationId != null) {
-      whereClause += " AND o.location_id = ?";
-      whereArgs.add(_filter.locationId);
+      where += ' AND o.location_id = ?';
+      args.add(_filter.locationId);
     }
     if (_filter.waiterId != null) {
-      whereClause += " AND o.waiter_id = ?";
-      whereArgs.add(_filter.waiterId);
+      where += ' AND o.waiter_id = ?';
+      args.add(_filter.waiterId);
     }
 
     return await db.rawQuery('''
@@ -162,117 +235,124 @@ class ReportProvider extends ChangeNotifier {
       LEFT JOIN locations l ON o.location_id = l.id
       LEFT JOIN tables t ON o.table_id = t.id
       LEFT JOIN waiters w ON o.waiter_id = w.id
-      WHERE $whereClause
+      WHERE $where
       ORDER BY o.created_at DESC
-    ''', whereArgs);
+    ''', args);
   }
 
-  // Product Performance Stats
-  Future<List<Map<String, dynamic>>> getProductStats() async {
-    final db = await DatabaseHelper.instance.database;
-    final start = _filter.startDate.toIso8601String().split('T')[0];
-    final end = _filter.endDate.toIso8601String().split('T')[0];
+  // ── Product Stats ─────────────────────────────────────────────────────────
 
-    String whereClause =
-        "o.status = 1 AND date(o.created_at) BETWEEN date(?) AND date(?)";
-    List<dynamic> whereArgs = [start, end];
+  Future<List<Map<String, dynamic>>> getProductStats() async {
+    if (_isClient) {
+      final data = await _remoteGet('/reports/products');
+      return List<Map<String, dynamic>>.from(data as List);
+    }
+    final db = await DatabaseHelper.instance.database;
+    final args = <dynamic>[];
+    var where = _whereTimePaid(args);
 
     if (_filter.orderType != null) {
-      whereClause += " AND o.order_type = ?";
-      whereArgs.add(_filter.orderType);
+      where += ' AND o.order_type = ?';
+      args.add(_filter.orderType);
     }
     if (_filter.locationId != null) {
-      whereClause += " AND o.location_id = ?";
-      whereArgs.add(_filter.locationId);
+      where += ' AND o.location_id = ?';
+      args.add(_filter.locationId);
     }
     if (_filter.waiterId != null) {
-      whereClause += " AND o.waiter_id = ?";
-      whereArgs.add(_filter.waiterId);
+      where += ' AND o.waiter_id = ?';
+      args.add(_filter.waiterId);
     }
 
     return await db.rawQuery('''
-      SELECT 
-        p.name as name, 
-        SUM(oi.qty) as total_qty, 
+      SELECT
+        p.name as name,
+        p.category as category,
+        SUM(oi.qty) as total_qty,
         SUM(oi.qty * oi.price) as total_revenue,
         p.quantity as current_stock
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE $whereClause
+      WHERE $where
       GROUP BY p.id, p.name, p.quantity
       ORDER BY total_revenue DESC
-    ''', whereArgs);
+    ''', args);
   }
 
-  // Waiter Commissions & Stats
-  Future<List<Map<String, dynamic>>> getWaiterStats() async {
-    final db = await DatabaseHelper.instance.database;
-    final start = _filter.startDate.toIso8601String().split('T')[0];
-    final end = _filter.endDate.toIso8601String().split('T')[0];
+  // ── Waiter Stats ──────────────────────────────────────────────────────────
 
-    String whereClause =
-        "o.status = 1 AND date(o.created_at) BETWEEN date(?) AND date(?)";
-    List<dynamic> whereArgs = [start, end];
+  Future<List<Map<String, dynamic>>> getWaiterStats() async {
+    if (_isClient) {
+      final data = await _remoteGet('/reports/waiters');
+      return List<Map<String, dynamic>>.from(data as List);
+    }
+    final db = await DatabaseHelper.instance.database;
+    final args = <dynamic>[];
+    var where = _whereTimePaid(args);
 
     if (_filter.orderType != null) {
-      whereClause += " AND o.order_type = ?";
-      whereArgs.add(_filter.orderType);
+      where += ' AND o.order_type = ?';
+      args.add(_filter.orderType);
     }
     if (_filter.locationId != null) {
-      whereClause += " AND o.location_id = ?";
-      whereArgs.add(_filter.locationId);
+      where += ' AND o.location_id = ?';
+      args.add(_filter.locationId);
     }
 
     return await db.rawQuery('''
-      SELECT 
-        w.name as name, 
-        w.type as waiter_type, 
+      SELECT
+        w.name as name,
+        w.type as waiter_type,
         w.value as waiter_value,
         COUNT(o.id) as order_count,
         SUM(COALESCE(o.total, 0)) as total_sales
       FROM waiters w
-      LEFT JOIN orders o ON w.id = o.waiter_id AND $whereClause
+      LEFT JOIN orders o ON w.id = o.waiter_id AND $where
       GROUP BY w.id, w.name, w.type, w.value
       HAVING order_count > 0
-    ''', whereArgs);
+    ''', args);
   }
 
-  // Location (Floor) Performance
-  Future<List<Map<String, dynamic>>> getLocationStats() async {
-    final db = await DatabaseHelper.instance.database;
-    final start = _filter.startDate.toIso8601String().split('T')[0];
-    final end = _filter.endDate.toIso8601String().split('T')[0];
+  // ── Location Stats ────────────────────────────────────────────────────────
 
-    String whereClause =
-        "o.status = 1 AND date(o.created_at) BETWEEN date(?) AND date(?)";
-    List<dynamic> whereArgs = [start, end];
+  Future<List<Map<String, dynamic>>> getLocationStats() async {
+    if (_isClient) {
+      final data = await _remoteGet('/reports/locations',
+          {'start': _filter.startDate.toIso8601String(), 'end': _filter.endDate.toIso8601String()});
+      return List<Map<String, dynamic>>.from(data as List);
+    }
+    final db = await DatabaseHelper.instance.database;
+    final args = <dynamic>[];
+    final where = _whereTimePaid(args);
 
     return await db.rawQuery('''
-      SELECT 
-        l.name, 
+      SELECT
+        l.name,
         COUNT(o.id) as order_count,
         SUM(o.total) as total_revenue
       FROM locations l
       JOIN orders o ON l.id = o.location_id
-      WHERE $whereClause
+      WHERE $where
       GROUP BY l.id
       ORDER BY total_revenue DESC
-    ''', whereArgs);
+    ''', args);
   }
 
-  // Table Performance
-  Future<List<Map<String, dynamic>>> getTableStats() async {
-    final db = await DatabaseHelper.instance.database;
-    final start = _filter.startDate.toIso8601String().split('T')[0];
-    final end = _filter.endDate.toIso8601String().split('T')[0];
+  // ── Table Stats ───────────────────────────────────────────────────────────
 
-    String whereClause =
-        "o.status = 1 AND date(o.created_at) BETWEEN date(?) AND date(?)";
-    List<dynamic> whereArgs = [start, end];
+  Future<List<Map<String, dynamic>>> getTableStats() async {
+    if (_isClient) {
+      final data = await _remoteGet('/reports/tables',
+          {'start': _filter.startDate.toIso8601String(), 'end': _filter.endDate.toIso8601String()});
+      return List<Map<String, dynamic>>.from(data as List);
+    }
+    final db = await DatabaseHelper.instance.database;
+    final args = <dynamic>[];
+    final where = _whereTimePaid(args);
 
     return await db.rawQuery('''
-      SELECT 
+      SELECT
         t.name as table_name,
         l.name as location_name,
         COUNT(o.id) as order_count,
@@ -280,22 +360,36 @@ class ReportProvider extends ChangeNotifier {
       FROM tables t
       JOIN locations l ON t.location_id = l.id
       JOIN orders o ON t.id = o.table_id
-      WHERE $whereClause
+      WHERE $where
       GROUP BY t.id
       ORDER BY total_revenue DESC
-    ''', whereArgs);
+    ''', args);
   }
 
-  // Z-Report (Daily Summary)
-  Future<Map<String, dynamic>> getZReportData() async {
-    final db = await DatabaseHelper.instance.database;
-    final start = _filter.startDate.toIso8601String().split('T')[0];
-    final end = _filter.endDate.toIso8601String().split('T')[0];
+  // ── Z-Report ──────────────────────────────────────────────────────────────
 
-    // Summary of all PAID orders in range
-    final summary = await db.rawQuery(
-      '''
-      SELECT 
+  Future<Map<String, dynamic>> getZReportData() async {
+    final dateLabel = _filter.startDate.toIso8601String().split('T')[0];
+    final endLabel = _filter.endDate.toIso8601String().split('T')[0];
+
+    if (_isClient) {
+      final data = await _remoteGet('/reports/zreport',
+          {'start': _filter.startDate.toIso8601String(), 'end': _filter.endDate.toIso8601String()});
+      final m = Map<String, dynamic>.from(data as Map);
+      return {
+        'date': dateLabel == endLabel ? dateLabel : '$dateLabel - $endLabel',
+        'summary': m['summary'],
+        'waiters': m['waiterSales'],
+        'categories': m['categorySales'],
+      };
+    }
+
+    final db = await DatabaseHelper.instance.database;
+    final start = _filter.startDate.toIso8601String();
+    final end = _filter.endDate.toIso8601String();
+
+    final summary = await db.rawQuery('''
+      SELECT
         COUNT(*) as count,
         SUM(total) as total,
         SUM(CASE WHEN payment_type = 'Cash' OR payment_type = 'Naqd' THEN total ELSE 0 END) as cash_total,
@@ -304,74 +398,57 @@ class ReportProvider extends ChangeNotifier {
         MIN(created_at) as first_order,
         MAX(created_at) as last_order
       FROM orders
-      WHERE status = 1 
-        AND date(created_at) BETWEEN date(?) AND date(?)
-    ''',
-      [start, end],
-    );
+      WHERE status = 1 AND created_at >= ? AND created_at <= ?
+    ''', [start, end]);
 
-    // Waiter sales (using LEFT JOIN so we don't lose orders without waiters)
-    final waiterSales = await db.rawQuery(
-      '''
+    final waiterSales = await db.rawQuery('''
       SELECT COALESCE(w.name, 'Admin/Saboy') as name, SUM(o.total) as sales
       FROM orders o
       LEFT JOIN waiters w ON o.waiter_id = w.id
-      WHERE o.status = 1 
-        AND date(o.created_at) BETWEEN date(?) AND date(?)
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at <= ?
       GROUP BY o.waiter_id
-    ''',
-      [start, end],
-    );
+    ''', [start, end]);
 
-    // Category breakdown (Fulfils "order_items properly JOINed" requirement)
-    final categorySales = await db.rawQuery(
-      '''
+    final categorySales = await db.rawQuery('''
       SELECT p.category, SUM(oi.qty) as qty, SUM(oi.qty * oi.price) as total
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE o.status = 1 
-        AND date(o.created_at) BETWEEN date(?) AND date(?)
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at <= ?
       GROUP BY p.category
       ORDER BY total DESC
-    ''',
-      [start, end],
-    );
+    ''', [start, end]);
 
     return {
-      'date': start == end ? start : "$start - $end",
+      'date': dateLabel == endLabel ? dateLabel : '$dateLabel - $endLabel',
       'summary': summary.first,
       'waiters': waiterSales,
       'categories': categorySales,
     };
   }
 
+  // ── Order Details ─────────────────────────────────────────────────────────
+
   Future<Map<String, dynamic>?> getOrderDetails(String orderId) async {
     final db = await DatabaseHelper.instance.database;
-    final results = await db.rawQuery(
-      '''
+    final results = await db.rawQuery('''
       SELECT o.*, l.name as location_name, t.name as table_name, w.name as waiter_name
       FROM orders o
       LEFT JOIN locations l ON o.location_id = l.id
       LEFT JOIN tables t ON o.table_id = t.id
       LEFT JOIN waiters w ON o.waiter_id = w.id
       WHERE o.id = ?
-    ''',
-      [orderId],
-    );
+    ''', [orderId]);
     return results.isNotEmpty ? results.first : null;
   }
 
   Future<List<Map<String, dynamic>>> getOrderItems(String orderId) async {
     final db = await DatabaseHelper.instance.database;
-    return await db.rawQuery(
-      '''
+    return await db.rawQuery('''
       SELECT oi.*, p.name as product_name
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       WHERE oi.order_id = ?
-    ''',
-      [orderId],
-    );
+    ''', [orderId]);
   }
 }

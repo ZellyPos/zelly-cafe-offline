@@ -821,7 +821,7 @@ class _PosScreenState extends State<PosScreen> {
   ) {
     final theme = Theme.of(context);
     return Container(
-      width: 160,
+      width: 240,
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(
@@ -838,7 +838,7 @@ class _PosScreenState extends State<PosScreen> {
                   _showCategoryModal(context, categories, categoryProvider),
               borderRadius: BorderRadius.circular(10),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 9),
+                padding: const EdgeInsets.symmetric(vertical: 13),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary,
                   borderRadius: BorderRadius.circular(10),
@@ -849,15 +849,15 @@ class _PosScreenState extends State<PosScreen> {
                     Icon(
                       Icons.grid_view_rounded,
                       color: Colors.white,
-                      size: 16,
+                      size: 20,
                     ),
-                    SizedBox(width: 6),
+                    SizedBox(width: 8),
                     Text(
                       'Barchasi',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -907,8 +907,8 @@ class _PosScreenState extends State<PosScreen> {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 10,
+                        horizontal: 14,
+                        vertical: 14,
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
@@ -929,14 +929,12 @@ class _PosScreenState extends State<PosScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: isSelected
-                              ? FontWeight.w800
-                              : FontWeight.w700,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
                           color: isSelected
                               ? effectiveColor
                               : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.65,
+                                  alpha: 0.75,
                                 ),
                         ),
                       ),
@@ -1487,7 +1485,10 @@ class _PosScreenState extends State<PosScreen> {
             final db = await DatabaseHelper.instance.database;
             await db.update(
               'orders',
-              {'bill_requested': 1},
+              {
+                'bill_requested': 1,
+                'bill_requested_at': DateTime.now().toIso8601String(),
+              },
               where: 'id = ?',
               whereArgs: [orderId],
             );

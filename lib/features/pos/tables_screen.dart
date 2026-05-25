@@ -349,20 +349,39 @@ class _TablesScreenState extends State<TablesScreen> {
     const green = Color(0xFF10B981);
     final isDark = theme.brightness == Brightness.dark;
 
+    // Rang va chegara holat bo'yicha
+    final Color cardColor;
+    final Border? cardBorder;
+    final Color onCard;
+
+    if (isBlockedForWaiter) {
+      // Boshqa ofisant stoli — ko'k
+      cardColor = isDark ? const Color(0xFF1A2C4A) : const Color(0xFFDBEAFE);
+      cardBorder = Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.5), width: 1.5);
+      onCard = isDark ? Colors.white : const Color(0xFF1E3A5F);
+    } else if (billRequested) {
+      // Chek chiqarilgan — to'q yashil
+      cardColor = isDark ? const Color(0xFF14532D) : const Color(0xFF16A34A);
+      cardBorder = Border.all(color: const Color(0xFF15803D).withValues(alpha: 0.9), width: 1.5);
+      onCard = Colors.white;
+    } else if (isOccupied) {
+      // Band (chek chiqarilmagan) — to'q sariq
+      cardColor = isDark ? const Color(0xFF3D2A00) : const Color(0xFFFEF08A);
+      cardBorder = Border.all(color: const Color(0xFFEAB308).withValues(alpha: 0.8), width: 1.5);
+      onCard = isDark ? Colors.white : const Color(0xFF713F12);
+    } else {
+      // Bo'sh stol — yashil maysa
+      cardColor = isDark ? const Color(0xFF0F2A1E) : const Color(0xFFECFDF5);
+      cardBorder = Border.all(color: green.withValues(alpha: 0.25), width: 1);
+      onCard = theme.colorScheme.onSurface;
+    }
+
     return Container(
       decoration: BoxDecoration(
-        color: isBlockedForWaiter
-            ? (isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF8FAFC))
-            : billRequested
-                ? (isDark ? const Color(0xFF0D2B1B) : const Color(0xFFF0FFF7))
-                : isOccupied
-                    ? (isDark ? const Color(0xFF2D1B1B) : const Color(0xFFFFF5F5))
-                    : theme.cardTheme.color,
+        color: cardColor,
         borderRadius: BorderRadius.circular(AppTheme.borderRadius),
         boxShadow: AppTheme.softShadow,
-        border: billRequested
-            ? Border.all(color: green.withValues(alpha: 0.5), width: 1.5)
-            : null,
+        border: cardBorder,
       ),
       child: Material(
         color: Colors.transparent,
@@ -383,7 +402,7 @@ class _TablesScreenState extends State<TablesScreen> {
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
-                          color: theme.colorScheme.onSurface,
+                          color: onCard,
                           letterSpacing: -0.5,
                         ),
                         maxLines: 1,
@@ -434,8 +453,25 @@ class _TablesScreenState extends State<TablesScreen> {
                     context,
                     Icons.person_outline_rounded,
                     info.waiterName ?? "Kassa",
+                    color: onCard.withValues(alpha: 0.85),
                   ),
                   const SizedBox(height: 6),
+                  _buildIconText(
+                    context,
+                    Icons.access_time_rounded,
+                    _formatTime(info.openedAt),
+                    color: billRequested ? Colors.white70 : Colors.blue.shade700,
+                  ),
+                  if (info.billRequestedAt != null) ...[
+                    const SizedBox(height: 4),
+                    _buildIconText(
+                      context,
+                      Icons.receipt_outlined,
+                      "Chek: ${_formatTime(info.billRequestedAt)}",
+                      color: billRequested ? Colors.white70 : Colors.orange.shade700,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
                   if (table.pricingType == 1)
                     _buildIconText(
                       context,
@@ -451,7 +487,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       horizontal: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.05),
+                      color: onCard.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -459,7 +495,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.primary,
+                        color: onCard,
                       ),
                     ),
                   ),
@@ -524,7 +560,7 @@ class _TablesScreenState extends State<TablesScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: occupied
-            ? const Color(0xFFFEF2F2) // Red 50
+            ? const Color(0xFFFFCDD2) // Red 200
             : const Color(0xFFECFDF5), // Emerald 50
         borderRadius: BorderRadius.circular(8),
       ),
@@ -532,7 +568,7 @@ class _TablesScreenState extends State<TablesScreen> {
         occupied ? AppStrings.occupied : AppStrings.available,
         style: TextStyle(
           color: occupied
-              ? const Color(0xFFEF4444) // Red 500
+              ? const Color(0xFFB91C1C) // Red 700
               : const Color(0xFF10B981), // Emerald 500
           fontWeight: FontWeight.bold,
           fontSize: 11,
@@ -570,18 +606,18 @@ class _TablesScreenState extends State<TablesScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
+        color: const Color(0xFFBFDBFE),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: const [
-          Icon(Icons.lock_outline_rounded, size: 11, color: Color(0xFF94A3B8)),
+          Icon(Icons.lock_outline_rounded, size: 11, color: Color(0xFF1D4ED8)),
           SizedBox(width: 4),
           Text(
-            'Band',
+            'Boshqa ofisant',
             style: TextStyle(
-              color: Color(0xFF94A3B8),
+              color: Color(0xFF1D4ED8),
               fontWeight: FontWeight.bold,
               fontSize: 11,
             ),
@@ -637,6 +673,13 @@ class _TablesScreenState extends State<TablesScreen> {
         tooltip: _isDesignMode ? 'Saqlash' : 'Dizayn rejimi',
       ),
     );
+  }
+
+  String _formatTime(DateTime? dt) {
+    if (dt == null) return '';
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   String _formatDuration(DateTime? start) {

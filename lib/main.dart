@@ -31,12 +31,21 @@ import 'providers/inventory_provider.dart';
 import 'providers/expense_provider.dart';
 import 'providers/delivery_provider.dart';
 import 'providers/saboy_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/supabase_config.dart';
+import 'core/services/sync_service.dart';
 import 'features/login/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
+    // 0. Initialize Supabase
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      anonKey: SupabaseConfig.anonKey,
+    );
+
     // 1. Window management setup
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
@@ -57,6 +66,9 @@ void main() async {
     // 2. Initialize Core Services (Database, License)
     await DatabaseHelper.instance.database;
     await LicenseService.instance.init();
+
+    // 3. Initialize background sync service
+    SyncService.instance.startPeriodicSync();
 
     runApp(
       MultiProvider(

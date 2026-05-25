@@ -62,6 +62,7 @@ class TableProvider extends ChangeNotifier {
              o.opened_at,
              o.total as order_total,
              o.bill_requested,
+             o.bill_requested_at,
              w.name as waiter_name
       FROM tables t
       LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
@@ -81,6 +82,9 @@ class TableProvider extends ChangeNotifier {
                 ? DateTime.parse(item['opened_at'] as String)
                 : null,
             billRequested: (item['bill_requested'] as int? ?? 0) == 1,
+            billRequestedAt: item['bill_requested_at'] != null
+                ? DateTime.parse(item['bill_requested_at'] as String)
+                : null,
           );
         }
         return TableModel.fromMap(item, activeOrder: activeOrder);
@@ -260,6 +264,7 @@ class TableProvider extends ChangeNotifier {
                o.opened_at,
                o.total as order_total,
                o.bill_requested,
+               o.bill_requested_at,
                w.name as waiter_name
         FROM tables t
         LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
@@ -286,6 +291,9 @@ class TableProvider extends ChangeNotifier {
                 ? DateTime.parse(item['opened_at'] as String)
                 : null,
             billRequested: (item['bill_requested'] as int? ?? 0) == 1,
+            billRequestedAt: item['bill_requested_at'] != null
+                ? DateTime.parse(item['bill_requested_at'] as String)
+                : null,
           );
         }
         return TableModel.fromMap(item, activeOrder: activeOrder);

@@ -1188,7 +1188,10 @@ class ApiServer {
         final db = await DatabaseHelper.instance.database;
         await db.update(
           'orders',
-          {'bill_requested': 1},
+          {
+            'bill_requested': 1,
+            'bill_requested_at': DateTime.now().toIso8601String(),
+          },
           where: 'id = ?',
           whereArgs: [id],
         );

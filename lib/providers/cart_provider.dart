@@ -175,16 +175,46 @@ class CartProvider extends ChangeNotifier {
     return 0;
   }
 
-  void setWaiter(int? waiterId, [BuildContext? context]) {
+  void setWaiter(int? waiterId, [BuildContext? context]) async {
     final oldWaiterId = _activeWaiterId;
     _activeWaiterId = waiterId;
-    _syncOrderHeader(context);
+    
+    // Recalculate totals and sync order header (which now saves waiter_id to SQLite)
+    await _syncOrderHeader(context);
 
     // If client mode, sync immediately to server
     if (context != null) {
       final connectivity = context.read<ConnectivityProvider>();
       if (connectivity.mode == ConnectivityMode.client) {
-        _syncItems(connectivity, context);
+        await _syncItems(connectivity, context);
+      } else {
+        // standalone/server mode: immediately update local SQLite orders table
+        if (_activeOrderId != null) {
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'orders',
+            {'waiter_id': waiterId},
+            where: 'id = ?',
+            whereArgs: [_activeOrderId],
+          );
+        }
+        // Broadcast the update so other terminals and the local TablesScreen immediately reload
+        if (_activeTableId != null) {
+          WebSocketManager.instance.broadcast('tables_updated', {
+            'table_id': _activeTableId!,
+          });
+        }
+      }
+    } else {
+      // Fallback update without context
+      if (_activeOrderId != null) {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'orders',
+          {'waiter_id': waiterId},
+          where: 'id = ?',
+          whereArgs: [_activeOrderId],
+        );
       }
     }
 
@@ -778,6 +808,7 @@ class CartProvider extends ChangeNotifier {
         'room_total': roomTotal,
         'service_total': serviceTotal,
         'grand_total': totalAmount + roomTotal + serviceTotal,
+        'waiter_id': _activeWaiterId,
       },
       where: 'id = ?',
       whereArgs: [orderId],
@@ -931,7 +962,11 @@ class CartProvider extends ChangeNotifier {
       }
 
       if (quantity <= 0) {
-        _items.remove(productId);
+        if (_items[productId]!.printedQuantity > 0) {
+          _items[productId]!.quantity = 0;
+        } else {
+          _items.remove(productId);
+        }
       } else {
         _items[productId]!.quantity = quantity;
       }
@@ -964,7 +999,11 @@ class CartProvider extends ChangeNotifier {
           return;
         }
         if (quantity <= 0) {
-          _items.remove(productId);
+          if (item.printedQuantity > 0) {
+            item.quantity = 0;
+          } else {
+            _items.remove(productId);
+          }
         } else {
           item.quantity = quantity;
         }

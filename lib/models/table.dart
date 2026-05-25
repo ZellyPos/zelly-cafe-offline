@@ -122,6 +122,7 @@ class ActiveOrderInfo {
   final double totalAmount;
   final DateTime? openedAt;
   final bool billRequested;
+  final DateTime? billRequestedAt;
 
   ActiveOrderInfo({
     required this.orderId,
@@ -130,5 +131,6 @@ class ActiveOrderInfo {
     required this.totalAmount,
     this.openedAt,
     this.billRequested = false,
+    this.billRequestedAt,
   });
 }

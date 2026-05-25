@@ -265,18 +265,24 @@ class TelegramBotService {
 
   Future<void> _editOrders(int chatId, int msgId, String period) async {
     final db = await DatabaseHelper.instance.database;
+    final dayStart = await DatabaseHelper.instance.getDayStartTime();
+    final dayStartStr = dayStart.toIso8601String();
 
     String where;
+    List<dynamic> whereArgs = [];
     String label;
     switch (period) {
       case 'week':
-        where = "date(o.created_at) >= date('now','-7 days')";
+        where = "o.created_at >= ?";
+        whereArgs = [dayStart.subtract(const Duration(days: 7)).toIso8601String()];
         label = 'So\'nggi 7 kun';
       case 'month':
-        where = "date(o.created_at) >= date('now','-30 days')";
+        where = "o.created_at >= ?";
+        whereArgs = [dayStart.subtract(const Duration(days: 30)).toIso8601String()];
         label = 'So\'nggi 30 kun';
       default:
-        where = "date(o.created_at) = date('now')";
+        where = "o.created_at >= ?";
+        whereArgs = [dayStartStr];
         label = 'Bugun';
     }
 
@@ -292,7 +298,7 @@ class TelegramBotService {
         COALESCE(SUM(CASE WHEN order_type=1 THEN 1 ELSE 0 END),0) as takeaway
       FROM orders o
       WHERE o.status=1 AND $where
-    ''');
+    ''', whereArgs);
 
     final last = await db.rawQuery('''
       SELECT o.daily_number, o.id, o.grand_total, o.payment_type,
@@ -302,7 +308,7 @@ class TelegramBotService {
       LEFT JOIN tables t ON o.table_id=t.id
       WHERE o.status=1 AND $where
       ORDER BY o.created_at DESC LIMIT 7
-    ''');
+    ''', whereArgs);
 
     final m = metrics.first;
     final cnt = m['cnt'] as int? ?? 0;
@@ -363,15 +369,17 @@ class TelegramBotService {
 
   Future<void> _editProducts(int chatId, int msgId) async {
     final db = await DatabaseHelper.instance.database;
+    final dayStart = await DatabaseHelper.instance.getDayStartTime();
+    final dayStartStr = dayStart.toIso8601String();
 
     final topSold = await db.rawQuery('''
       SELECT p.name, SUM(oi.qty) as qty, SUM(oi.qty*oi.price) as revenue
       FROM order_items oi
       JOIN products p ON oi.product_id=p.id
       JOIN orders o ON oi.order_id=o.id
-      WHERE o.status=1 AND date(o.created_at)=date('now')
+      WHERE o.status=1 AND o.created_at >= ?
       GROUP BY p.id ORDER BY qty DESC LIMIT 10
-    ''');
+    ''', [dayStartStr]);
 
     final lowStock = await db.rawQuery('''
       SELECT name, quantity FROM products
@@ -429,6 +437,8 @@ class TelegramBotService {
 
   Future<void> _editWaiters(int chatId, int msgId) async {
     final db = await DatabaseHelper.instance.database;
+    final dayStart = await DatabaseHelper.instance.getDayStartTime();
+    final dayStartStr = dayStart.toIso8601String();
 
     final stats = await db.rawQuery('''
       SELECT
@@ -439,11 +449,11 @@ class TelegramBotService {
       FROM waiters w
       LEFT JOIN orders o ON o.waiter_id=w.id
         AND o.status=1
-        AND date(o.created_at)=date('now')
+        AND o.created_at >= ?
       WHERE w.name != 'Kassa'
       GROUP BY w.id
       ORDER BY sales DESC
-    ''');
+    ''', [dayStartStr]);
 
     final buf = StringBuffer();
     buf.writeln('👨‍🍳 <b>OFISANTLAR — Bugun</b>');
@@ -487,6 +497,8 @@ class TelegramBotService {
 
   Future<void> _editTables(int chatId, int msgId) async {
     final db = await DatabaseHelper.instance.database;
+    final dayStart = await DatabaseHelper.instance.getDayStartTime();
+    final dayStartStr = dayStart.toIso8601String();
 
     final tables = await db.rawQuery('''
       SELECT t.name, t.active_order_id,
@@ -505,8 +517,8 @@ class TelegramBotService {
         COALESCE(SUM(o.grand_total),0) as revenue
       FROM orders o
       JOIN tables t ON o.table_id=t.id
-      WHERE o.status=1 AND date(o.created_at)=date('now')
-    ''');
+      WHERE o.status=1 AND o.created_at >= ?
+    ''', [dayStartStr]);
 
     final active = tables.where((t) => t['active_order_id'] != null).toList();
     final free = tables.where((t) => t['active_order_id'] == null).toList();
@@ -552,6 +564,8 @@ class TelegramBotService {
 
   Future<void> _editLocations(int chatId, int msgId) async {
     final db = await DatabaseHelper.instance.database;
+    final dayStart = await DatabaseHelper.instance.getDayStartTime();
+    final dayStartStr = dayStart.toIso8601String();
 
     final today = await db.rawQuery('''
       SELECT
@@ -562,9 +576,9 @@ class TelegramBotService {
       FROM locations l
       LEFT JOIN orders o ON o.location_id=l.id
         AND o.status=1
-        AND date(o.created_at)=date('now')
+        AND o.created_at >= ?
       GROUP BY l.id ORDER BY revenue DESC
-    ''');
+    ''', [dayStartStr]);
 
     final allTime = await db.rawQuery('''
       SELECT l.name,
@@ -635,6 +649,8 @@ class TelegramBotService {
   Future<String> _buildGeneral() async {
     final db = await DatabaseHelper.instance.database;
     final now = DateTime.now();
+    final dayStart = await DatabaseHelper.instance.getDayStartTime();
+    final dayStartStr = dayStart.toIso8601String();
 
     final metrics = await db.rawQuery('''
       SELECT
@@ -647,36 +663,36 @@ class TelegramBotService {
         COALESCE(SUM(CASE WHEN order_type=0 THEN 1 ELSE 0 END),0) as dine_in,
         COALESCE(SUM(CASE WHEN order_type=1 THEN 1 ELSE 0 END),0) as takeaway
       FROM orders
-      WHERE status=1 AND date(created_at)=date('now')
-    ''');
+      WHERE status=1 AND created_at >= ?
+    ''', [dayStartStr]);
 
     final topProducts = await db.rawQuery('''
       SELECT p.name, SUM(oi.qty) as qty, SUM(oi.qty*oi.price) as revenue
       FROM order_items oi
       JOIN products p ON oi.product_id=p.id
       JOIN orders o ON oi.order_id=o.id
-      WHERE o.status=1 AND date(o.created_at)=date('now')
+      WHERE o.status=1 AND o.created_at >= ?
       GROUP BY p.id ORDER BY revenue DESC LIMIT 5
-    ''');
+    ''', [dayStartStr]);
 
     final waiters = await db.rawQuery('''
       SELECT w.name, COUNT(o.id) as cnt,
              COALESCE(SUM(o.grand_total),0) as sales
       FROM waiters w
       JOIN orders o ON o.waiter_id=w.id
-      WHERE o.status=1 AND date(o.created_at)=date('now')
+      WHERE o.status=1 AND o.created_at >= ?
         AND w.name!='Kassa'
       GROUP BY w.id ORDER BY sales DESC LIMIT 5
-    ''');
+    ''', [dayStartStr]);
 
     final locations = await db.rawQuery('''
       SELECT l.name, COUNT(o.id) as cnt,
              COALESCE(SUM(o.grand_total),0) as revenue
       FROM locations l
       JOIN orders o ON o.location_id=l.id
-      WHERE o.status=1 AND date(o.created_at)=date('now')
+      WHERE o.status=1 AND o.created_at >= ?
       GROUP BY l.id ORDER BY revenue DESC
-    ''');
+    ''', [dayStartStr]);
 
     final m = metrics.first;
     final cnt = m['cnt'] as int? ?? 0;

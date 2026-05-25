@@ -69,8 +69,8 @@ class FloorPlanViewer extends StatelessWidget {
                         Container(
                           decoration: BoxDecoration(
                             color: table.status == 1
-                                ? Colors.red.withOpacity(0.9)
-                                : Colors.green.withOpacity(0.9),
+                                ? const Color(0xFFB91C1C)
+                                : const Color(0xFF059669),
                             borderRadius: BorderRadius.circular(
                               table.shape == 1 ? 100 : 8,
                             ),

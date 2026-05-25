@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/database_helper.dart';
 import 'connectivity_provider.dart';
 
@@ -33,6 +34,15 @@ class ReportProvider extends ChangeNotifier {
   final bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  bool _useCloud = false;
+  bool get useCloud => false; // Hardcoded to false to prevent fetching data from Supabase for now
+
+  void setUseCloud(bool val) {
+    // _useCloud = val; // Disabled to prevent any Supabase sync/retrieval
+    _dashboardStatsFuture = null;
+    notifyListeners();
+  }
+
   ConnectivityProvider? _connectivity;
   void setConnectivity(ConnectivityProvider c) {
     _connectivity = c;
@@ -40,6 +50,20 @@ class ReportProvider extends ChangeNotifier {
 
   bool get _isClient =>
       _connectivity?.mode == ConnectivityMode.client;
+
+  List<Map<String, dynamic>> _applyFilters(List<dynamic> rawOrders) {
+    var filtered = List<Map<String, dynamic>>.from(rawOrders);
+    if (_filter.orderType != null) {
+      filtered = filtered.where((o) => o['order_type'] == _filter.orderType).toList();
+    }
+    if (_filter.locationId != null) {
+      filtered = filtered.where((o) => o['location_id'] == _filter.locationId).toList();
+    }
+    if (_filter.waiterId != null) {
+      filtered = filtered.where((o) => o['waiter_id'] == _filter.waiterId).toList();
+    }
+    return filtered;
+  }
 
   String get _baseUrl => _connectivity?.clientBaseUrl ?? '';
 
@@ -134,6 +158,94 @@ class ReportProvider extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> _fetchDashboardStats() async {
+    if (_useCloud) {
+      try {
+        final start = _filter.startDate.toIso8601String();
+        final end = _filter.endDate.toIso8601String();
+        
+        final ordersRaw = await Supabase.instance.client
+            .from('orders')
+            .select('*')
+            .eq('status', 1)
+            .gte('created_at', start)
+            .lte('created_at', end);
+            
+        final orders = _applyFilters(ordersRaw);
+        
+        if (orders.isEmpty) {
+          return {
+            'metrics': {
+              'count': 0,
+              'total': 0.0,
+              'avg_check': 0.0,
+              'cash_total': 0.0,
+              'card_total': 0.0,
+              'terminal_total': 0.0,
+              'dine_in_total': 0.0,
+              'takeaway_total': 0.0
+            },
+            'topQty': [],
+            'topRevenue': [],
+          };
+        }
+        
+        // Calculate metrics
+        int count = orders.length;
+        double total = orders.fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        double avgCheck = count > 0 ? total / count : 0.0;
+        
+        double cashTotal = orders.where((o) => o['payment_type'] == 'Cash' || o['payment_type'] == 'Naqd').fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        double cardTotal = orders.where((o) => o['payment_type'] == 'Card' || o['payment_type'] == 'Karta').fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        double terminalTotal = orders.where((o) => o['payment_type'] == 'Terminal').fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        
+        double dineInTotal = orders.where((o) => o['order_type'] == 0).fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        double takeawayTotal = orders.where((o) => o['order_type'] == 1).fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        
+        final orderIds = orders.map((o) => o['id']).toList();
+        final itemsRaw = await Supabase.instance.client
+            .from('order_items')
+            .select('product_name, qty, price')
+            .inFilter('order_id', orderIds);
+            
+        final Map<String, double> qtyMap = {};
+        final Map<String, double> revMap = {};
+        for (final item in itemsRaw) {
+          final name = item['product_name'] ?? 'Nomuvofiq Mahsulot';
+          final qty = ((item['qty'] ?? 0.0) as num).toDouble();
+          final price = ((item['price'] ?? 0.0) as num).toDouble();
+          qtyMap[name] = (qtyMap[name] ?? 0.0) + qty;
+          revMap[name] = (revMap[name] ?? 0.0) + (qty * price);
+        }
+        
+        final topQty = qtyMap.entries
+            .map((e) => {'name': e.key, 'qty': e.value})
+            .toList()
+          ..sort((a, b) => (b['qty'] as double).compareTo(a['qty'] as double));
+          
+        final topRevenue = revMap.entries
+            .map((e) => {'name': e.key, 'revenue': e.value})
+            .toList()
+          ..sort((a, b) => (b['revenue'] as double).compareTo(a['revenue'] as double));
+          
+        return {
+          'metrics': {
+            'count': count,
+            'total': total,
+            'avg_check': avgCheck,
+            'cash_total': cashTotal,
+            'card_total': cardTotal,
+            'terminal_total': terminalTotal,
+            'dine_in_total': dineInTotal,
+            'takeaway_total': takeawayTotal
+          },
+          'topQty': topQty.take(5).toList(),
+          'topRevenue': topRevenue.take(5).toList(),
+        };
+      } catch (e) {
+        debugPrint('Cloud Dashboard Stats error, falling back to local: $e');
+      }
+    }
+
     if (_isClient) {
       final data = await _remoteGet('/reports/stats');
       return Map<String, dynamic>.from(data as Map);
@@ -208,6 +320,44 @@ class ReportProvider extends ChangeNotifier {
   // ── Orders List ───────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getOrders() async {
+    if (_useCloud) {
+      try {
+        final start = _filter.startDate.toIso8601String();
+        final end = _filter.endDate.toIso8601String();
+        
+        final ordersRaw = await Supabase.instance.client
+            .from('orders')
+            .select('*')
+            .gte('created_at', start)
+            .lte('created_at', end)
+            .order('created_at', ascending: false);
+            
+        final filtered = _applyFilters(ordersRaw);
+        if (filtered.isEmpty) return [];
+
+        // Fetch lookups in parallel
+        final results = await Future.wait([
+          Supabase.instance.client.from('waiters').select('id, name'),
+          Supabase.instance.client.from('locations').select('id, name'),
+          Supabase.instance.client.from('tables').select('id, name'),
+        ]);
+
+        final waiterMap = {for (var w in results[0]) w['id']: w['name']};
+        final locationMap = {for (var l in results[1]) l['id']: l['name']};
+        final tableMap = {for (var t in results[2]) t['id']: t['name']};
+
+        return filtered.map((row) {
+          final map = Map<String, dynamic>.from(row);
+          map['waiter_name'] = waiterMap[row['waiter_id']];
+          map['location_name'] = locationMap[row['location_id']];
+          map['table_name'] = tableMap[row['table_id']];
+          return map;
+        }).toList();
+      } catch (e) {
+        debugPrint('Cloud getOrders error, falling back: $e');
+      }
+    }
+
     if (_isClient) {
       final data = await _remoteGet('/reports/orders');
       return List<Map<String, dynamic>>.from(data as List);
@@ -243,6 +393,55 @@ class ReportProvider extends ChangeNotifier {
   // ── Product Stats ─────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getProductStats() async {
+    if (_useCloud) {
+      try {
+        final start = _filter.startDate.toIso8601String();
+        final end = _filter.endDate.toIso8601String();
+        
+        final ordersRaw = await Supabase.instance.client
+            .from('orders')
+            .select('id, order_type, location_id, waiter_id')
+            .eq('status', 1)
+            .gte('created_at', start)
+            .lte('created_at', end);
+            
+        final orders = _applyFilters(ordersRaw);
+        if (orders.isEmpty) return [];
+        
+        final orderIds = orders.map((o) => o['id']).toList();
+        final itemsRaw = await Supabase.instance.client
+            .from('order_items')
+            .select('product_name, qty, price, product_id')
+            .inFilter('order_id', orderIds);
+            
+        final Map<String, Map<String, dynamic>> productStats = {};
+        for (final item in itemsRaw) {
+          final name = item['product_name'] ?? 'Nomuvofiq Mahsulot';
+          final qty = ((item['qty'] ?? 0.0) as num).toDouble();
+          final price = ((item['price'] ?? 0.0) as num).toDouble();
+          
+          if (!productStats.containsKey(name)) {
+            productStats[name] = {
+              'name': name,
+              'category': 'Bulut',
+              'total_qty': 0.0,
+              'total_revenue': 0.0,
+              'current_stock': null
+            };
+          }
+          
+          productStats[name]!['total_qty'] = (productStats[name]!['total_qty'] as double) + qty;
+          productStats[name]!['total_revenue'] = (productStats[name]!['total_revenue'] as double) + (qty * price);
+        }
+        
+        final result = productStats.values.toList();
+        result.sort((a, b) => (b['total_revenue'] as double).compareTo(a['total_revenue'] as double));
+        return result;
+      } catch (e) {
+        debugPrint('Cloud getProductStats error, falling back: $e');
+      }
+    }
+
     if (_isClient) {
       final data = await _remoteGet('/reports/products');
       return List<Map<String, dynamic>>.from(data as List);
@@ -283,6 +482,52 @@ class ReportProvider extends ChangeNotifier {
   // ── Waiter Stats ──────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getWaiterStats() async {
+    if (_useCloud) {
+      try {
+        final start = _filter.startDate.toIso8601String();
+        final end = _filter.endDate.toIso8601String();
+        
+        final ordersRaw = await Supabase.instance.client
+            .from('orders')
+            .select('*')
+            .eq('status', 1)
+            .gte('created_at', start)
+            .lte('created_at', end);
+            
+        final orders = _applyFilters(ordersRaw);
+        if (orders.isEmpty) return [];
+
+        final waiters = await Supabase.instance.client.from('waiters').select('id, name, type, value');
+        final waiterMap = {for (var w in waiters) w['id']: w};
+        
+        final Map<String, Map<String, dynamic>> waiterStats = {};
+        for (final o in orders) {
+          final waiter = waiterMap[o['waiter_id']];
+          final waiterName = waiter?['name'] ?? 'Kassa';
+          final waiterType = waiter?['type'] ?? 0;
+          final waiterValue = ((waiter?['value'] ?? 0.0) as num).toDouble();
+          final totalSales = ((o['total'] ?? 0.0) as num).toDouble();
+          
+          if (!waiterStats.containsKey(waiterName)) {
+            waiterStats[waiterName] = {
+              'name': waiterName,
+              'waiter_type': waiterType,
+              'waiter_value': waiterValue,
+              'order_count': 0,
+              'total_sales': 0.0
+            };
+          }
+          
+          waiterStats[waiterName]!['order_count'] = (waiterStats[waiterName]!['order_count'] as int) + 1;
+          waiterStats[waiterName]!['total_sales'] = (waiterStats[waiterName]!['total_sales'] as double) + totalSales;
+        }
+        
+        return waiterStats.values.toList();
+      } catch (e) {
+        debugPrint('Cloud getWaiterStats error, falling back: $e');
+      }
+    }
+
     if (_isClient) {
       final data = await _remoteGet('/reports/waiters');
       return List<Map<String, dynamic>>.from(data as List);
@@ -317,6 +562,49 @@ class ReportProvider extends ChangeNotifier {
   // ── Location Stats ────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getLocationStats() async {
+    if (_useCloud) {
+      try {
+        final start = _filter.startDate.toIso8601String();
+        final end = _filter.endDate.toIso8601String();
+        
+        final ordersRaw = await Supabase.instance.client
+            .from('orders')
+            .select('*')
+            .eq('status', 1)
+            .gte('created_at', start)
+            .lte('created_at', end);
+            
+        final orders = _applyFilters(ordersRaw);
+        if (orders.isEmpty) return [];
+
+        final locations = await Supabase.instance.client.from('locations').select('id, name');
+        final locationMap = {for (var l in locations) l['id']: l['name']};
+        
+        final Map<String, Map<String, dynamic>> locationStats = {};
+        for (final o in orders) {
+          final locName = locationMap[o['location_id']] ?? 'Noma\'lum Joy';
+          final totalSales = ((o['total'] ?? 0.0) as num).toDouble();
+          
+          if (!locationStats.containsKey(locName)) {
+            locationStats[locName] = {
+              'name': locName,
+              'order_count': 0,
+              'total_revenue': 0.0
+            };
+          }
+          
+          locationStats[locName]!['order_count'] = (locationStats[locName]!['order_count'] as int) + 1;
+          locationStats[locName]!['total_revenue'] = (locationStats[locName]!['total_revenue'] as double) + totalSales;
+        }
+        
+        final result = locationStats.values.toList();
+        result.sort((a, b) => (b['total_revenue'] as double).compareTo(a['total_revenue'] as double));
+        return result;
+      } catch (e) {
+        debugPrint('Cloud getLocationStats error, falling back: $e');
+      }
+    }
+
     if (_isClient) {
       final data = await _remoteGet('/reports/locations',
           {'start': _filter.startDate.toIso8601String(), 'end': _filter.endDate.toIso8601String()});
@@ -342,6 +630,58 @@ class ReportProvider extends ChangeNotifier {
   // ── Table Stats ───────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getTableStats() async {
+    if (_useCloud) {
+      try {
+        final start = _filter.startDate.toIso8601String();
+        final end = _filter.endDate.toIso8601String();
+        
+        final ordersRaw = await Supabase.instance.client
+            .from('orders')
+            .select('*')
+            .eq('status', 1)
+            .gte('created_at', start)
+            .lte('created_at', end);
+            
+        final orders = _applyFilters(ordersRaw);
+        if (orders.isEmpty) return [];
+
+        final results = await Future.wait([
+          Supabase.instance.client.from('tables').select('id, name, location_id'),
+          Supabase.instance.client.from('locations').select('id, name'),
+        ]);
+
+        final locationMap = {for (var l in results[1]) l['id']: l['name']};
+        final tableMap = {for (var t in results[0]) t['id']: t};
+        
+        final Map<String, Map<String, dynamic>> tableStats = {};
+        for (final o in orders) {
+          final t = tableMap[o['table_id']];
+          final tableName = t?['name'] ?? 'Noma\'lum Stol';
+          final locName = locationMap[t?['location_id']] ?? '';
+          final totalSales = ((o['total'] ?? 0.0) as num).toDouble();
+          
+          final key = '$tableName-$locName';
+          if (!tableStats.containsKey(key)) {
+            tableStats[key] = {
+              'table_name': tableName,
+              'location_name': locName,
+              'order_count': 0,
+              'total_revenue': 0.0
+            };
+          }
+          
+          tableStats[key]!['order_count'] = (tableStats[key]!['order_count'] as int) + 1;
+          tableStats[key]!['total_revenue'] = (tableStats[key]!['total_revenue'] as double) + totalSales;
+        }
+        
+        final result = tableStats.values.toList();
+        result.sort((a, b) => (b['total_revenue'] as double).compareTo(a['total_revenue'] as double));
+        return result;
+      } catch (e) {
+        debugPrint('Cloud getTableStats error, falling back: $e');
+      }
+    }
+
     if (_isClient) {
       final data = await _remoteGet('/reports/tables',
           {'start': _filter.startDate.toIso8601String(), 'end': _filter.endDate.toIso8601String()});
@@ -371,6 +711,112 @@ class ReportProvider extends ChangeNotifier {
   Future<Map<String, dynamic>> getZReportData() async {
     final dateLabel = _filter.startDate.toIso8601String().split('T')[0];
     final endLabel = _filter.endDate.toIso8601String().split('T')[0];
+
+    if (_useCloud) {
+      try {
+        final start = _filter.startDate.toIso8601String();
+        final end = _filter.endDate.toIso8601String();
+        
+        final ordersRaw = await Supabase.instance.client
+            .from('orders')
+            .select('*')
+            .eq('status', 1)
+            .gte('created_at', start)
+            .lte('created_at', end);
+            
+        final orders = _applyFilters(ordersRaw);
+        
+        if (orders.isEmpty) {
+          return {
+            'date': dateLabel == endLabel ? dateLabel : '$dateLabel - $endLabel',
+            'summary': {
+              'count': 0,
+              'total': 0.0,
+              'cash_total': 0.0,
+              'card_total': 0.0,
+              'terminal_total': 0.0,
+              'first_order': null,
+              'last_order': null
+            },
+            'waiters': [],
+            'categories': [],
+          };
+        }
+        
+        // Calculate summary
+        int count = orders.length;
+        double total = orders.fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        double cashTotal = orders.where((o) => o['payment_type'] == 'Cash' || o['payment_type'] == 'Naqd').fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        double cardTotal = orders.where((o) => o['payment_type'] == 'Card' || o['payment_type'] == 'Karta').fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        double terminalTotal = orders.where((o) => o['payment_type'] == 'Terminal').fold(0.0, (sum, o) => sum + ((o['total'] ?? 0.0) as num).toDouble());
+        
+        final sortedDates = orders.map((o) => o['created_at'] as String).toList()..sort();
+        final firstOrder = sortedDates.first;
+        final lastOrder = sortedDates.last;
+        
+        // Fetch lookups in parallel
+        final results = await Future.wait([
+          Supabase.instance.client.from('waiters').select('id, name'),
+          Supabase.instance.client.from('products').select('id, category'),
+        ]);
+
+        final waiterMapLookup = {for (var w in results[0]) w['id']: w['name']};
+        final productMapLookup = {for (var p in results[1]) p['id']: p['category']};
+
+        // Waiters
+        final Map<String, double> waiterMap = {};
+        for (final o in orders) {
+          final waiterName = waiterMapLookup[o['waiter_id']] ?? 'Admin/Saboy';
+          final orderTotal = ((o['total'] ?? 0.0) as num).toDouble();
+          waiterMap[waiterName] = (waiterMap[waiterName] ?? 0.0) + orderTotal;
+        }
+        final waiterSales = waiterMap.entries.map((e) => {'name': e.key, 'sales': e.value}).toList();
+        
+        // Categories
+        final orderIds = orders.map((o) => o['id']).toList();
+        final itemsRaw = await Supabase.instance.client
+            .from('order_items')
+            .select('qty, price, product_id')
+            .inFilter('order_id', orderIds);
+            
+        final Map<String, Map<String, dynamic>> categoryMap = {};
+        for (final item in itemsRaw) {
+          final categoryName = productMapLookup[item['product_id']] ?? 'Bulut';
+          final qty = ((item['qty'] ?? 0.0) as num).toDouble();
+          final price = ((item['price'] ?? 0.0) as num).toDouble();
+          
+          if (!categoryMap.containsKey(categoryName)) {
+            categoryMap[categoryName] = {
+              'category': categoryName,
+              'qty': 0.0,
+              'total': 0.0
+            };
+          }
+          categoryMap[categoryName]!['qty'] = (categoryMap[categoryName]!['qty'] as double) + qty;
+          categoryMap[categoryName]!['total'] = (categoryMap[categoryName]!['total'] as double) + (qty * price);
+        }
+        
+        final categorySales = categoryMap.values.toList();
+        categorySales.sort((a, b) => (b['total'] as double).compareTo(a['total'] as double));
+        
+        return {
+          'date': dateLabel == endLabel ? dateLabel : '$dateLabel - $endLabel',
+          'summary': {
+            'count': count,
+            'total': total,
+            'cash_total': cashTotal,
+            'card_total': cardTotal,
+            'terminal_total': terminalTotal,
+            'first_order': firstOrder,
+            'last_order': lastOrder
+          },
+          'waiters': waiterSales,
+          'categories': categorySales,
+        };
+      } catch (e) {
+        debugPrint('Cloud getZReportData error, falling back: $e');
+      }
+    }
 
     if (_isClient) {
       final data = await _remoteGet('/reports/zreport',

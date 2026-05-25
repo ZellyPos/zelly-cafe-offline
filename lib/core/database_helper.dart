@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 50,
+      version: 52,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -61,6 +61,21 @@ class DatabaseHelper {
           );
         } catch (e2) {
           print('Failsafe: Error adding bill_requested column: $e2');
+        }
+      }
+    }
+
+    // Final failsafe for orders.bill_requested_at column
+    try {
+      await db.rawQuery('SELECT bill_requested_at FROM orders LIMIT 1');
+    } catch (e) {
+      if (e.toString().contains('no such column')) {
+        try {
+          await db.execute(
+            'ALTER TABLE orders ADD COLUMN bill_requested_at TEXT',
+          );
+        } catch (e2) {
+          print('Failsafe: Error adding bill_requested_at column: $e2');
         }
       }
     }
@@ -1066,6 +1081,61 @@ class DatabaseHelper {
         print('Error upgrading database to v50: $e');
       }
     }
+
+    if (oldVersion < 51) {
+      try {
+        final orderInfo = await db.rawQuery('PRAGMA table_info(orders)');
+        final orderCols = orderInfo.map((c) => c['name'] as String).toSet();
+        if (!orderCols.contains('is_synced')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN is_synced INTEGER DEFAULT 0');
+        }
+
+        final expenseInfo = await db.rawQuery('PRAGMA table_info(expenses)');
+        final expenseCols = expenseInfo.map((c) => c['name'] as String).toSet();
+        if (!expenseCols.contains('is_synced')) {
+          await db.execute('ALTER TABLE expenses ADD COLUMN is_synced INTEGER DEFAULT 0');
+        }
+
+        final txInfo = await db.rawQuery('PRAGMA table_info(transactions)');
+        final txCols = txInfo.map((c) => c['name'] as String).toSet();
+        if (!txCols.contains('is_synced')) {
+          await db.execute('ALTER TABLE transactions ADD COLUMN is_synced INTEGER DEFAULT 0');
+        }
+
+        final shiftInfo = await db.rawQuery('PRAGMA table_info(shifts)');
+        final shiftCols = shiftInfo.map((c) => c['name'] as String).toSet();
+        if (!shiftCols.contains('is_synced')) {
+          await db.execute('ALTER TABLE shifts ADD COLUMN is_synced INTEGER DEFAULT 0');
+        }
+
+        final cashInfo = await db.rawQuery('PRAGMA table_info(cash_movements)');
+        final cashCols = cashInfo.map((c) => c['name'] as String).toSet();
+        if (!cashCols.contains('is_synced')) {
+          await db.execute('ALTER TABLE cash_movements ADD COLUMN is_synced INTEGER DEFAULT 0');
+        }
+
+        // Add indices for performance on is_synced lookup
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_is_synced ON orders (is_synced)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_is_synced ON expenses (is_synced)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_is_synced ON transactions (is_synced)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_shifts_is_synced ON shifts (is_synced)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_cash_movements_is_synced ON cash_movements (is_synced)');
+      } catch (e) {
+        print('Error upgrading database to v51 (is_synced columns): $e');
+      }
+    }
+
+    if (oldVersion < 52) {
+      try {
+        final orderInfo = await db.rawQuery('PRAGMA table_info(orders)');
+        final orderCols = orderInfo.map((c) => c['name'] as String).toSet();
+        if (!orderCols.contains('bill_requested_at')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN bill_requested_at TEXT');
+        }
+      } catch (e) {
+        print('Error upgrading database to v52 (bill_requested_at): $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -1141,7 +1211,9 @@ CREATE TABLE IF NOT EXISTS orders (
   courier_id INTEGER,
   delivery_fee REAL DEFAULT 0,
   delivery_note TEXT,
-  zone_id INTEGER
+  zone_id INTEGER,
+  is_synced INTEGER DEFAULT 0,
+  bill_requested_at TEXT
 )
 ''');
 
@@ -1271,6 +1343,7 @@ CREATE TABLE IF NOT EXISTS users (
         amount $realType,
         note TEXT,
         created_at $textType,
+        is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (category_id) REFERENCES expense_categories (id)
       )
     ''');
@@ -1294,6 +1367,7 @@ CREATE TABLE IF NOT EXISTS users (
         amount $realType,
         note TEXT,
         created_at $textType,
+        is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (customer_id) REFERENCES customers (id)
       )
     ''');
@@ -1410,6 +1484,7 @@ CREATE TABLE IF NOT EXISTS users (
         difference REAL,
         notes TEXT,
         status INTEGER DEFAULT 0,
+        is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (opened_by) REFERENCES users (id),
         FOREIGN KEY (closed_by) REFERENCES users (id)
       )
@@ -1425,6 +1500,7 @@ CREATE TABLE IF NOT EXISTS users (
         note TEXT,
         created_at $textType,
         created_by INTEGER NOT NULL,
+        is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (shift_id) REFERENCES shifts (id) ON DELETE CASCADE,
         FOREIGN KEY (created_by) REFERENCES users (id)
       )
@@ -1493,6 +1569,13 @@ CREATE TABLE IF NOT EXISTS users (
         is_active INTEGER DEFAULT 1
       )
     ''');
+
+    // Sync indices
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_is_synced ON orders (is_synced)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_expenses_is_synced ON expenses (is_synced)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_is_synced ON transactions (is_synced)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_shifts_is_synced ON shifts (is_synced)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cash_movements_is_synced ON cash_movements (is_synced)');
 
     // Initial time records
     await db.insert('security_logs', {

@@ -47,13 +47,42 @@ class MainLayoutState extends State<MainLayout> {
   late int _selectedIndex;
   bool _isExpanded = true;
 
+  final Map<String, bool> _groupExpanded = {
+    'boshqaruv': true,
+    'moliya': false,
+    'hisobot': false,
+    'sozlamalar': false,
+  };
+
+  static const Map<String, List<int>> _groupIndices = {
+    'boshqaruv': [1, 2, 3, 4, 5, 13, 19, 20],
+    'moliya': [17, 14, 15],
+    'hisobot': [6],
+    'sozlamalar': [7, 8, 9, 10, 11, 12, 16],
+  };
+
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex ?? 0;
+    _autoExpandGroup(_selectedIndex);
   }
 
-  void setIndex(int index) => setState(() => _selectedIndex = index);
+  void _autoExpandGroup(int index) {
+    for (final entry in _groupIndices.entries) {
+      if (entry.value.contains(index)) {
+        _groupExpanded[entry.key] = true;
+        break;
+      }
+    }
+  }
+
+  void setIndex(int index) {
+    setState(() {
+      _selectedIndex = index;
+      _autoExpandGroup(index);
+    });
+  }
 
   final List<Widget> _screens = [
     const TablesScreen(),
@@ -309,85 +338,95 @@ class MainLayoutState extends State<MainLayout> {
   List<Widget> _buildNavItems(String role) {
     final enableInventory = context.read<AppSettingsProvider>().enableInventory;
     final cartProv = context.read<CartProvider>();
-
     final canExpenses = cartProv.hasPermission(context, 'perm_manage_expenses');
     final canReports = cartProv.hasPermission(context, 'perm_view_reports');
 
+    if (role == 'waiter') {
+      return [_item(0, Icons.grid_view_rounded, AppStrings.tablesNav)];
+    }
+
     if (role == 'admin') {
       return [
-        // POS
+        // ── POS ──────────────────────────────────────────────────
         _item(0, Icons.grid_view_rounded, AppStrings.tablesNav),
         _item(21, Icons.shopping_bag_outlined, 'Saboy'),
-
         _divider(),
-        _section('Boshqaruv'),
+
+        // ── Boshqaruv ─────────────────────────────────────────────
+        _group('boshqaruv', 'Boshqaruv', Icons.settings_outlined, [
+          _item(1, Icons.inventory_2_outlined, AppStrings.productsNav),
+          _item(2, Icons.category_outlined, AppStrings.categoriesNav),
+          _item(3, Icons.layers_outlined, AppStrings.locationsNav),
+          _item(4, Icons.table_bar_outlined, AppStrings.tablesSettingsNav),
+          _item(5, Icons.badge_outlined, AppStrings.waitersNav),
+          _item(13, Icons.manage_accounts_outlined, AppStrings.cashiersNav),
+          _item(19, Icons.delivery_dining_outlined, 'Kuryerlar'),
+          _item(20, Icons.map_outlined, 'Yetkazish zonalari'),
+        ]),
+        _divider(),
+
+        // ── Moliya ────────────────────────────────────────────────
+        _group('moliya', 'Moliya', Icons.account_balance_wallet_outlined, [
+          _shiftStatusTile(),
+          _item(17, Icons.work_history_rounded, 'Smena'),
+          _item(14, Icons.payments_outlined, AppStrings.expensesNav),
+          _item(15, Icons.groups_outlined, AppStrings.customersNav),
+        ]),
+        _divider(),
+
+        // ── Hisobot ───────────────────────────────────────────────
+        _group('hisobot', 'Hisobot', Icons.bar_chart_rounded, [
+          _item(6, Icons.bar_chart_rounded, AppStrings.reportsNav),
+        ]),
+        _divider(),
+
+        // ── Sozlamalar ────────────────────────────────────────────
+        _group('sozlamalar', 'Sozlamalar', Icons.tune_rounded, [
+          _item(7, Icons.print_outlined, AppStrings.printerNav),
+          _item(8, Icons.receipt_long_outlined, AppStrings.receiptNav),
+          _item(9, Icons.lock_outline_rounded, AppStrings.pinNav),
+          _item(10, Icons.branding_watermark_outlined, AppStrings.brandNav),
+          _item(11, Icons.settings_ethernet_outlined, AppStrings.connectionNav),
+          _item(12, Icons.send_outlined, AppStrings.telegramNav),
+          if (enableInventory) _item(16, Icons.warehouse_outlined, 'Ombor'),
+        ]),
+      ];
+    }
+
+    // ── Cashier ───────────────────────────────────────────────────
+    return [
+      _item(0, Icons.grid_view_rounded, AppStrings.tablesNav),
+      _item(21, Icons.shopping_bag_outlined, 'Saboy'),
+      _divider(),
+
+      _group('boshqaruv', 'Boshqaruv', Icons.settings_outlined, [
         _item(1, Icons.inventory_2_outlined, AppStrings.productsNav),
         _item(2, Icons.category_outlined, AppStrings.categoriesNav),
         _item(3, Icons.layers_outlined, AppStrings.locationsNav),
         _item(4, Icons.table_bar_outlined, AppStrings.tablesSettingsNav),
         _item(5, Icons.badge_outlined, AppStrings.waitersNav),
-        _item(13, Icons.manage_accounts_outlined, AppStrings.cashiersNav),
-        _item(19, Icons.delivery_dining_outlined, 'Kuryerlar'),
-        _item(20, Icons.map_outlined, 'Yetkazish zonalari'),
-
-        _divider(),
-        _section('Moliya'),
-        _shiftStatusTile(),
-        _item(17, Icons.work_history_rounded, 'Smena'),
-        _item(14, Icons.payments_outlined, AppStrings.expensesNav),
-        _item(15, Icons.groups_outlined, AppStrings.customersNav),
-
-        _divider(),
-        _section('Hisobot'),
-        _item(6, Icons.bar_chart_rounded, AppStrings.reportsNav),
-
-        _divider(),
-        _section('Sozlamalar'),
-        _item(7, Icons.print_outlined, AppStrings.printerNav),
-        _item(8, Icons.receipt_long_outlined, AppStrings.receiptNav),
-        _item(9, Icons.lock_outline_rounded, AppStrings.pinNav),
-        _item(10, Icons.branding_watermark_outlined, AppStrings.brandNav),
-        _item(11, Icons.settings_ethernet_outlined, AppStrings.connectionNav),
-        _item(12, Icons.send_outlined, AppStrings.telegramNav),
-        if (enableInventory) _item(16, Icons.warehouse_outlined, 'Ombor'),
-      ];
-    }
-
-    // Waiter — faqat stollar
-    if (role == 'waiter') {
-      return [
-        _item(0, Icons.grid_view_rounded, AppStrings.tablesNav),
-      ];
-    }
-
-    // Cashier
-    return [
-      _item(0, Icons.grid_view_rounded, AppStrings.tablesNav),
-
-      _divider(),
-      _section('Boshqaruv'),
-      _item(1, Icons.inventory_2_outlined, AppStrings.productsNav),
-      _item(2, Icons.category_outlined, AppStrings.categoriesNav),
-      _item(3, Icons.layers_outlined, AppStrings.locationsNav),
-      _item(4, Icons.table_bar_outlined, AppStrings.tablesSettingsNav),
-      _item(5, Icons.badge_outlined, AppStrings.waitersNav),
+      ]),
 
       if (canExpenses) ...[
         _divider(),
-        _section('Moliya'),
-        _item(14, Icons.payments_outlined, AppStrings.expensesNav),
+        _group('moliya', 'Moliya', Icons.account_balance_wallet_outlined, [
+          _shiftStatusTile(),
+          _item(14, Icons.payments_outlined, AppStrings.expensesNav),
+        ]),
       ],
 
       if (canReports) ...[
         _divider(),
-        _section(AppStrings.stats),
-        _item(6, Icons.bar_chart_rounded, AppStrings.reportsNav),
+        _group('hisobot', 'Hisobot', Icons.bar_chart_rounded, [
+          _item(6, Icons.bar_chart_rounded, AppStrings.reportsNav),
+        ]),
       ],
 
       _divider(),
-      _section('Sozlamalar'),
-      _item(7, Icons.print_outlined, AppStrings.printerNav),
-      _item(8, Icons.receipt_long_outlined, AppStrings.receiptNav),
+      _group('sozlamalar', 'Sozlamalar', Icons.tune_rounded, [
+        _item(7, Icons.print_outlined, AppStrings.printerNav),
+        _item(8, Icons.receipt_long_outlined, AppStrings.receiptNav),
+      ]),
     ];
   }
 
@@ -477,24 +516,6 @@ class MainLayoutState extends State<MainLayout> {
       );
     }
     return tile;
-  }
-
-  // ─── Section label ──────────────────────────────────────────────────────────
-
-  Widget _section(String title) {
-    if (!_isExpanded) return const SizedBox(height: 4);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 16, 6),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          color: _kSidebarFg.withValues(alpha: 0.3),
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.4,
-        ),
-      ),
-    );
   }
 
   // ─── Smena: live status tile ────────────────────────────────────────────────
@@ -639,6 +660,111 @@ class MainLayoutState extends State<MainLayout> {
   }
 
   // ─── Smena: ochish/kassa harakati action item ────────────────────────────────
+
+  // ─── Group (collapsible section) ───────────────────────────────────────────
+
+  Widget _group(
+    String key,
+    String label,
+    IconData icon,
+    List<Widget> children,
+  ) {
+    final open = _groupExpanded[key] ?? false;
+
+    // Collapsed sidebar — show group as single icon button
+    if (!_isExpanded) {
+      final hasActive = (_groupIndices[key] ?? []).contains(_selectedIndex);
+      return Tooltip(
+        message: label,
+        preferBelow: false,
+        waitDuration: const Duration(milliseconds: 300),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: () => setState(() => _isExpanded = true),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: hasActive
+                      ? _kAccent.withValues(alpha: 0.15)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  size: 21,
+                  color: hasActive
+                      ? _kAccent
+                      : _kSidebarFg.withValues(alpha: 0.45),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Group header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              onTap: () => setState(() => _groupExpanded[key] = !open),
+              borderRadius: BorderRadius.circular(10),
+              hoverColor: _kSidebarFg.withValues(alpha: 0.05),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                child: Row(
+                  children: [
+                    Icon(icon, size: 16, color: _kSidebarFg.withValues(alpha: 0.4)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        label.toUpperCase(),
+                        style: TextStyle(
+                          color: _kSidebarFg.withValues(alpha: 0.4),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: open ? 0.25 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        size: 16,
+                        color: _kSidebarFg.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Animated children
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOutCubic,
+          child: open
+              ? Column(children: children)
+              : const SizedBox(width: double.infinity, height: 0),
+        ),
+      ],
+    );
+  }
 
   Widget _divider() => Padding(
     padding: EdgeInsets.symmetric(

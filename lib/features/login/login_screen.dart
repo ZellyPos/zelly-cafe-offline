@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../../core/database_helper.dart';
+import '../../data/repositories/user_repository.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../providers/product_provider.dart';
@@ -17,6 +17,7 @@ import '../../providers/customer_provider.dart';
 import '../../models/waiter.dart';
 import '../main_layout/main_layout.dart';
 import '../../features/settings/connection_settings_screen.dart';
+import '../../core/app_logger.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -41,6 +42,11 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = DateTime.now());
+    });
+    // Login ekrani ko'rinishi bilanoq waiter listini yuklaydi
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<WaiterProvider>().loadWaiters();
     });
   }
 
@@ -115,12 +121,11 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } else {
       // Local or Server mode
-      final db = DatabaseHelper.instance;
-      final userResults = await db.queryByColumn('users', 'pin', _enteredPin);
+      final user = await UserRepository().getUserByPin(_enteredPin);
 
-      if (userResults.isNotEmpty) {
-        final user = userResults.first;
+      if (user != null) {
         if (user['is_active'] == 1) {
+          AppLogger.i('Login', 'Kirish muvaffaqiyatli | foydalanuvchi=${user['name']} | rol=${user['role']}');
           connectivity.setCurrentUser(user);
           if (mounted) {
             _loadAllDataAndNavigate(connectivity);
@@ -132,13 +137,13 @@ class _LoginScreenState extends State<LoginScreen> {
       // Fallback for settings login pin (admin)
       final settings = context.read<AppSettingsProvider>();
       if (_enteredPin == settings.loginPin) {
+        AppLogger.i('Login', 'Admin kirdi (sozlamalar PIN)');
         connectivity.setCurrentUser({'name': 'Admin', 'role': 'admin'});
         if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const MainLayout()),
-          );
+          _loadAllDataAndNavigate(connectivity);
         }
       } else {
+        AppLogger.w('Login', 'Noto\'g\'ri PIN kiritildi');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

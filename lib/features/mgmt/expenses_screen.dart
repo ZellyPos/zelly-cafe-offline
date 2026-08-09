@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/expense_provider.dart';
+import '../../providers/shift_provider.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../models/expense.dart';
-import 'expense_categories_screen.dart';
 import '../../models/expense_category.dart';
+import 'expense_categories_screen.dart';
 import '../../providers/connectivity_provider.dart';
-import '../../core/app_strings.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -16,54 +16,57 @@ class ExpensesScreen extends StatefulWidget {
 }
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
-  DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now();
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ExpenseProvider>().loadExpenses(
-        start: _startDate,
-        end: _endDate,
-        connectivity: context.read<ConnectivityProvider>(),
-      );
+      final shiftProvider = context.read<ShiftProvider>();
+      final expenseProvider = context.read<ExpenseProvider>();
+      expenseProvider.loadExpenses(shiftId: shiftProvider.activeShift?.id);
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final expenseProvider = context.watch<ExpenseProvider>();
+    final shiftProvider = context.watch<ShiftProvider>();
+    final activeShift = shiftProvider.activeShift;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppStrings.expensesTitle),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.surface,
-        foregroundColor: Theme.of(context).appBarTheme.foregroundColor ?? Theme.of(context).colorScheme.onSurface,
-        elevation: Theme.of(context).appBarTheme.elevation ?? 0,
+        title: const Text(
+          'Xarajatlar',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ExpenseCategoriesScreen(),
-                ),
-              );
-            },
-            tooltip: AppStrings.expenseTypes,
+            icon: const Icon(Icons.category_rounded),
+            tooltip: 'Kategoriyalar',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ExpenseCategoriesScreen(),
+              ),
+            ),
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+            padding: const EdgeInsets.only(right: 12),
             child: ElevatedButton.icon(
-              onPressed: () => _showAddExpenseDialog(context),
-              icon: const Icon(Icons.add),
-              label: Text(AppStrings.addExpense),
+              onPressed: () => _showAddExpenseDialog(context, activeShift?.id),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text(
+                'Xarajat qo\'shish',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ),
@@ -71,210 +74,108 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       ),
       body: Column(
         children: [
-          _buildFilterBar(),
-          Expanded(
-            child: expenseProvider.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildExpenseList(expenseProvider),
-          ),
+          _buildFilterChips(context, expenseProvider, activeShift?.id),
+          if (expenseProvider.isLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (expenseProvider.expenses.isEmpty)
+            _buildEmpty(theme, expenseProvider)
+          else
+            Expanded(
+              child: _buildContent(context, expenseProvider, theme),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterBar() {
+  Widget _buildFilterChips(BuildContext context, ExpenseProvider provider, int? shiftId) {
+    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(16),
-      color: Theme.of(context).colorScheme.surface,
+      color: theme.colorScheme.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          Icon(Icons.calendar_today, size: 20, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
-          const SizedBox(width: 8),
-          Text(
-            "${_startDate.day}.${_startDate.month}.${_startDate.year} - "
-            "${_endDate.day}.${_endDate.month}.${_endDate.year}",
-            style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+          _chip(
+            context,
+            label: 'Bugun',
+            icon: Icons.today_rounded,
+            selected: provider.filter == ExpenseFilter.today,
+            onTap: () => provider.setFilter(ExpenseFilter.today, shiftId: shiftId),
           ),
-          const Spacer(),
-          TextButton(
-            onPressed: _selectDateRange,
-            child: Text(AppStrings.selectDate),
+          const SizedBox(width: 8),
+          _chip(
+            context,
+            label: 'Bu smena',
+            icon: Icons.work_rounded,
+            selected: provider.filter == ExpenseFilter.currentShift,
+            onTap: shiftId == null
+                ? null
+                : () => provider.setFilter(ExpenseFilter.currentShift, shiftId: shiftId),
+          ),
+          const SizedBox(width: 8),
+          _chip(
+            context,
+            label: 'Barchasi',
+            icon: Icons.list_rounded,
+            selected: provider.filter == ExpenseFilter.all,
+            onTap: () => provider.setFilter(ExpenseFilter.all, shiftId: shiftId),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildExpenseList(ExpenseProvider provider) {
-    if (provider.expenses.isEmpty) {
-      return Center(child: Text(AppStrings.noExpenses));
-    }
-
-    final total = provider.expenses.fold<double>(0, (sum, e) => sum + e.amount);
-
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: provider.expenses.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final expense = provider.expenses[index];
-              final category = provider.categories.firstWhere(
-                (c) => c.id == expense.categoryId,
-                orElse: () => ExpenseCategory(name: AppStrings.noExpenseType),
-              );
-
-              return Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Theme.of(context).dividerColor),
-                ),
-                child: ListTile(
-                  title: Text(
-                    category.name,
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
-                  ),
-                  subtitle: Text(
-                    "${expense.note ?? ''}\n${expense.createdAt.hour.toString().padLeft(2, '0')}:${expense.createdAt.minute.toString().padLeft(2, '0')}",
-                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
-                  ),
-                  trailing: Text(
-                    PriceFormatter.format(expense.amount),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 18,
-                    ),
-                  ),
-                  onLongPress: () => _confirmDelete(context, expense.id!),
-                ),
-              );
-            },
+  Widget _chip(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required bool selected,
+    VoidCallback? onTap,
+  }) {
+    final theme = Theme.of(context);
+    final disabled = onTap == null;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: disabled
+              ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.4)
+              : selected
+              ? Colors.red.shade600
+              : theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected && !disabled
+                ? Colors.red.shade600
+                : Colors.transparent,
           ),
         ),
-        Container(
-          padding: const EdgeInsets.all(24),
-          color: Theme.of(context).colorScheme.surface,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                AppStrings.totalExpenses,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Theme.of(context).colorScheme.onSurface),
-              ),
-              Text(
-                PriceFormatter.format(total),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 24,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _selectDateRange() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
-    );
-    if (picked != null) {
-      setState(() {
-        _startDate = picked.start;
-        _endDate = picked.end;
-      });
-      context.read<ExpenseProvider>().loadExpenses(
-        start: _startDate,
-        end: _endDate,
-        connectivity: context.read<ConnectivityProvider>(),
-      );
-    }
-  }
-
-  void _showAddExpenseDialog(BuildContext context) {
-    final provider = context.read<ExpenseProvider>();
-    int? selectedCatId = provider.categories.isNotEmpty
-        ? provider.categories.first.id
-        : null;
-    final amountController = TextEditingController();
-    final noteController = TextEditingController();
-
-    if (selectedCatId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppStrings.addExpenseTypeFirst),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(AppStrings.newExpense),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<int>(
-                initialValue: selectedCatId,
-                decoration: InputDecoration(labelText: AppStrings.expenseType),
-                items: provider.categories
-                    .map(
-                      (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
-                    )
-                    .toList(),
-                onChanged: (id) => setDialogState(() => selectedCatId = id),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: AppStrings.amount,
-                  suffixText: "so'm",
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: noteController,
-                decoration: InputDecoration(labelText: AppStrings.note),
-                maxLines: 2,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(AppStrings.cancel),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: disabled
+                  ? theme.colorScheme.onSurface.withOpacity(0.3)
+                  : selected
+                  ? Colors.white
+                  : theme.colorScheme.onSurface.withOpacity(0.7),
             ),
-            ElevatedButton(
-              onPressed: () {
-                final amount = double.tryParse(amountController.text) ?? 0;
-                if (amount > 0 && selectedCatId != null) {
-                  context.read<ExpenseProvider>().addExpense(
-                    Expense(
-                      categoryId: selectedCatId!,
-                      amount: amount,
-                      note: noteController.text,
-                      createdAt: DateTime.now(),
-                    ),
-                    connectivity: context.read<ConnectivityProvider>(),
-                  );
-                  Navigator.pop(context);
-                }
-              },
-              child: Text(AppStrings.save),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: disabled
+                    ? theme.colorScheme.onSurface.withOpacity(0.3)
+                    : selected
+                    ? Colors.white
+                    : theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
             ),
           ],
         ),
@@ -282,15 +183,303 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     );
   }
 
-  void _confirmDelete(BuildContext context, int id) {
+  Widget _buildEmpty(ThemeData theme, ExpenseProvider provider) {
+    final hasCats = provider.categories.isNotEmpty;
+    return Expanded(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasCats ? Icons.receipt_long_rounded : Icons.category_rounded,
+              size: 64,
+              color: theme.colorScheme.onSurface.withOpacity(0.12),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              hasCats
+                  ? 'Bu davrda xarajat yo\'q'
+                  : 'Avval kategoriya qo\'shing',
+              style: TextStyle(
+                fontSize: 15,
+                color: theme.colorScheme.onSurface.withOpacity(0.4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    ExpenseProvider provider,
+    ThemeData theme,
+  ) {
+    return Column(
+      children: [
+        if (provider.categoryTotals.isNotEmpty)
+          _buildCategoryTotals(context, provider, theme),
+        Expanded(child: _buildList(context, provider, theme)),
+      ],
+    );
+  }
+
+  Widget _buildCategoryTotals(
+    BuildContext context,
+    ExpenseProvider provider,
+    ThemeData theme,
+  ) {
+    final totals = provider.categoryTotals;
+    final grandTotal = totals.values.fold(0.0, (a, b) => a + b);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'KATEGORIYALAR BO\'YICHA',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: theme.colorScheme.onSurface.withOpacity(0.45),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...totals.entries.map(
+            (e) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      e.key,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurface.withOpacity(0.75),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${PriceFormatter.format(e.value)} so\'m',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Jami:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              Text(
+                '${PriceFormatter.format(grandTotal)} so\'m',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildList(
+    BuildContext context,
+    ExpenseProvider provider,
+    ThemeData theme,
+  ) {
+    final showShift = provider.filter == ExpenseFilter.all;
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      itemCount: provider.expenses.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final expense = provider.expenses[index];
+        final category = provider.categories.firstWhere(
+          (c) => c.id == expense.categoryId,
+          orElse: () => ExpenseCategory(name: 'Boshqa'),
+        );
+        final timeStr =
+            '${expense.createdAt.hour.toString().padLeft(2, '0')}:'
+            '${expense.createdAt.minute.toString().padLeft(2, '0')}';
+
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.12)),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            leading: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.money_off_rounded,
+                color: Colors.red,
+                size: 20,
+              ),
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    category.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (showShift && expense.shiftId != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Smena #${expense.shiftId}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurface.withOpacity(0.55),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 12,
+                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      timeStr,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      ),
+                    ),
+                  ],
+                ),
+                if (expense.note != null && expense.note!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      expense.note!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withOpacity(0.55),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
+            trailing: Text(
+              '${PriceFormatter.format(expense.amount)} so\'m',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 15,
+                color: theme.colorScheme.error,
+              ),
+            ),
+            onLongPress: expense.id != null
+                ? () => _confirmDelete(context, expense.id!)
+                : null,
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAddExpenseDialog(BuildContext context, int? shiftId) {
+    final provider = context.read<ExpenseProvider>();
+
+    if (provider.categories.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Avval kategoriya qo\'shing'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          action: SnackBarAction(
+            label: 'Qo\'shish',
+            textColor: Colors.white,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ExpenseCategoriesScreen()),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(AppStrings.confirmDeleteTitle),
-        content: Text(AppStrings.confirmDeleteExpense),
+      builder: (ctx) => _AddExpenseDialog(
+        shiftId: shiftId,
+        categories: provider.categories,
+        onSave: (expense) async {
+          await provider.addExpense(
+            expense,
+            connectivity: context.read<ConnectivityProvider>(),
+            shiftId: shiftId,
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, int id) {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(
+          'Xarajatni o\'chirish',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text('Bu xarajatni o\'chirishni tasdiqlaysizmi?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Bekor qilish'),
           ),
           ElevatedButton(
@@ -299,13 +488,194 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 id,
                 connectivity: context.read<ConnectivityProvider>(),
               );
-              Navigator.pop(context);
+              Navigator.pop(ctx);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-            child: Text(AppStrings.delete),
+            style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.error),
+            child: const Text('O\'chirish', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Dialog ────────────────────────────────────────────────────────────────────
+
+class _AddExpenseDialog extends StatefulWidget {
+  final int? shiftId;
+  final List<ExpenseCategory> categories;
+  final Future<void> Function(Expense) onSave;
+
+  const _AddExpenseDialog({
+    required this.shiftId,
+    required this.categories,
+    required this.onSave,
+  });
+
+  @override
+  State<_AddExpenseDialog> createState() => _AddExpenseDialogState();
+}
+
+class _AddExpenseDialogState extends State<_AddExpenseDialog> {
+  late int? _selectedCatId;
+  final _amountController = TextEditingController();
+  final _noteController = TextEditingController();
+  bool _saving = false;
+  String? _amountError;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCatId = widget.categories.isNotEmpty ? widget.categories.first.id : null;
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final amount = double.tryParse(_amountController.text.replaceAll(' ', '')) ?? 0;
+    if (amount <= 0) {
+      setState(() => _amountError = 'Summa 0 dan katta bo\'lishi kerak');
+      return;
+    }
+    if (_selectedCatId == null) return;
+
+    setState(() { _saving = true; _amountError = null; });
+    try {
+      await widget.onSave(
+        Expense(
+          categoryId: _selectedCatId!,
+          amount: amount,
+          note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+          createdAt: DateTime.now(),
+          shiftId: widget.shiftId,
+        ),
+      );
+      if (mounted) Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: const Text(
+        'Yangi xarajat',
+        style: TextStyle(fontWeight: FontWeight.w800),
+      ),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Kategoriya
+            DropdownButtonFormField<int>(
+              value: _selectedCatId,
+              decoration: const InputDecoration(
+                labelText: 'Kategoriya',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+              items: widget.categories
+                  .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
+                  .toList(),
+              onChanged: (id) => setState(() => _selectedCatId = id),
+            ),
+            const SizedBox(height: 14),
+
+            // Summa
+            TextField(
+              controller: _amountController,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              onChanged: (_) {
+                if (_amountError != null) setState(() => _amountError = null);
+              },
+              decoration: InputDecoration(
+                labelText: 'Summa',
+                suffixText: "so'm",
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                errorText: _amountError,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Izoh
+            TextField(
+              controller: _noteController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Izoh (ixtiyoriy)',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Smena info
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.work_rounded,
+                    size: 16,
+                    color: widget.shiftId != null
+                        ? const Color(0xFF10B981)
+                        : theme.colorScheme.onSurface.withOpacity(0.4),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.shiftId != null
+                        ? 'Joriy smena: #${widget.shiftId}'
+                        : 'Ochiq smena yo\'q',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: widget.shiftId != null
+                          ? theme.colorScheme.onSurface.withOpacity(0.75)
+                          : theme.colorScheme.onSurface.withOpacity(0.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Bekor qilish'),
+        ),
+        ElevatedButton(
+          onPressed: _saving ? null : _save,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red.shade600,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                )
+              : const Text('Saqlash', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ],
     );
   }
 }

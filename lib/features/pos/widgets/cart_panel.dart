@@ -7,6 +7,7 @@ import '../../../core/app_strings.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../models/table.dart';
 import 'quantity_dialog.dart';
+import 'discount_dialog.dart';
 import '../../license/widgets/license_gate.dart';
 
 class CartPanelWidget extends StatelessWidget {
@@ -192,16 +193,19 @@ class CartPanelWidget extends StatelessWidget {
 
   Widget _buildCartItem(
     BuildContext context,
-    dynamic item,
+    CartItem item,
     CartProvider cartProvider,
   ) {
     final theme = Theme.of(context);
     final isCancelled = item.quantity == 0;
-    return InkWell(
+    final hasDiscount = item.discountAmount > 0;
+
+    return GestureDetector(
+      onLongPress: () => _showItemContextMenu(context, item, cartProvider),
+      child: InkWell(
       onTap: () async {
         final isFullyUnsaved = item.printedQuantity == 0;
 
-        // Sync permission check before any await — no context-across-gap issue
         if (!isFullyUnsaved &&
             !cartProvider.hasPermission(context, 'perm_edit_price')) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -246,12 +250,18 @@ class CartPanelWidget extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isCancelled ? const Color(0xFFFEF2F2).withOpacity(0.5) : null,
+          color: isCancelled
+              ? const Color(0xFFFEF2F2).withOpacity(0.5)
+              : hasDiscount
+                  ? Colors.orange.withValues(alpha: 0.04)
+                  : null,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCancelled
                 ? const Color(0xFFFCA5A5).withOpacity(0.3)
-                : Colors.transparent,
+                : hasDiscount
+                    ? Colors.orange.withValues(alpha: 0.25)
+                    : Colors.transparent,
           ),
         ),
         child: Row(
@@ -284,6 +294,18 @@ class CartPanelWidget extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                  // Chegirma satri
+                  if (hasDiscount) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      "- ${PriceFormatter.format(item.discountAmount)} chegirma",
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -295,7 +317,6 @@ class CartPanelWidget extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildQtyBtn(context, Icons.remove_rounded, () async {
-                      // Fully unsaved items (never printed) → allow without permission
                       final isFullyUnsaved = item.printedQuantity == 0;
                       if (!isFullyUnsaved) {
                         final permission = item.quantity <= 1
@@ -365,6 +386,32 @@ class CartPanelWidget extends StatelessWidget {
           ],
         ),
       ),
+    ),  // InkWell
+    );  // GestureDetector
+  }
+
+  // Item long press — chegirma menyu
+  void _showItemContextMenu(
+    BuildContext context,
+    CartItem item,
+    CartProvider cartProvider,
+  ) {
+    showItemDiscountDialog(
+      context,
+      productName: item.product.name,
+      itemTotal: item.originalTotal,
+      currentDiscount: item.discountAmount,
+      onApply: (amount) => cartProvider.setItemDiscount(
+        item.product.id!,
+        amount,
+        context.read<ConnectivityProvider>(),
+        context,
+      ),
+      onRemove: () => cartProvider.removeItemDiscount(
+        item.product.id!,
+        context.read<ConnectivityProvider>(),
+        context,
+      ),
     );
   }
 
@@ -425,14 +472,24 @@ class CartPanelWidget extends StatelessWidget {
     BuildContext context,
     CartProvider cartProvider,
   ) {
-    // Sinxron hisoblash — DB query yo'q, table obyektidan to'g'ridan-to'g'ri
     final roomCharge = cartProvider.calculateRoomChargeFromTable(table);
     final serviceFee = cartProvider.calculateWaiterServiceFee(context);
-    final grandTotal = cartProvider.totalAmount + roomCharge + serviceFee;
+    final foodTotal = cartProvider.totalAmount; // after item discounts
+    final orderDiscount = cartProvider.orderDiscountAmount;
+    final grandTotal = (foodTotal - orderDiscount + roomCharge + serviceFee).clamp(0.0, double.infinity);
 
     return Column(
       children: [
-        _buildRow(context, "Taomlar jami", cartProvider.totalAmount),
+        _buildRow(context, "Taomlar jami", foodTotal),
+        if (orderDiscount > 0)
+          _buildRow(
+            context,
+            cartProvider.orderDiscountType == 'percent'
+                ? "Chegirma (-${cartProvider.orderDiscountValue.toStringAsFixed(0)}%)"
+                : "Chegirma",
+            orderDiscount,
+            isDiscount: true,
+          ),
         if (roomCharge > 0) _buildRow(context, "Xona / Stol", roomCharge),
         if (serviceFee > 0) _buildRow(context, "Xizmat haqi", serviceFee),
         const Padding(
@@ -449,6 +506,7 @@ class CartPanelWidget extends StatelessWidget {
     String label,
     double value, {
     bool isMain = false,
+    bool isDiscount = false,
   }) {
     final theme = Theme.of(context);
     return Padding(
@@ -461,20 +519,26 @@ class CartPanelWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: isMain ? 15 : 13,
               fontWeight: isMain ? FontWeight.w800 : FontWeight.w600,
-              color: isMain
-                  ? theme.colorScheme.onSurface
-                  : const Color(0xFF94A3B8),
+              color: isDiscount
+                  ? Colors.red
+                  : isMain
+                      ? theme.colorScheme.onSurface
+                      : const Color(0xFF94A3B8),
               letterSpacing: isMain ? -0.2 : 0,
             ),
           ),
           Text(
-            PriceFormatter.format(value),
+            isDiscount
+                ? "- ${PriceFormatter.format(value)}"
+                : PriceFormatter.format(value),
             style: TextStyle(
               fontSize: isMain ? 22 : 14,
               fontWeight: FontWeight.w900,
-              color: isMain
-                  ? const Color(0xFF10B981)
-                  : theme.colorScheme.onSurface,
+              color: isDiscount
+                  ? Colors.red
+                  : isMain
+                      ? const Color(0xFF10B981)
+                      : theme.colorScheme.onSurface,
             ),
           ),
         ],
@@ -599,9 +663,10 @@ class CartPanelWidget extends StatelessWidget {
             const SizedBox(height: 8),
           Row(
             children: [
+              // Print tugmasi
               SizedBox(
                 height: 56,
-                width: 64,
+                width: 56,
                 child: ElevatedButton(
                   onPressed: () {
                     if (cartProvider.hasPermission(
@@ -620,10 +685,51 @@ class CartPanelWidget extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: const Icon(Icons.print_outlined, size: 24),
+                  child: const Icon(Icons.print_outlined, size: 22),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              // Chegirma tugmasi
+              SizedBox(
+                height: 56,
+                width: 56,
+                child: ElevatedButton(
+                  onPressed: () {
+                    showOrderDiscountDialog(
+                      context,
+                      foodTotal: cartProvider.totalAmount,
+                      currentType: cartProvider.orderDiscountType,
+                      currentValue: cartProvider.orderDiscountValue,
+                      currentNote: cartProvider.orderDiscountNote,
+                      onApply: (type, value, note) =>
+                          cartProvider.setOrderDiscount(
+                            type, value, note,
+                            context.read<ConnectivityProvider>(), context),
+                      onRemove: () => cartProvider.removeOrderDiscount(
+                            context.read<ConnectivityProvider>(), context),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: cartProvider.orderDiscountType != null
+                        ? Colors.orange.withValues(alpha: 0.15)
+                        : const Color(0xFFF1F5F9),
+                    foregroundColor: cartProvider.orderDiscountType != null
+                        ? Colors.orange
+                        : const Color(0xFF475569),
+                    elevation: 0,
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: cartProvider.orderDiscountType != null
+                          ? const BorderSide(
+                              color: Colors.orange, width: 1.5)
+                          : BorderSide.none,
+                    ),
+                  ),
+                  child: const Icon(Icons.local_offer_rounded, size: 22),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: SizedBox(
                   height: 56,

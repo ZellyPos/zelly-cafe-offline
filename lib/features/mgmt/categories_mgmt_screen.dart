@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/product_provider.dart';
 import '../../models/category.dart';
@@ -116,7 +118,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                     gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent:
                           MediaQuery.of(context).size.width <= 1100 ? 200 : 240,
-                      childAspectRatio: 1.6,
+                      childAspectRatio: 1.2,
                       crossAxisSpacing: 16,
                       mainAxisSpacing: 16,
                     ),
@@ -126,11 +128,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                       final productCount = productProvider.products
                           .where((p) => p.category == category.name)
                           .length;
-                      return _buildCategoryCard(
-                        context,
-                        category,
-                        productCount,
-                      );
+                      return _buildCategoryCard(context, category, productCount);
                     },
                   ),
           ),
@@ -171,127 +169,174 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
     int productCount,
   ) {
     final theme = Theme.of(context);
+
     Color cardColor = theme.colorScheme.surface;
     if (category.color != null && category.color != '#FFFFFF') {
       try {
         cardColor = Color(int.parse(category.color!.replaceFirst('#', '0xFF')));
-      } catch (e) {
-        cardColor = theme.colorScheme.surface;
-      }
+      } catch (_) {}
     } else if (theme.brightness == Brightness.dark) {
       cardColor = theme.colorScheme.surface;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: theme.shadowColor.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(
-          color: theme.brightness == Brightness.light
-              ? const Color(0xFFE2E8F0)
-              : theme.colorScheme.onSurface.withOpacity(0.1),
-        ),
-      ),
+    final hasImage =
+        category.imagePath != null && File(category.imagePath!).existsSync();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
           onTap: () => _showCategoryDialog(context, category: category),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        category.name,
-                        style: TextStyle(
-                          fontSize: MediaQuery.of(context).size.width <= 1100
-                              ? 15
-                              : 16,
-                          fontWeight: FontWeight.bold,
-                          color: cardColor.computeLuminance() > 0.5
-                              ? theme.colorScheme.onSurface
-                              : Colors.white,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.edit_outlined,
-                            color: cardColor.computeLuminance() > 0.5
-                                ? Colors.blue
-                                : Colors.white70,
-                            size: 20,
-                          ),
-                          onPressed: () =>
-                              _showCategoryDialog(context, category: category),
-                          constraints: const BoxConstraints(),
-                          padding: EdgeInsets.zero,
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: Icon(
-                            Icons.delete_outline,
-                            color: cardColor.computeLuminance() > 0.5
-                                ? Colors.red
-                                : Colors.white70,
-                            size: 20,
-                          ),
-                          onPressed: () =>
-                              _confirmDelete(context, category, productCount),
-                          constraints: const BoxConstraints(),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    ),
-                  ],
+          child: Container(
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: theme.shadowColor.withOpacity(0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
+              ],
+              border: Border.all(
+                color: theme.brightness == Brightness.light
+                    ? const Color(0xFFE2E8F0)
+                    : theme.colorScheme.onSurface.withOpacity(0.1),
+              ),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Full-bleed background image
+                if (hasImage)
+                  Image.file(
+                    File(category.imagePath!),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                   ),
-                  decoration: BoxDecoration(
-                    color: cardColor.computeLuminance() > 0.5
-                        ? Colors.orange.shade50
-                        : Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.inventory_2_outlined,
-                        size: 14,
-                        color: cardColor.computeLuminance() > 0.5
-                            ? Colors.orange.shade700
-                            : Colors.white,
+                // Gradient overlay for readability
+                if (hasImage)
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.15),
+                          Colors.black.withOpacity(0.65),
+                        ],
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        "$productCount ta mahsulot",
-                        style: TextStyle(
-                          color: cardColor.computeLuminance() > 0.5
-                              ? Colors.orange.shade700
-                              : Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
+                    ),
+                  ),
+                // Content layer
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              category.name,
+                              style: TextStyle(
+                                fontSize: MediaQuery.of(context).size.width <=
+                                        1100
+                                    ? 15
+                                    : 16,
+                                fontWeight: FontWeight.bold,
+                                color: hasImage
+                                    ? Colors.white
+                                    : (cardColor.computeLuminance() > 0.5
+                                          ? theme.colorScheme.onSurface
+                                          : Colors.white),
+                                shadows: hasImage
+                                    ? [
+                                        const Shadow(
+                                          blurRadius: 4,
+                                          color: Colors.black54,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              _actionIcon(
+                                icon: Icons.edit_outlined,
+                                color: hasImage
+                                    ? Colors.white70
+                                    : (cardColor.computeLuminance() > 0.5
+                                          ? Colors.blue
+                                          : Colors.white70),
+                                onTap: () => _showCategoryDialog(
+                                  context,
+                                  category: category,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              _actionIcon(
+                                icon: Icons.delete_outline,
+                                color: hasImage
+                                    ? Colors.red.shade300
+                                    : (cardColor.computeLuminance() > 0.5
+                                          ? Colors.red
+                                          : Colors.white70),
+                                onTap: () => _confirmDelete(
+                                  context,
+                                  category,
+                                  productCount,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: hasImage
+                              ? Colors.black.withOpacity(0.35)
+                              : (cardColor.computeLuminance() > 0.5
+                                    ? Colors.orange.shade50
+                                    : Colors.white.withOpacity(0.2)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.inventory_2_outlined,
+                              size: 14,
+                              color: hasImage
+                                  ? Colors.orange.shade200
+                                  : (cardColor.computeLuminance() > 0.5
+                                        ? Colors.orange.shade700
+                                        : Colors.white),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "$productCount ta mahsulot",
+                              style: TextStyle(
+                                color: hasImage
+                                    ? Colors.orange.shade200
+                                    : (cardColor.computeLuminance() > 0.5
+                                          ? Colors.orange.shade700
+                                          : Colors.white),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -301,6 +346,25 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _actionIcon({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: color, size: 18),
       ),
     );
   }
@@ -364,28 +428,29 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
   void _showCategoryDialog(BuildContext context, {Category? category}) {
     final nameController = TextEditingController(text: category?.name ?? '');
     String? selectedCardColor = category?.color;
+    String? selectedImagePath = category?.imagePath;
 
     final List<String> availableColors = [
-      '#FFFFFF', // White
-      '#F87171', // Red
-      '#FB923C', // Orange
-      '#FACC15', // Yellow
-      '#4ADE80', // Green
-      '#2DD4BF', // Teal
-      '#60A5FA', // Blue
-      '#818CF8', // Indigo
-      '#A78BFA', // Violet
-      '#F472B6', // Pink
-      '#DC2626', // Deep Red (Steak / Go'sht)
-      '#EA580C', // Burnt Orange (Grill)
-      '#D97706', // Amber (Fast food)
-      '#B45309', // Brown (Coffee / Shashlik)
-      '#92400E', // Dark Brown (Desert)
-      '#84CC16', // Lime (Salat)
-      '#16A34A', // Fresh Green (Vegan)
-      '#0EA5E9', // Fresh Blue (Ichimlik)
-      '#06B6D4', // Aqua (Suv / Fresh)
-      '#E11D48', // Raspberry (Desert)
+      '#FFFFFF',
+      '#F87171',
+      '#FB923C',
+      '#FACC15',
+      '#4ADE80',
+      '#2DD4BF',
+      '#60A5FA',
+      '#818CF8',
+      '#A78BFA',
+      '#F472B6',
+      '#DC2626',
+      '#EA580C',
+      '#D97706',
+      '#B45309',
+      '#92400E',
+      '#84CC16',
+      '#16A34A',
+      '#0EA5E9',
+      '#06B6D4',
+      '#E11D48',
     ];
 
     showDialog(
@@ -393,6 +458,22 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           final theme = Theme.of(context);
+
+          Future<void> pickImage() async {
+            final result = await FilePicker.platform.pickFiles(
+              type: FileType.image,
+              allowMultiple: false,
+            );
+            if (result != null && result.files.single.path != null) {
+              setDialogState(
+                () => selectedImagePath = result.files.single.path,
+              );
+            }
+          }
+
+          final hasImage = selectedImagePath != null &&
+              File(selectedImagePath!).existsSync();
+
           return AlertDialog(
             backgroundColor: theme.colorScheme.surface,
             shape: RoundedRectangleBorder(
@@ -408,112 +489,211 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               ),
             ),
             content: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    autofocus: true,
-                    style: TextStyle(color: theme.colorScheme.onSurface),
-                    decoration: InputDecoration(
-                      labelText: AppStrings.categoryName,
-                      labelStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Name field
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      style: TextStyle(color: theme.colorScheme.onSurface),
+                      decoration: InputDecoration(
+                        labelText: AppStrings.categoryName,
+                        labelStyle: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    AppStrings.categoryColor,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
+                    const SizedBox(height: 20),
+
+                    // Image picker
+                    Text(
+                      "Rasm",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 40,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: availableColors.length + 1,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(width: 8),
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          final isSelected = selectedCardColor == null;
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: pickImage,
+                          child: Container(
+                            width: 100,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: theme.brightness == Brightness.light
+                                  ? const Color(0xFFF1F5F9)
+                                  : theme.colorScheme.onSurface.withOpacity(
+                                      0.05,
+                                    ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.primary.withOpacity(
+                                  0.3,
+                                ),
+                                width: 1.5,
+                              ),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: hasImage
+                                ? Image.file(
+                                    File(selectedImagePath!),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        _noImagePlaceholder(theme),
+                                  )
+                                : _noImagePlaceholder(theme),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: pickImage,
+                                icon: const Icon(
+                                  Icons.image_outlined,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  hasImage
+                                      ? "Rasmni almashtirish"
+                                      : "Rasm tanlash",
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: theme.colorScheme.primary,
+                                  foregroundColor: theme.colorScheme.onPrimary,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                              if (hasImage) ...[
+                                const SizedBox(height: 8),
+                                TextButton.icon(
+                                  onPressed: () => setDialogState(
+                                    () => selectedImagePath = null,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 16,
+                                    color: Colors.red,
+                                  ),
+                                  label: const Text(
+                                    "Rasmni o'chirish",
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Color picker
+                    Text(
+                      AppStrings.categoryColor,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 40,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: availableColors.length + 1,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            final isSelected = selectedCardColor == null;
+                            return InkWell(
+                              onTap: () => setDialogState(
+                                () => selectedCardColor = null,
+                              ),
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surface,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppTheme.primaryColor
+                                        : theme.colorScheme.onSurface
+                                              .withOpacity(0.1),
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.format_color_reset_outlined,
+                                  size: 20,
+                                  color: isSelected
+                                      ? AppTheme.primaryColor
+                                      : theme.colorScheme.onSurface
+                                            .withOpacity(0.4),
+                                ),
+                              ),
+                            );
+                          }
+
+                          final colorHex = availableColors[index - 1];
+                          final color = Color(
+                            int.parse(colorHex.replaceFirst('#', '0xFF')),
+                          );
+                          final isSelected = selectedCardColor == colorHex;
+
                           return InkWell(
-                            onTap: () =>
-                                setDialogState(() => selectedCardColor = null),
+                            onTap: () => setDialogState(
+                              () => selectedCardColor = colorHex,
+                            ),
                             child: Container(
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.surface,
+                                color: color,
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: isSelected
-                                      ? AppTheme.primaryColor
-                                      : theme.colorScheme.onSurface.withOpacity(
-                                          0.1,
-                                        ),
+                                      ? Colors.black87
+                                      : Colors.grey.shade300,
                                   width: isSelected ? 2 : 1,
                                 ),
                               ),
-                              child: Icon(
-                                Icons.format_color_reset_outlined,
-                                size: 20,
-                                color: isSelected
-                                    ? AppTheme.primaryColor
-                                    : theme.colorScheme.onSurface.withOpacity(
-                                        0.4,
-                                      ),
-                              ),
+                              child: isSelected
+                                  ? Icon(
+                                      Icons.check,
+                                      color: color.computeLuminance() > 0.5
+                                          ? Colors.black87
+                                          : Colors.white,
+                                    )
+                                  : null,
                             ),
                           );
-                        }
-
-                        final colorHex = availableColors[index - 1];
-                        final color = Color(
-                          int.parse(colorHex.replaceFirst('#', '0xFF')),
-                        );
-                        final isSelected = selectedCardColor == colorHex;
-
-                        return InkWell(
-                          onTap: () => setDialogState(
-                            () => selectedCardColor = colorHex,
-                          ),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isSelected
-                                    ? Colors.black87
-                                    : Colors.grey.shade300,
-                                width: isSelected ? 2 : 1,
-                              ),
-                            ),
-                            child: isSelected
-                                ? Icon(
-                                    Icons.check,
-                                    color: color.computeLuminance() > 0.5
-                                        ? Colors.black87
-                                        : Colors.white,
-                                  )
-                                : null,
-                          ),
-                        );
-                      },
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -531,6 +711,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                     id: category?.id,
                     name: nameController.text,
                     color: selectedCardColor,
+                    imagePath: selectedImagePath,
                   );
                   if (category == null) {
                     context.read<CategoryProvider>().addCategory(
@@ -561,6 +742,27 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
     );
   }
 
+  Widget _noImagePlaceholder(ThemeData theme) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.add_photo_alternate_outlined,
+          size: 28,
+          color: theme.colorScheme.onSurface.withOpacity(0.3),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "Rasm yo'q",
+          style: TextStyle(
+            fontSize: 11,
+            color: theme.colorScheme.onSurface.withOpacity(0.4),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showReorderDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -582,12 +784,30 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                   itemCount: categories.length,
                   itemBuilder: (context, index) {
                     final cat = categories[index];
+                    final hasImage = cat.imagePath != null &&
+                        File(cat.imagePath!).existsSync();
                     return ListTile(
                       key: ValueKey(cat.id),
-                      leading: Icon(
-                        Icons.drag_handle,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
-                      ),
+                      leading: hasImage
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Image.file(
+                                File(cat.imagePath!),
+                                width: 36,
+                                height: 36,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Icon(
+                                  Icons.drag_handle,
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.6),
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              Icons.drag_handle,
+                              color: theme.colorScheme.onSurface
+                                  .withOpacity(0.6),
+                            ),
                       title: Text(
                         cat.name,
                         style: TextStyle(color: theme.colorScheme.onSurface),

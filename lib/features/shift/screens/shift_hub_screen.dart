@@ -249,9 +249,19 @@ class _ShiftStatusTab extends StatelessWidget {
                   label: 'Karta savdo',
                   value: '${PriceFormatter.format(summary.totalCardSales)} so\'m',
                   icon: Icons.credit_card_rounded,
-                  color: const Color(0xFF6366F1),
+                  color: const Color(0xFF3B82F6),
                   theme: theme,
                 ),
+                if (summary.totalTerminalSales > 0) ...[
+                  const SizedBox(width: 16),
+                  _statCard(
+                    label: 'Terminal',
+                    value: '${PriceFormatter.format(summary.totalTerminalSales)} so\'m',
+                    icon: Icons.point_of_sale_rounded,
+                    color: const Color(0xFF8B5CF6),
+                    theme: theme,
+                  ),
+                ],
                 const SizedBox(width: 16),
                 _statCard(
                   label: 'Jami savdo',

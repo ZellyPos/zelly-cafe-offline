@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../database_helper.dart';
 import '../utils/price_formatter.dart';
+import 'tunnel_service.dart';
 
 class TelegramBotService {
   static final TelegramBotService instance = TelegramBotService._();
@@ -14,21 +15,30 @@ class TelegramBotService {
   String? _token;
   bool _isRunning = false;
   String _restaurantName = 'ZELLY';
+  // Ruxsat berilgan chat ID'lar (ilovada telegram_chat_id sozlamasidan, vergul bilan ajratilgan)
+  Set<int> _allowedChatIds = {};
 
   bool get isRunning => _isRunning;
   String get _base => 'https://api.telegram.org/bot$_token';
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
-  void start({required String token, String restaurantName = 'ZELLY'}) {
+  void start({required String token, String restaurantName = 'ZELLY', String? allowedChatId}) {
     if (token.isEmpty) return;
     _token = token;
     _restaurantName = restaurantName;
+    _allowedChatIds = allowedChatId != null && allowedChatId.isNotEmpty
+        ? allowedChatId
+            .split(',')
+            .map((s) => int.tryParse(s.trim()))
+            .whereType<int>()
+            .toSet()
+        : {};
     if (_isRunning && (_pollingTimer?.isActive ?? false)) return;
     _pollingTimer?.cancel();
     _isRunning = true;
     _schedulePoll();
-    debugPrint('TelegramBot: polling started');
+    debugPrint('TelegramBot: polling started, allowedChatIds=$_allowedChatIds');
   }
 
   void stop() {
@@ -90,9 +100,20 @@ class TelegramBotService {
 
   // ─── Message Handler ───────────────────────────────────────────────────────
 
+  // Kiruvchi chatId ga ruxsat bor-yo'qligini tekshiradi
+  bool _isAuthorized(int chatId) {
+    if (_allowedChatIds.isEmpty) return true; // ID sozlanmagan — hamma ruxsatli
+    return _allowedChatIds.contains(chatId);
+  }
+
   Future<void> _handleMessage(Map<String, dynamic> msg) async {
     final chatId = msg['chat']['id'] as int;
     final text = (msg['text'] as String? ?? '').trim();
+
+    if (!_isAuthorized(chatId)) {
+      debugPrint('TelegramBot: unauthorized chatId=$chatId');
+      return;
+    }
 
     // Persist chatId so proactive notifications reach this user
     await _saveKnownChat(chatId);
@@ -183,6 +204,12 @@ class TelegramBotService {
     final data = cb['data'] as String;
     final cbId = cb['id'] as String;
 
+    if (!_isAuthorized(chatId)) {
+      debugPrint('TelegramBot: unauthorized callback chatId=$chatId');
+      await _answerCallback(cbId);
+      return;
+    }
+
     await _answerCallback(cbId);
 
     switch (data) {
@@ -230,20 +257,30 @@ class TelegramBotService {
     await _editMsg(chatId, msgId, text, kb: _mainKb());
   }
 
-  List<List<Map<String, String>>> _mainKb() => [
-    [
-      {'text': '📋 Buyurtmalar', 'callback_data': 'orders'},
-      {'text': '🍽 Taomlar', 'callback_data': 'products'},
-    ],
-    [
-      {'text': '👨‍🍳 Ofisantlar', 'callback_data': 'waiters'},
-      {'text': '🪑 Stollar', 'callback_data': 'tables'},
-    ],
-    [
-      {'text': '📍 Joylar', 'callback_data': 'locations'},
-      {'text': '📈 Umumiy Hisobot', 'callback_data': 'general'},
-    ],
-  ];
+  List<List<Map<String, dynamic>>> _mainKb() {
+    final tunnelUrl = TunnelService.instance.tunnelUrl;
+    return [
+      if (tunnelUrl != null)
+        [
+          {
+            'text': '📊 Hisobot Paneli',
+            'web_app': {'url': '$tunnelUrl/reports/view'},
+          }
+        ],
+      [
+        {'text': '📋 Buyurtmalar', 'callback_data': 'orders'},
+        {'text': '🍽 Taomlar', 'callback_data': 'products'},
+      ],
+      [
+        {'text': '👨‍🍳 Ofisantlar', 'callback_data': 'waiters'},
+        {'text': '🪑 Stollar', 'callback_data': 'tables'},
+      ],
+      [
+        {'text': '📍 Joylar', 'callback_data': 'locations'},
+        {'text': '📈 Umumiy Hisobot', 'callback_data': 'general'},
+      ],
+    ];
+  }
 
   // ─── Buyurtmalar ───────────────────────────────────────────────────────────
 
@@ -785,7 +822,7 @@ class TelegramBotService {
   Future<void> _sendMsg(
     int chatId,
     String text, {
-    List<List<Map<String, String>>>? kb,
+    List<List<Map<String, dynamic>>>? kb,
   }) async {
     try {
       final body = <String, dynamic>{
@@ -810,7 +847,7 @@ class TelegramBotService {
     int chatId,
     int msgId,
     String text, {
-    List<List<Map<String, String>>>? kb,
+    List<List<Map<String, dynamic>>>? kb,
   }) async {
     try {
       final body = <String, dynamic>{

@@ -3,6 +3,7 @@ class Expense {
   final int categoryId;
   final double amount;
   final String? note;
+  final int? shiftId;
   final DateTime createdAt;
 
   Expense({
@@ -10,6 +11,7 @@ class Expense {
     required this.categoryId,
     required this.amount,
     this.note,
+    this.shiftId,
     required this.createdAt,
   });
 
@@ -19,6 +21,7 @@ class Expense {
       'category_id': categoryId,
       'amount': amount,
       'note': note,
+      'shift_id': shiftId,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -29,6 +32,7 @@ class Expense {
       categoryId: map['category_id'] as int,
       amount: (map['amount'] as num).toDouble(),
       note: map['note'] as String?,
+      shiftId: map['shift_id'] as int?,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }

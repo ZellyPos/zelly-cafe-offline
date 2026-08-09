@@ -12,6 +12,13 @@ class Product {
   final String? unit;
   final bool noServiceCharge;
 
+  /// Ombor turi: 'prepared' (tayyorlanadi — retseptli) yoki 'resale' (sotib
+  /// olinadi — retseptsiz, kirim qilinadi).
+  final String productType;
+
+  /// O'rtacha tannarx (resale mahsulot uchun; food-cost hisobida ishlatiladi).
+  final double avgCost;
+
   Product({
     this.id,
     required this.name,
@@ -27,10 +34,15 @@ class Product {
     this.trackType = 0, // 0=none, 1=retail, 2=recipe
     this.allowNegativeStock = false,
     this.noServiceCharge = false,
+    this.productType = 'prepared',
+    this.avgCost = 0,
   });
 
   final int trackType;
   final bool allowNegativeStock;
+
+  bool get isPrepared => productType == 'prepared';
+  bool get isResale => productType == 'resale';
 
   Map<String, dynamic> toMap() {
     return {
@@ -47,6 +59,8 @@ class Product {
       'track_type': trackType,
       'allow_negative_stock': allowNegativeStock ? 1 : 0,
       'no_service_charge': noServiceCharge ? 1 : 0,
+      'product_type': productType,
+      'avg_cost': avgCost,
     };
   }
 
@@ -75,6 +89,8 @@ class Product {
           : 0,
       allowNegativeStock: map['allow_negative_stock'] == 1,
       noServiceCharge: map['no_service_charge'] == 1,
+      productType: map['product_type'] as String? ?? 'prepared',
+      avgCost: (map['avg_cost'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -93,6 +109,8 @@ class Product {
     int? trackType,
     bool? allowNegativeStock,
     bool? noServiceCharge,
+    String? productType,
+    double? avgCost,
   }) {
     return Product(
       id: id ?? this.id,
@@ -109,6 +127,8 @@ class Product {
       trackType: trackType ?? this.trackType,
       allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
       noServiceCharge: noServiceCharge ?? this.noServiceCharge,
+      productType: productType ?? this.productType,
+      avgCost: avgCost ?? this.avgCost,
     );
   }
 }

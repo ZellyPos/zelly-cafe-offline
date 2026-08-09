@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
-import '../core/database_helper.dart';
+import '../data/repositories/delivery_repository.dart';
 import '../core/printing_service.dart';
 import '../core/services/telegram_bot_service.dart';
 import '../models/order.dart';
@@ -10,6 +10,11 @@ import '../models/product.dart';
 import 'cart_provider.dart';
 
 class DeliveryProvider extends ChangeNotifier {
+  final DeliveryRepository _repo;
+
+  DeliveryProvider({DeliveryRepository? repository})
+    : _repo = repository ?? DeliveryRepository();
+
   // ── Couriers ──────────────────────────────────────────────────────────────
   List<Courier> _couriers = [];
   List<Courier> get couriers => _couriers;
@@ -79,32 +84,22 @@ class DeliveryProvider extends ChangeNotifier {
   // ── Couriers ───────────────────────────────────────────────────────────────
 
   Future<void> loadCouriers() async {
-    final db = await DatabaseHelper.instance.database;
-    final rows = await db.query('couriers', orderBy: 'name ASC');
-    _couriers = rows.map(Courier.fromMap).toList();
+    _couriers = await _repo.getCouriers();
     notifyListeners();
   }
 
   Future<void> addCourier(String name, String? phone) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.insert('couriers', {
-      'name': name,
-      'phone': phone,
-      'is_active': 1,
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    await _repo.addCourier(name, phone);
     await loadCouriers();
   }
 
   Future<void> updateCourier(Courier c) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.update('couriers', c.toMap(), where: 'id = ?', whereArgs: [c.id]);
+    await _repo.updateCourier(c);
     await loadCouriers();
   }
 
   Future<void> deleteCourier(int id) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.delete('couriers', where: 'id = ?', whereArgs: [id]);
+    await _repo.deleteCourier(id);
     await loadCouriers();
   }
 
@@ -113,50 +108,29 @@ class DeliveryProvider extends ChangeNotifier {
   Future<List<Map<String, dynamic>>> getCourierStats({
     required DateTime start,
     required DateTime end,
-  }) async {
-    final db = await DatabaseHelper.instance.database;
-    return db.rawQuery('''
-      SELECT
-        c.id,
-        c.name,
-        c.phone,
-        COUNT(o.id) as deliveries,
-        SUM(o.grand_total) as revenue,
-        SUM(o.delivery_fee) as delivery_fees
-      FROM couriers c
-      LEFT JOIN orders o ON o.courier_id = c.id
-        AND o.status = 1
-        AND o.order_type = 2
-        AND o.created_at BETWEEN ? AND ?
-      GROUP BY c.id
-      ORDER BY deliveries DESC
-    ''', [start.toIso8601String(), end.toIso8601String()]);
+  }) {
+    return _repo.getCourierStats(start: start, end: end);
   }
 
   // ── Zones ──────────────────────────────────────────────────────────────────
 
   Future<void> loadZones() async {
-    final db = await DatabaseHelper.instance.database;
-    final rows = await db.query('delivery_zones', orderBy: 'name ASC');
-    _zones = rows.map(DeliveryZone.fromMap).toList();
+    _zones = await _repo.getZones();
     notifyListeners();
   }
 
   Future<void> addZone(String name, double fee, String color) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.insert('delivery_zones', {'name': name, 'fee': fee, 'color': color, 'is_active': 1});
+    await _repo.addZone(name, fee, color);
     await loadZones();
   }
 
   Future<void> updateZone(DeliveryZone z) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.update('delivery_zones', z.toMap(), where: 'id = ?', whereArgs: [z.id]);
+    await _repo.updateZone(z);
     await loadZones();
   }
 
   Future<void> deleteZone(int id) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.delete('delivery_zones', where: 'id = ?', whereArgs: [id]);
+    await _repo.deleteZone(id);
     await loadZones();
   }
 
@@ -174,38 +148,8 @@ class DeliveryProvider extends ChangeNotifier {
   // ── Customer phone lookup ──────────────────────────────────────────────────
 
   /// Search customers + last delivery address by phone prefix.
-  Future<List<Map<String, dynamic>>> lookupByPhone(String phone) async {
-    if (phone.length < 3) return [];
-    final db = await DatabaseHelper.instance.database;
-    // Check customers table
-    final customers = await db.rawQuery('''
-      SELECT name, phone, NULL as address
-      FROM customers
-      WHERE phone LIKE ?
-      LIMIT 5
-    ''', ['%$phone%']);
-
-    // Also check last delivery orders with that phone
-    final orders = await db.rawQuery('''
-      SELECT customer_name as name, customer_phone as phone, delivery_address as address
-      FROM orders
-      WHERE order_type = 2 AND customer_phone LIKE ? AND delivery_address IS NOT NULL
-      GROUP BY customer_phone
-      ORDER BY created_at DESC
-      LIMIT 5
-    ''', ['%$phone%']);
-
-    // Merge, deduplicate by phone
-    final seen = <String>{};
-    final result = <Map<String, dynamic>>[];
-    for (final row in [...customers, ...orders]) {
-      final p = row['phone'] as String? ?? '';
-      if (!seen.contains(p)) {
-        seen.add(p);
-        result.add(Map<String, dynamic>.from(row));
-      }
-    }
-    return result;
+  Future<List<Map<String, dynamic>>> lookupByPhone(String phone) {
+    return _repo.lookupByPhone(phone);
   }
 
   // ── Active orders ──────────────────────────────────────────────────────────
@@ -214,36 +158,10 @@ class DeliveryProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final db = await DatabaseHelper.instance.database;
-
-      final start = filterDateStart ?? DateTime.now();
-      final end = filterDateEnd ?? DateTime.now().add(const Duration(days: 1));
-      final startStr = DateTime(start.year, start.month, start.day).toIso8601String();
-      final endStr = DateTime(end.year, end.month, end.day, 23, 59, 59).toIso8601String();
-
-      final rows = await db.rawQuery('''
-        SELECT o.*, c.name as courier_name
-        FROM orders o
-        LEFT JOIN couriers c ON o.courier_id = c.id
-        WHERE o.order_type = 2
-          AND (o.status = 0 OR (o.status = 1 AND o.created_at BETWEEN ? AND ?))
-        ORDER BY o.created_at DESC
-      ''', [startStr, endStr]);
-
-      final List<Order> result = [];
-      for (final row in rows) {
-        final map = Map<String, dynamic>.from(row);
-        final orderId = map['id'] as String;
-        final itemRows = await db.rawQuery('''
-          SELECT oi.*, p.name as product_name
-          FROM order_items oi
-          LEFT JOIN products p ON oi.product_id = p.id
-          WHERE oi.order_id = ?
-        ''', [orderId]);
-        final items = itemRows.map((r) => OrderItem.fromMap(Map<String, dynamic>.from(r))).toList();
-        result.add(Order.fromMap(map, items: items));
-      }
-      _orders = result;
+      _orders = await _repo.getActiveOrders(
+        filterStart: filterDateStart,
+        filterEnd: filterDateEnd,
+      );
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -251,42 +169,42 @@ class DeliveryProvider extends ChangeNotifier {
   }
 
   Future<void> updateDeliveryStatus(String orderId, int status) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.update('orders', {'delivery_status': status}, where: 'id = ?', whereArgs: [orderId]);
+    await _repo.updateDeliveryStatus(orderId, status);
     await loadOrders();
   }
 
+  // Buyurtmaga kurier biriktirish + status = 2 (yo'lda)
+  Future<void> assignCourier({
+    required String orderId,
+    required int courierId,
+  }) async {
+    await _repo.assignCourier(orderId, courierId);
+    await loadOrders();
+  }
+
+  // Buyurtmani yetkazildi deb belgilash
+  Future<void> markDelivered(String orderId) async {
+    await _repo.markDelivered(orderId);
+    await loadOrders();
+  }
+
+  // Kurierni faollashtirish/o'chirish
+  Future<void> toggleCourierStatus(int courierId, bool isActive) async {
+    await _repo.setCourierActive(courierId, isActive);
+    await loadCouriers();
+  }
+
+  // Kurierning hozirgi yo'ldagi buyurtmalar soni
+  int getCourierActiveCount(int courierId) =>
+      _orders.where((o) =>
+        o.courierId == courierId &&
+        (o.deliveryStatus == 1 || o.deliveryStatus == 2)
+      ).length;
+
   Future<String?> checkoutOrder(String orderId, String paymentType, double paidAmount) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      final now = DateTime.now();
-      final orderRows = await db.query('orders', where: 'id = ?', whereArgs: [orderId]);
-      if (orderRows.isEmpty) return 'Buyurtma topilmadi';
-
-      final map = Map<String, dynamic>.from(orderRows.first);
-      final grandT = (map['grand_total'] as num?)?.toDouble() ?? 0.0;
-      final change = paidAmount > grandT ? paidAmount - grandT : 0.0;
-
-      await db.update('orders', {
-        'status': 1,
-        'delivery_status': 3,
-        'payment_type': paymentType,
-        'paid_amount': paidAmount,
-        'receipt_change': change,
-        'closed_at': now.toIso8601String(),
-      }, where: 'id = ?', whereArgs: [orderId]);
-
-      final updatedMap = Map<String, dynamic>.from(
-        (await db.query('orders', where: 'id = ?', whereArgs: [orderId])).first,
-      );
-      final itemRows = await db.rawQuery('''
-        SELECT oi.*, p.name as product_name
-        FROM order_items oi
-        LEFT JOIN products p ON oi.product_id = p.id
-        WHERE oi.order_id = ?
-      ''', [orderId]);
-      final items = itemRows.map((r) => OrderItem.fromMap(Map<String, dynamic>.from(r))).toList();
-      final order = Order.fromMap(updatedMap, items: items);
+      final order = await _repo.closeOrder(orderId, paymentType, paidAmount);
+      if (order == null) return 'Buyurtma topilmadi';
 
       try { await PrintingService.printReceipt(order: order); } catch (_) {}
 
@@ -346,20 +264,14 @@ class DeliveryProvider extends ChangeNotifier {
     if (deliveryAddress.trim().isEmpty) return 'Manzilni kiriting';
 
     try {
-      final db = await DatabaseHelper.instance.database;
       final orderId = const Uuid().v4();
       final now = DateTime.now();
       final foodTotal = cartTotal;
       final gTotal = foodTotal + deliveryFee;
 
-      final dayStart = await DatabaseHelper.instance.getDayStartTime();
-      final countRes = await db.rawQuery(
-        'SELECT MAX(daily_number) as max_no FROM orders WHERE created_at >= ?',
-        [dayStart.toIso8601String()],
-      );
-      final dailyNo = ((countRes.first['max_no'] as int?) ?? 0) + 1;
+      final dailyNo = await _repo.getNextDailyNumber();
 
-      await db.insert('orders', {
+      final orderMap = {
         'id': orderId,
         'total': gTotal,
         'grand_total': gTotal,
@@ -381,11 +293,11 @@ class DeliveryProvider extends ChangeNotifier {
         'courier_id': selectedCourierId,
         'zone_id': selectedZoneId,
         'daily_number': dailyNo,
-      });
+      };
 
-      for (final entry in _cartItems.entries) {
+      final itemRows = _cartItems.entries.map((entry) {
         final item = entry.value;
-        await db.insert('order_items', {
+        return {
           'order_id': orderId,
           'product_id': item.product.id,
           'product_name': item.product.name,
@@ -393,8 +305,10 @@ class DeliveryProvider extends ChangeNotifier {
           'unit': item.product.unit,
           'price': item.product.price,
           'printed_qty': 0,
-        });
-      }
+        };
+      }).toList();
+
+      await _repo.createOrder(orderMap, itemRows);
 
       // Kitchen print
       final printItems = _cartItems.values.map((ci) => OrderItem(

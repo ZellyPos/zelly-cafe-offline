@@ -644,7 +644,9 @@ class PrintingService {
     List<int> bytes,
     PrinterSettings settings,
   ) async {
-    if (settings.type == PrinterType.network) {
+    if (settings.type == PrinterType.network ||
+        settings.type == PrinterType.receipt) {
+      // receipt — tarmoq orqali ishlaydigan kassa printeri
       return await _printNetwork(
         bytes,
         settings.ipAddress,

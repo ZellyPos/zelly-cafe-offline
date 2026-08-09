@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../data/repositories/printer_repository.dart';
 import '../models/printer_settings.dart';
-import '../core/database_helper.dart';
 import '../core/printing_service.dart';
 
 const String _kSelectedReceiptPrinterId = 'selected_receipt_printer_id';
 
 class PrinterProvider with ChangeNotifier {
+  final PrinterRepository _repo;
+
+  PrinterProvider({PrinterRepository? repository})
+    : _repo = repository ?? PrinterRepository();
+
   List<PrinterSettings> _printers = [];
   List<String> _windowsPrinters = [];
   List<String> _legacyUsbPrinters = []; // For fallback
@@ -34,50 +39,30 @@ class PrinterProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _selectedReceiptPrinterId = prefs.getInt(_kSelectedReceiptPrinterId);
 
-    final db = await DatabaseHelper.instance.database;
-    final res = await db.query('printers');
+    _printers = await _repo.getPrinters();
 
-    if (res.isNotEmpty) {
-      _printers = res.map((m) => PrinterSettings.fromMap(m)).toList();
-    } else {
+    if (_printers.isEmpty) {
       // Fallback/Migration: check old settings table
-      final oldRes = await db.query('settings');
-      if (oldRes.isNotEmpty) {
-        Map<String, dynamic> settingsMap = {};
-        for (var row in oldRes) {
-          settingsMap[row['key'] as String] = row['value'];
-        }
-        if (settingsMap.containsKey('printer_type')) {
-          final oldSettings = PrinterSettings.fromMap(
-            settingsMap,
-          ).copyWith(displayName: 'Asosiy Printer');
-          _printers = [oldSettings];
-          // Proactively save to new table
-          await savePrinter(oldSettings);
-        }
+      final settingsMap = await _repo.getLegacySettings();
+      if (settingsMap.containsKey('printer_type')) {
+        final oldSettings = PrinterSettings.fromMap(
+          settingsMap,
+        ).copyWith(displayName: 'Asosiy Printer');
+        // Proactively save to new table, then reload to pick up the assigned id
+        await _repo.savePrinter(oldSettings);
+        _printers = await _repo.getPrinters();
       }
     }
     notifyListeners();
   }
 
   Future<void> savePrinter(PrinterSettings printer) async {
-    final db = await DatabaseHelper.instance.database;
-    if (printer.id == null) {
-      await db.insert('printers', printer.toMap());
-    } else {
-      await db.update(
-        'printers',
-        printer.toMap(),
-        where: 'id = ?',
-        whereArgs: [printer.id],
-      );
-    }
+    await _repo.savePrinter(printer);
     await loadSettings();
   }
 
   Future<void> deletePrinter(int id) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.delete('printers', where: 'id = ?', whereArgs: [id]);
+    await _repo.deletePrinter(id);
     await loadSettings();
   }
 

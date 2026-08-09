@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../data/repositories/settings_repository.dart';
 import '../core/services/telegram_bot_service.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 class AppSettingsProvider extends ChangeNotifier {
+  final SettingsRepository _repo;
+
+  AppSettingsProvider({SettingsRepository? repository})
+    : _repo = repository ?? SettingsRepository();
+
   String _loginPin = '0000';
   String? _brandImagePath;
   String _restaurantName = 'ZELLY';
@@ -25,78 +30,29 @@ class AppSettingsProvider extends ChangeNotifier {
   bool get enableInventory => _enableInventory;
 
   Future<void> loadSettings() async {
-    final db = DatabaseHelper.instance;
+    // Barcha sozlamalarni bitta query da olamiz
+    final settings = await _repo.getAll();
 
-    final pinRes = await db.queryByColumn('settings', 'key', 'login_pin');
-    if (pinRes.isNotEmpty) {
-      _loginPin = pinRes.first['value'];
-    } else {
-      await db.insert('settings', {'key': 'login_pin', 'value': '0000'});
-      _loginPin = '0000';
+    _loginPin = settings['login_pin'] ?? '0000';
+    if (!settings.containsKey('login_pin')) {
+      await _repo.setValue('login_pin', '0000');
     }
 
-    final imageRes = await db.queryByColumn(
-      'settings',
-      'key',
-      'login_brand_image_path',
-    );
-    if (imageRes.isNotEmpty) {
-      _brandImagePath = imageRes.first['value'];
-    }
+    _brandImagePath = settings['login_brand_image_path'];
+    _restaurantName = settings['restaurant_name'] ?? 'ZELLY';
+    _telegramBotToken = settings['telegram_bot_token'];
+    _telegramChatId = settings['telegram_chat_id'];
 
-    final nameRes = await db.queryByColumn(
-      'settings',
-      'key',
-      'restaurant_name',
-    );
-    if (nameRes.isNotEmpty) {
-      _restaurantName = nameRes.first['value'];
-    }
-
-    final tokenRes = await db.queryByColumn(
-      'settings',
-      'key',
-      'telegram_bot_token',
-    );
-    if (tokenRes.isNotEmpty) {
-      _telegramBotToken = tokenRes.first['value'];
-    }
-
-    final chatRes = await db.queryByColumn(
-      'settings',
-      'key',
-      'telegram_chat_id',
-    );
-    if (chatRes.isNotEmpty) {
-      _telegramChatId = chatRes.first['value'];
-    }
-
-    final themeRes = await db.queryByColumn('settings', 'key', 'theme_mode');
-    if (themeRes.isNotEmpty) {
-      final value = themeRes.first['value'];
+    final themeVal = settings['theme_mode'];
+    if (themeVal != null) {
       _themeMode = ThemeMode.values.firstWhere(
-        (e) => e.name == value,
+        (e) => e.name == themeVal,
         orElse: () => ThemeMode.light,
       );
     }
 
-    final autoConfirmRes = await db.queryByColumn(
-      'settings',
-      'key',
-      'auto_confirm_order',
-    );
-    if (autoConfirmRes.isNotEmpty) {
-      _autoConfirmOrder = autoConfirmRes.first['value'] == 'true';
-    }
-
-    final inventoryRes = await db.queryByColumn(
-      'settings',
-      'key',
-      'enable_inventory',
-    );
-    if (inventoryRes.isNotEmpty) {
-      _enableInventory = inventoryRes.first['value'] == 'true';
-    }
+    _autoConfirmOrder = settings['auto_confirm_order'] == 'true';
+    _enableInventory = settings['enable_inventory'] == 'true';
 
     _startBot();
     notifyListeners();
@@ -108,6 +64,7 @@ class AppSettingsProvider extends ChangeNotifier {
       TelegramBotService.instance.start(
         token: token,
         restaurantName: _restaurantName,
+        allowedChatId: _telegramChatId,
       );
     } else if (stopIfEmpty) {
       TelegramBotService.instance.stop();
@@ -115,114 +72,31 @@ class AppSettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setAutoConfirmOrder(bool value) async {
-    final db = DatabaseHelper.instance;
-    final existing = await db.queryByColumn(
-      'settings',
-      'key',
-      'auto_confirm_order',
-    );
-    if (existing.isNotEmpty) {
-      await db.update(
-        'settings',
-        {'value': value.toString()},
-        'key = ?',
-        ['auto_confirm_order'],
-      );
-    } else {
-      await db.insert('settings', {
-        'key': 'auto_confirm_order',
-        'value': value.toString(),
-      });
-    }
+    await _repo.setValue('auto_confirm_order', value.toString());
     _autoConfirmOrder = value;
     notifyListeners();
   }
 
   Future<void> setEnableInventory(bool value) async {
-    final db = DatabaseHelper.instance;
-    final existing = await db.queryByColumn(
-      'settings',
-      'key',
-      'enable_inventory',
-    );
-    if (existing.isNotEmpty) {
-      await db.update(
-        'settings',
-        {'value': value.toString()},
-        'key = ?',
-        ['enable_inventory'],
-      );
-    } else {
-      await db.insert('settings', {
-        'key': 'enable_inventory',
-        'value': value.toString(),
-      });
-    }
+    await _repo.setValue('enable_inventory', value.toString());
     _enableInventory = value;
     notifyListeners();
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
-    final db = DatabaseHelper.instance;
-    final existing = await db.queryByColumn('settings', 'key', 'theme_mode');
-    if (existing.isNotEmpty) {
-      await db.update(
-        'settings',
-        {'value': mode.name},
-        'key = ?',
-        ['theme_mode'],
-      );
-    } else {
-      await db.insert('settings', {'key': 'theme_mode', 'value': mode.name});
-    }
+    await _repo.setValue('theme_mode', mode.name);
     _themeMode = mode;
     notifyListeners();
   }
 
   Future<void> setTelegramSettings(String? token, String? chatId) async {
-    final db = DatabaseHelper.instance;
-
     if (token != null && token.isNotEmpty) {
-      final existing = await db.queryByColumn(
-        'settings',
-        'key',
-        'telegram_bot_token',
-      );
-      if (existing.isNotEmpty) {
-        await db.update(
-          'settings',
-          {'value': token},
-          'key = ?',
-          ['telegram_bot_token'],
-        );
-      } else {
-        await db.insert('settings', {
-          'key': 'telegram_bot_token',
-          'value': token,
-        });
-      }
+      await _repo.setValue('telegram_bot_token', token);
       _telegramBotToken = token;
     }
 
     if (chatId != null && chatId.isNotEmpty) {
-      final existing = await db.queryByColumn(
-        'settings',
-        'key',
-        'telegram_chat_id',
-      );
-      if (existing.isNotEmpty) {
-        await db.update(
-          'settings',
-          {'value': chatId},
-          'key = ?',
-          ['telegram_chat_id'],
-        );
-      } else {
-        await db.insert('settings', {
-          'key': 'telegram_chat_id',
-          'value': chatId,
-        });
-      }
+      await _repo.setValue('telegram_chat_id', chatId);
       _telegramChatId = chatId;
     }
 
@@ -231,22 +105,7 @@ class AppSettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setRestaurantName(String name) async {
-    final db = DatabaseHelper.instance;
-    final existing = await db.queryByColumn(
-      'settings',
-      'key',
-      'restaurant_name',
-    );
-    if (existing.isNotEmpty) {
-      await db.update(
-        'settings',
-        {'value': name},
-        'key = ?',
-        ['restaurant_name'],
-      );
-    } else {
-      await db.insert('settings', {'key': 'restaurant_name', 'value': name});
-    }
+    await _repo.setValue('restaurant_name', name);
     _restaurantName = name;
     TelegramBotService.instance.updateRestaurantName(name);
     notifyListeners();
@@ -255,8 +114,7 @@ class AppSettingsProvider extends ChangeNotifier {
   Future<bool> updatePin(String currentPin, String newPin) async {
     if (currentPin != _loginPin) return false;
 
-    final db = DatabaseHelper.instance;
-    await db.update('settings', {'value': newPin}, 'key = ?', ['login_pin']);
+    await _repo.updateValue('login_pin', newPin);
     _loginPin = newPin;
     notifyListeners();
     return true;
@@ -271,27 +129,7 @@ class AppSettingsProvider extends ChangeNotifier {
     final file = File(filePath);
     await file.copy(savedPath);
 
-    final db = DatabaseHelper.instance;
-    final existing = await db.queryByColumn(
-      'settings',
-      'key',
-      'login_brand_image_path',
-    );
-
-    if (existing.isNotEmpty) {
-      await db.update(
-        'settings',
-        {'value': savedPath},
-        'key = ?',
-        ['login_brand_image_path'],
-      );
-    } else {
-      await db.insert('settings', {
-        'key': 'login_brand_image_path',
-        'value': savedPath,
-      });
-    }
-
+    await _repo.setValue('login_brand_image_path', savedPath);
     _brandImagePath = savedPath;
     notifyListeners();
   }
@@ -303,8 +141,7 @@ class AppSettingsProvider extends ChangeNotifier {
         await file.delete();
       }
 
-      final db = DatabaseHelper.instance;
-      await db.delete('settings', 'key = ?', ['login_brand_image_path']);
+      await _repo.deleteKey('login_brand_image_path');
       _brandImagePath = null;
       notifyListeners();
     }

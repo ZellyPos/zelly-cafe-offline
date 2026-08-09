@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../providers/developer_provider.dart';
-import '../../core/database_helper.dart';
+import '../../data/repositories/developer_repository.dart';
+import '../settings/telegram_settings_screen.dart';
 
 class DeveloperMgmtScreen extends StatefulWidget {
   const DeveloperMgmtScreen({super.key});
@@ -40,7 +41,7 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
   }
 
   Future<void> _loadMeta() async {
-    final path = await DatabaseHelper.instance.getDatabasePath();
+    final path = await DeveloperRepository().getDatabasePath();
     final file = File(path);
     final size = file.existsSync()
         ? _formatSize(await file.length())
@@ -50,11 +51,10 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
 
   Future<void> _loadRowCounts(List<String> tables) async {
     setState(() => _loadingCounts = true);
-    final db = await DatabaseHelper.instance.database;
+    final repo = DeveloperRepository();
     final counts = <String, int>{};
     for (final t in tables) {
-      final res = await db.rawQuery('SELECT COUNT(*) as c FROM "$t"');
-      counts[t] = (res.first['c'] as int?) ?? 0;
+      counts[t] = await repo.getRowCount(t);
     }
     if (mounted) setState(() { _rowCounts = counts; _loadingCounts = false; });
   }
@@ -101,6 +101,8 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _buildTelegramCard(context, theme),
+                  const SizedBox(height: 20),
                   _buildDbInfoCard(theme),
                   const SizedBox(height: 20),
                   _buildActionsRow(context, theme),
@@ -111,6 +113,20 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  // ─── Telegram sync ───────────────────────────────────────────────────────
+  Widget _buildTelegramCard(BuildContext context, ThemeData t) {
+    return _ActionCard(
+      icon: Icons.send_rounded,
+      label: 'Telegram bot sinxronizatsiyasi',
+      subtitle: 'Bot token va foydalanuvchi ID\'lari',
+      color: const Color(0xFF0EA5E9),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const TelegramSettingsScreen()),
+      ),
     );
   }
 
@@ -283,17 +299,17 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
     if (query.isEmpty) return;
     setState(() { _sqlLoading = true; _sqlResult = null; });
     try {
-      final db = await DatabaseHelper.instance.database;
+      final repo = DeveloperRepository();
       final upper = query.toUpperCase().trimLeft();
       if (upper.startsWith('SELECT') || upper.startsWith('PRAGMA')) {
-        final rows = await db.rawQuery(query);
+        final rows = await repo.runRawQuery(query);
         setState(() {
           _sqlResult = rows.isEmpty
               ? '(Natija yo\'q)'
               : rows.map((r) => r.toString()).join('\n');
         });
       } else {
-        await db.execute(query);
+        await repo.executeRawQuery(query);
         setState(() { _sqlResult = 'Muvaffaqiyatli bajarildi.'; });
         await _refresh();
       }
@@ -390,7 +406,7 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
   Future<void> _backupDatabase() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final dbPath = await DatabaseHelper.instance.getDatabasePath();
+      final dbPath = await DeveloperRepository().getDatabasePath();
       final dbFile = File(dbPath);
       if (!dbFile.existsSync()) throw Exception('Baza fayli topilmadi!');
 
@@ -441,8 +457,9 @@ class _DeveloperMgmtScreenState extends State<DeveloperMgmtScreen> {
       if (result?.files.single.path == null) return;
 
       final pickedFile = File(result!.files.single.path!);
-      final dbPath = await DatabaseHelper.instance.getDatabasePath();
-      await DatabaseHelper.instance.close();
+      final devRepo = DeveloperRepository();
+      final dbPath = await devRepo.getDatabasePath();
+      await devRepo.close();
       await pickedFile.copy(dbPath);
 
       if (!mounted) return;

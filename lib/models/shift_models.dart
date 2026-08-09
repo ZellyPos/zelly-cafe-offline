@@ -136,21 +136,39 @@ class CashMovement {
 class ShiftSummary {
   final double totalCashSales;
   final double totalCardSales;
+  final double totalTerminalSales;
   final double totalDebtSales;
+  final double totalBonusSales;
+  final double totalTransferSales;
   final double totalInMovements;
   final double totalOutMovements;
   final double expectedCashBalance;
+  final double totalOrderDiscount;
+  final double totalItemDiscount;
+  final double totalExpenses;
 
   ShiftSummary({
     this.totalCashSales = 0,
     this.totalCardSales = 0,
+    this.totalTerminalSales = 0,
     this.totalDebtSales = 0,
+    this.totalBonusSales = 0,
+    this.totalTransferSales = 0,
     this.totalInMovements = 0,
     this.totalOutMovements = 0,
     this.expectedCashBalance = 0,
+    this.totalOrderDiscount = 0,
+    this.totalItemDiscount = 0,
+    this.totalExpenses = 0,
   });
 
-  double get totalSales => totalCashSales + totalCardSales + totalDebtSales;
+  double get totalSales =>
+      totalCashSales + totalCardSales + totalTerminalSales +
+      totalDebtSales + totalBonusSales + totalTransferSales;
+
+  double get totalDiscount => totalOrderDiscount + totalItemDiscount;
+  double get grossSales => totalSales + totalDiscount;
+  double get netProfit => totalSales - totalExpenses;
 }
 
 /// Smena yopilganda to'liq hisobot (chop etish + ko'rsatish uchun)

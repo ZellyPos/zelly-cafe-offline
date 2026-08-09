@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/report_provider.dart';
 import '../../../providers/location_provider.dart';
 import '../../../providers/waiter_provider.dart';
-import '../../../core/database_helper.dart';
+import '../../../data/repositories/settings_repository.dart';
 import 'package:intl/intl.dart';
 
 class ReportFilterBar extends StatefulWidget {
@@ -14,7 +14,17 @@ class ReportFilterBar extends StatefulWidget {
 }
 
 class _ReportFilterBarState extends State<ReportFilterBar> {
-  String? _activeChip = 'today';
+  String? _activeChip;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeChip = 'today';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _selectChip('today');
+    });
+  }
+
 
   static const _chips = [
     ('today', 'Bugun'),
@@ -25,34 +35,32 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
   ];
 
   Future<DateTimeRange> _rangeFor(String chip) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    // Kun boshlanish vaqtini (day_reset_time sozlamasi) olamiz
+    final dayStart = await SettingsRepository().getDayStartTime();
+    final dayEnd = dayStart.add(const Duration(days: 1));
 
     if (chip == 'today') {
-      // Kun boshlanish vaqtini hisobga oladi (day_reset_time sozlamasi)
-      final dayStart = await DatabaseHelper.instance.getDayStartTime();
-      return DateTimeRange(start: dayStart, end: todayEnd);
+      return DateTimeRange(start: dayStart, end: dayEnd);
     }
 
     return switch (chip) {
       'yesterday' => DateTimeRange(
-          start: today.subtract(const Duration(days: 1)),
-          end: today.subtract(const Duration(seconds: 1)),
+          start: dayStart.subtract(const Duration(days: 1)),
+          end: dayStart,
         ),
       '3days' => DateTimeRange(
-          start: today.subtract(const Duration(days: 2)),
-          end: todayEnd,
+          start: dayStart.subtract(const Duration(days: 2)),
+          end: dayEnd,
         ),
       'week' => DateTimeRange(
-          start: today.subtract(const Duration(days: 6)),
-          end: todayEnd,
+          start: dayStart.subtract(const Duration(days: 6)),
+          end: dayEnd,
         ),
       'month' => DateTimeRange(
-          start: DateTime(now.year, now.month, 1),
-          end: todayEnd,
+          start: DateTime(dayStart.year, dayStart.month, 1, dayStart.hour, dayStart.minute),
+          end: dayEnd,
         ),
-      _ => DateTimeRange(start: today, end: todayEnd),
+      _ => DateTimeRange(start: dayStart, end: dayEnd),
     };
   }
 
@@ -63,25 +71,31 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
     context.read<ReportProvider>().updateFilter(
           startDate: range.start,
           endDate: range.end,
+          chipKey: chip,
         );
+  }
+
+  String _fmtRange(DateTime start, DateTime end) {
+    final fmt = DateFormat('dd.MM HH:mm');
+    return '${fmt.format(start)} – ${fmt.format(end)}';
   }
 
   Future<void> _pickCustomRange() async {
     final filter = context.read<ReportProvider>().filter;
-    final picked = await showDateRangePicker(
+    final result = await showDialog<DateTimeRange>(
       context: context,
-      initialDateRange: DateTimeRange(
-        start: filter.startDate,
-        end: filter.endDate,
+      builder: (_) => _DateTimeRangeDialog(
+        initial: DateTimeRange(
+          start: filter.startDate,
+          end: filter.endDate,
+        ),
       ),
-      firstDate: DateTime(2022),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (picked != null && mounted) {
+    if (result != null && mounted) {
       setState(() => _activeChip = null);
       context.read<ReportProvider>().updateFilter(
-            startDate: picked.start,
-            endDate: picked.end,
+            startDate: result.start,
+            endDate: result.end,
           );
     }
   }
@@ -95,7 +109,6 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(
@@ -106,122 +119,118 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
           ),
         ),
       ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.filter_alt_outlined,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-            size: 14,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
+      child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 7, 8, 7),
+            child: Row(
               children: [
-                // Quick date chips
-                ..._chips.map((c) => _DateChip(
-                      label: c.$2,
-                      active: _activeChip == c.$1,
-                      onTap: () => _selectChip(c.$1),
-                    )),
-
-                // Custom range chip
-                _DateChip(
-                  label: _activeChip == null
-                      ? '${DateFormat('dd.MM').format(filter.startDate)} – ${DateFormat('dd.MM.yyyy').format(filter.endDate)}'
-                      : 'Sana tanlash',
-                  active: _activeChip == null,
-                  icon: Icons.calendar_month,
-                  onTap: _pickCustomRange,
-                ),
-
-                const SizedBox(width: 4),
-
-                // Dropdowns
-                _buildDropdown<int?>(
-                  label: "Turi",
-                  value: filter.orderType,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text("Barchasi")),
-                    DropdownMenuItem(value: 0, child: Text("Stol")),
-                    DropdownMenuItem(value: 1, child: Text("Saboy")),
-                    DropdownMenuItem(value: 2, child: Text("Yetkazish")),
-                  ],
-                  onChanged: (val) => reportProvider.updateFilter(
-                    orderType: val,
-                    clearOrderType: val == null,
+                Icon(Icons.filter_alt_outlined,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                    size: 14),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ..._chips.map((c) => _DateChip(
+                            label: c.$2,
+                            active: _activeChip == c.$1,
+                            onTap: () => _selectChip(c.$1),
+                          )),
+                      _DateChip(
+                        label: _activeChip == null
+                            ? _fmtRange(filter.startDate, filter.endDate)
+                            : 'Sana va vaqt',
+                        active: _activeChip == null,
+                        icon: Icons.access_time_rounded,
+                        onTap: _pickCustomRange,
+                      ),
+                      const SizedBox(width: 4),
+                      _buildDropdown<int?>(
+                        label: "Turi",
+                        value: filter.orderType,
+                        items: const [
+                          DropdownMenuItem(value: null, child: Text("Barchasi")),
+                          DropdownMenuItem(value: 0, child: Text("Stol")),
+                          DropdownMenuItem(value: 1, child: Text("Saboy")),
+                          DropdownMenuItem(value: 2, child: Text("Yetkazish")),
+                        ],
+                        onChanged: (val) => reportProvider.updateFilter(
+                          orderType: val,
+                          clearOrderType: val == null,
+                        ),
+                        context: context,
+                      ),
+                      _buildDropdown<int?>(
+                        label: "Joy",
+                        value: filter.locationId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text("Barcha joylar")),
+                          ...locationProvider.locations.map(
+                            (l) => DropdownMenuItem(value: l.id, child: Text(l.name)),
+                          ),
+                        ],
+                        onChanged: (val) => reportProvider.updateFilter(
+                          locationId: val,
+                          clearLocation: val == null,
+                        ),
+                        context: context,
+                      ),
+                      _buildDropdown<int?>(
+                        label: "Ofitsiant",
+                        value: filter.waiterId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text("Barcha xodimlar")),
+                          ...waiterProvider.waiters.map(
+                            (w) => DropdownMenuItem(value: w.id, child: Text(w.name)),
+                          ),
+                        ],
+                        onChanged: (val) => reportProvider.updateFilter(
+                          waiterId: val,
+                          clearWaiter: val == null,
+                        ),
+                        context: context,
+                      ),
+                    ],
                   ),
-                  context: context,
                 ),
-                _buildDropdown<int?>(
-                  label: "Joy",
-                  value: filter.locationId,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text("Barcha joylar")),
-                    ...locationProvider.locations.map(
-                      (l) => DropdownMenuItem(value: l.id, child: Text(l.name)),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    setState(() => _activeChip = 'today');
+                    await _selectChip('today');
+                    if (!mounted) return;
+                    reportProvider.updateFilter(
+                      clearOrderType: true,
+                      clearLocation: true,
+                      clearWaiter: true,
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.refresh_rounded,
+                            size: 13,
+                            color: Colors.redAccent.withValues(alpha: 0.8)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tozalash',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.redAccent.withValues(alpha: 0.8),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                  onChanged: (val) => reportProvider.updateFilter(
-                    locationId: val,
-                    clearLocation: val == null,
                   ),
-                  context: context,
-                ),
-                _buildDropdown<int?>(
-                  label: "Ofitsiant",
-                  value: filter.waiterId,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text("Barcha xodimlar")),
-                    ...waiterProvider.waiters.map(
-                      (w) => DropdownMenuItem(value: w.id, child: Text(w.name)),
-                    ),
-                  ],
-                  onChanged: (val) => reportProvider.updateFilter(
-                    waiterId: val,
-                    clearWaiter: val == null,
-                  ),
-                  context: context,
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          InkWell(
-            onTap: () async {
-              setState(() => _activeChip = 'today');
-              await _selectChip('today');
-              if (!mounted) return;
-              reportProvider.updateFilter(
-                clearOrderType: true,
-                clearLocation: true,
-                clearWaiter: true,
-              );
-            },
-            borderRadius: BorderRadius.circular(6),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.refresh_rounded,
-                      size: 13, color: Colors.redAccent.withValues(alpha: 0.8)),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Tozalash',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.redAccent.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -230,7 +239,7 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
     required String label,
     required T value,
     required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T> onChanged,
+    required ValueChanged<T?> onChanged,
     required BuildContext context,
   }) {
     final theme = Theme.of(context);
@@ -261,7 +270,7 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
             child: DropdownButton<T>(
               value: value,
               items: items,
-              onChanged: (val) => val != null ? onChanged(val) : null,
+              onChanged: onChanged,
               dropdownColor: theme.colorScheme.surface,
               style: TextStyle(
                 color: theme.colorScheme.onSurface,
@@ -343,3 +352,231 @@ class _DateChip extends StatelessWidget {
     );
   }
 }
+
+// ── Sana+Vaqt oralig'i dialog ─────────────────────────────────────────────────
+
+class _DateTimeRangeDialog extends StatefulWidget {
+  final DateTimeRange initial;
+  const _DateTimeRangeDialog({required this.initial});
+
+  @override
+  State<_DateTimeRangeDialog> createState() => _DateTimeRangeDialogState();
+}
+
+class _DateTimeRangeDialogState extends State<_DateTimeRangeDialog> {
+  late DateTime _start;
+  late DateTime _end;
+
+  @override
+  void initState() {
+    super.initState();
+    _start = widget.initial.start;
+    _end = widget.initial.end;
+  }
+
+  Future<void> _pickDate(bool isStart) async {
+    final initial = isStart ? _start : _end;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2022),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _start = DateTime(picked.year, picked.month, picked.day,
+            _start.hour, _start.minute);
+      } else {
+        _end = DateTime(picked.year, picked.month, picked.day,
+            _end.hour, _end.minute);
+      }
+    });
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    final initial = isStart ? _start : _end;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: initial.hour, minute: initial.minute),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _start = DateTime(_start.year, _start.month, _start.day,
+            picked.hour, picked.minute);
+      } else {
+        _end = DateTime(_end.year, _end.month, _end.day,
+            picked.hour, picked.minute);
+      }
+    });
+  }
+
+  String _fmtDate(DateTime dt) => DateFormat('dd.MM.yyyy').format(dt);
+  String _fmtTime(DateTime dt) =>
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+  Widget _row(BuildContext context, String label, DateTime dt, bool isStart) {
+    final theme = Theme.of(context);
+    const accent = Color(0xFF6366F1);
+    return Row(
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Sana tugmasi
+        InkWell(
+          onTap: () => _pickDate(isStart),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: accent.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.calendar_today_rounded, size: 13, color: accent),
+                const SizedBox(width: 6),
+                Text(
+                  _fmtDate(dt),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Soat tugmasi
+        InkWell(
+          onTap: () => _pickTime(isStart),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.schedule_rounded,
+                    size: 13, color: Color(0xFFF59E0B)),
+                const SizedBox(width: 6),
+                Text(
+                  _fmtTime(dt),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFF59E0B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isValid = _end.isAfter(_start);
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 420,
+        child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.date_range_rounded,
+                    color: Color(0xFF6366F1), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Sana va vaqt oralig\'ini tanlash',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _row(context, 'Boshlanish:', _start, true),
+            const SizedBox(height: 12),
+            _row(context, 'Tugash:', _end, false),
+            const SizedBox(height: 8),
+            if (!isValid)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Tugash vaqti boshlanishdan keyin bo\'lishi kerak',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Bekor qilish'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: isValid
+                      ? () => Navigator.pop(
+                            context,
+                            DateTimeRange(start: _start, end: _end),
+                          )
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Qo\'llash'),
+                ),
+              ],
+            ),
+          ],
+        ),   // Column
+        ),   // Padding
+      ),     // SizedBox
+    );       // Dialog
+  }
+}
+

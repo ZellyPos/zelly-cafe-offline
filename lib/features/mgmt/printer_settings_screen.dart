@@ -305,7 +305,14 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                           selectedType,
                           (val) => setDialogState(() => selectedType = val),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
+                        _buildTypeChoice(
+                          'Kassa (chek)',
+                          PrinterType.receipt,
+                          selectedType,
+                          (val) => setDialogState(() => selectedType = val),
+                        ),
+                        const SizedBox(width: 8),
                         _buildTypeChoice(
                           'USB Windows',
                           PrinterType.windows,
@@ -315,7 +322,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    if (selectedType == PrinterType.network) ...[
+                    if (selectedType == PrinterType.network ||
+                        selectedType == PrinterType.receipt) ...[
                       Row(
                         children: [
                           Expanded(

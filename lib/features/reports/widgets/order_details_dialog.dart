@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../providers/report_provider.dart';
 import '../../../core/printing_service.dart';
+import '../../../data/repositories/order_repository.dart';
 import '../../../models/order.dart';
 
 class OrderDetailsDialog extends StatefulWidget {
@@ -281,8 +282,6 @@ class _OrderDetailsDialogState extends State<OrderDetailsDialog> {
         (order['room_charge'] as num?)?.toDouble() ?? 0.0;
     final double serviceTotal =
         (order['service_total'] as num?)?.toDouble() ?? 0.0;
-    final String paymentType = order['payment_type'] ?? 'Kassa';
-
     return Column(
       children: [
         _buildSummaryRow(
@@ -307,30 +306,80 @@ class _OrderDetailsDialogState extends State<OrderDetailsDialog> {
           isTotal: true,
         ),
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text("To'lov turi:", style: TextStyle(color: Colors.grey)),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                paymentType,
-                style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12),
-              ),
-            ),
-          ],
+        // To'lov turlari — order_payments dan
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: OrderRepository().getOrderPayments(widget.orderId),
+          builder: (ctx, snap) {
+            final payments = snap.data ?? [];
+            if (payments.isEmpty) {
+              // Eski yozuvlar uchun fallback
+              final fallback = order['payment_type'] ?? 'Kassa';
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("To'lov turi:", style: TextStyle(color: Colors.grey)),
+                  _paymentChip(fallback, Colors.blue),
+                ],
+              );
+            }
+            if (payments.length == 1) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("To'lov turi:", style: TextStyle(color: Colors.grey)),
+                  _paymentChip(payments.first['payment_type'] as String, Colors.blue),
+                ],
+              );
+            }
+            // Split payment — bir nechta tur
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("To'lov turlari:", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                const SizedBox(height: 6),
+                ...payments.map((p) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _paymentChip(p['payment_type'] as String, Colors.blue),
+                      Text(
+                        PriceFormatter.format((p['amount'] as num?)?.toDouble() ?? 0),
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                )),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 16),
         _buildPrintButton(context, order),
       ],
+    );
+  }
+
+  Widget _paymentChip(String type, Color color) {
+    const labels = {
+      'cash': '💵 Naqd', 'Cash': '💵 Naqd',
+      'card': '💳 Karta', 'Card': '💳 Karta',
+      'terminal': '🖥️ Terminal', 'Terminal': '🖥️ Terminal',
+      'bonus': '⭐ Bonus', 'Bonus': '⭐ Bonus',
+      'debt': '📒 Qarz', 'Debt': '📒 Qarz',
+      'transfer': '📲 O\'tkazma', 'Transfer': '📲 O\'tkazma',
+    };
+    final label = labels[type] ?? type;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color.withValues(alpha: 0.85), fontWeight: FontWeight.bold, fontSize: 12),
+      ),
     );
   }
 

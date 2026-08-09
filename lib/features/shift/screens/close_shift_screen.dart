@@ -4,6 +4,7 @@ import '../../../providers/shift_provider.dart';
 import '../../../providers/connectivity_provider.dart';
 import '../../../models/shift_models.dart';
 import '../../../core/utils/price_formatter.dart';
+import '../../../data/repositories/expense_repository.dart';
 import 'shift_report_print_service.dart';
 
 class CloseShiftScreen extends StatefulWidget {
@@ -208,6 +209,10 @@ class _CloseShiftScreenState extends State<CloseShiftScreen> {
                   if (_previewReport != null) ...[
                     _buildSalesCard(_previewReport!, theme),
                     const SizedBox(height: 16),
+                    if (_previewReport!.summary.totalExpenses > 0) ...[
+                      _buildExpensesCard(_previewReport!, theme),
+                      const SizedBox(height: 16),
+                    ],
                     _buildCashCard(_previewReport!, theme),
                     const SizedBox(height: 16),
                     if (_previewReport!.movements.isNotEmpty)
@@ -444,12 +449,34 @@ class _CloseShiftScreenState extends State<CloseShiftScreen> {
             theme,
             color: const Color(0xFF3B82F6),
           ),
-          _row(
-            'Nasiya savdo',
-            report.summary.totalDebtSales,
-            theme,
-            color: const Color(0xFFF59E0B),
-          ),
+          if (report.summary.totalTerminalSales > 0)
+            _row(
+              'Terminal savdo',
+              report.summary.totalTerminalSales,
+              theme,
+              color: const Color(0xFF8B5CF6),
+            ),
+          if (report.summary.totalBonusSales > 0)
+            _row(
+              'Bonus savdo',
+              report.summary.totalBonusSales,
+              theme,
+              color: const Color(0xFFF59E0B),
+            ),
+          if (report.summary.totalDebtSales > 0)
+            _row(
+              'Nasiya savdo',
+              report.summary.totalDebtSales,
+              theme,
+              color: Colors.red,
+            ),
+          if (report.summary.totalTransferSales > 0)
+            _row(
+              "O'tkazma savdo",
+              report.summary.totalTransferSales,
+              theme,
+              color: const Color(0xFF06B6D4),
+            ),
           const Divider(height: 20),
           _row('Jami savdo', report.summary.totalSales, theme, bold: true),
           const SizedBox(height: 4),
@@ -459,7 +486,86 @@ class _CloseShiftScreenState extends State<CloseShiftScreen> {
             theme,
             isCount: true,
           ),
+          if (report.summary.totalDiscount > 0) ...[
+            const Divider(height: 20),
+            if (report.summary.totalOrderDiscount > 0)
+              _row(
+                '└ Buyurtma chegirmalari',
+                report.summary.totalOrderDiscount,
+                theme,
+                color: Colors.orange,
+                prefix: '- ',
+              ),
+            if (report.summary.totalItemDiscount > 0)
+              _row(
+                '└ Mahsulot chegirmalari',
+                report.summary.totalItemDiscount,
+                theme,
+                color: Colors.orange,
+                prefix: '- ',
+              ),
+            _row(
+              '└ Jami chegirma',
+              report.summary.totalDiscount,
+              theme,
+              bold: true,
+              color: Colors.red,
+              prefix: '- ',
+            ),
+            const SizedBox(height: 4),
+            _row(
+              'Chegirmasiz savdo',
+              report.summary.grossSales,
+              theme,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildExpensesCard(ShiftReport report, ThemeData theme) {
+    return _card(
+      theme,
+      title: 'Xarajatlar',
+      icon: Icons.money_off_rounded,
+      iconColor: Colors.orange,
+      child: FutureBuilder<Map<String, double>>(
+        future: ExpenseRepository().getExpenseTotalsByCategory(
+          shiftId: report.shift.id,
+        ),
+        builder: (context, snap) {
+          final cats = snap.data ?? {};
+          return Column(
+            children: [
+              ...cats.entries.map(
+                (e) => _row(e.key, e.value, theme, color: Colors.orange.shade700),
+              ),
+              if (cats.length > 1) ...[
+                const Divider(height: 20),
+              ],
+              _row(
+                'Jami xarajat',
+                report.summary.totalExpenses,
+                theme,
+                bold: true,
+                color: Colors.red,
+                prefix: '- ',
+              ),
+              const SizedBox(height: 4),
+              _row(
+                'Sof foyda',
+                report.summary.netProfit,
+                theme,
+                bold: true,
+                color: report.summary.netProfit >= 0
+                    ? const Color(0xFF10B981)
+                    : Colors.red,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Inno Setup noto'g'ri OutputDir bilan ishlaganda hosil bo'lgan papka
+{userdesktop}/
+
+# Installer chiqishi
+ZellySetup_*.exe

@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 52,
+      version: 55,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -1136,6 +1136,179 @@ class DatabaseHelper {
         print('Error upgrading database to v52 (bill_requested_at): $e');
       }
     }
+
+    if (oldVersion < 53) {
+      try {
+        final catInfo = await db.rawQuery('PRAGMA table_info(categories)');
+        final catCols = catInfo.map((c) => c['name'] as String).toSet();
+        if (!catCols.contains('image_path')) {
+          await db.execute('ALTER TABLE categories ADD COLUMN image_path TEXT');
+        }
+      } catch (e) {
+        print('Error upgrading database to v53 (categories.image_path): $e');
+      }
+    }
+
+    if (oldVersion < 54) {
+      try {
+        // 1. orders: chegirma ustunlari
+        final ordersInfo = await db.rawQuery('PRAGMA table_info(orders)');
+        final orderCols = ordersInfo.map((c) => c['name'] as String).toSet();
+        if (!orderCols.contains('discount_type')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN discount_type TEXT DEFAULT NULL');
+        }
+        if (!orderCols.contains('discount_value')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN discount_value REAL DEFAULT 0');
+        }
+        if (!orderCols.contains('discount_note')) {
+          await db.execute('ALTER TABLE orders ADD COLUMN discount_note TEXT DEFAULT NULL');
+        }
+
+        // 2. order_items: qator chegirmasi
+        final itemsInfo = await db.rawQuery('PRAGMA table_info(order_items)');
+        final itemsCols = itemsInfo.map((c) => c['name'] as String).toSet();
+        if (!itemsCols.contains('discount_amount')) {
+          await db.execute('ALTER TABLE order_items ADD COLUMN discount_amount REAL DEFAULT 0');
+        }
+
+        // 3. customers: sodiqlik tizimi
+        final custInfo = await db.rawQuery('PRAGMA table_info(customers)');
+        final custCols = custInfo.map((c) => c['name'] as String).toSet();
+        if (!custCols.contains('bonus_balance')) {
+          await db.execute('ALTER TABLE customers ADD COLUMN bonus_balance REAL DEFAULT 0');
+        }
+        if (!custCols.contains('total_spent')) {
+          await db.execute('ALTER TABLE customers ADD COLUMN total_spent REAL DEFAULT 0');
+        }
+        if (!custCols.contains('visit_count')) {
+          await db.execute('ALTER TABLE customers ADD COLUMN visit_count INTEGER DEFAULT 0');
+        }
+
+        // 4. expenses: smena bog'liq
+        final expInfo = await db.rawQuery('PRAGMA table_info(expenses)');
+        final expCols = expInfo.map((c) => c['name'] as String).toSet();
+        if (!expCols.contains('shift_id')) {
+          await db.execute('ALTER TABLE expenses ADD COLUMN shift_id INTEGER DEFAULT NULL');
+        }
+
+        // 5. transactions: buyurtma bog'liq
+        final txInfo = await db.rawQuery('PRAGMA table_info(transactions)');
+        final txCols = txInfo.map((c) => c['name'] as String).toSet();
+        if (!txCols.contains('order_id')) {
+          await db.execute('ALTER TABLE transactions ADD COLUMN order_id TEXT DEFAULT NULL');
+        }
+
+        // 6. printers: filial bog'liq
+        final printerInfo = await db.rawQuery('PRAGMA table_info(printers)');
+        final printerCols = printerInfo.map((c) => c['name'] as String).toSet();
+        if (!printerCols.contains('location_id')) {
+          await db.execute('ALTER TABLE printers ADD COLUMN location_id INTEGER DEFAULT NULL');
+        }
+
+        // 7. stock_movements: kirim narxi
+        final stockInfo = await db.rawQuery('PRAGMA table_info(stock_movements)');
+        final stockCols = stockInfo.map((c) => c['name'] as String).toSet();
+        if (!stockCols.contains('cost_price')) {
+          await db.execute('ALTER TABLE stock_movements ADD COLUMN cost_price REAL DEFAULT 0');
+        }
+
+        // 8. delivery_zones: polygon xarita
+        final zoneInfo = await db.rawQuery('PRAGMA table_info(delivery_zones)');
+        final zoneCols = zoneInfo.map((c) => c['name'] as String).toSet();
+        if (!zoneCols.contains('polygon_json')) {
+          await db.execute('ALTER TABLE delivery_zones ADD COLUMN polygon_json TEXT DEFAULT NULL');
+        }
+
+        // 9. order_payments: split payment jadvali
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS order_payments (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id     TEXT    NOT NULL,
+            payment_type TEXT    NOT NULL,
+            amount       REAL    NOT NULL DEFAULT 0,
+            note         TEXT    DEFAULT NULL,
+            created_at   TEXT    NOT NULL,
+            is_synced    INTEGER DEFAULT 0,
+            FOREIGN KEY (order_id) REFERENCES orders(id)
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_order_payments_order_id ON order_payments(order_id)',
+        );
+
+        // 10. Mavjud yopilgan buyurtmalarni order_payments ga ko'chirish (bir martalik)
+        final payCount = await db.rawQuery('SELECT COUNT(*) as cnt FROM order_payments');
+        if ((payCount.first['cnt'] as int? ?? 0) == 0) {
+          await db.execute('''
+            INSERT INTO order_payments (order_id, payment_type, amount, created_at, is_synced)
+            SELECT
+              id,
+              COALESCE(payment_type, 'cash'),
+              COALESCE(grand_total, total, 0),
+              COALESCE(closed_at, created_at),
+              COALESCE(is_synced, 0)
+            FROM orders
+            WHERE status = 1
+          ''');
+        }
+      } catch (e) {
+        print('Error upgrading database to v54: $e');
+      }
+    }
+
+    if (oldVersion < 55) {
+      try {
+        // Ombor moduli: mahsulot turi + tannarx, xomashyo rasmi + tannarx,
+        // kirim yetkazuvchisi, tayyor mahsulot harakatlari jurnali.
+        final prodInfo = await db.rawQuery('PRAGMA table_info(products)');
+        final prodCols = prodInfo.map((c) => c['name'] as String).toSet();
+        if (!prodCols.contains('product_type')) {
+          await db.execute(
+            "ALTER TABLE products ADD COLUMN product_type TEXT DEFAULT 'prepared'",
+          );
+        }
+        if (!prodCols.contains('avg_cost')) {
+          await db.execute('ALTER TABLE products ADD COLUMN avg_cost REAL DEFAULT 0');
+        }
+
+        final ingInfo = await db.rawQuery('PRAGMA table_info(ingredients)');
+        final ingCols = ingInfo.map((c) => c['name'] as String).toSet();
+        if (!ingCols.contains('image_path')) {
+          await db.execute('ALTER TABLE ingredients ADD COLUMN image_path TEXT');
+        }
+        if (!ingCols.contains('avg_cost')) {
+          await db.execute('ALTER TABLE ingredients ADD COLUMN avg_cost REAL DEFAULT 0');
+        }
+
+        final smInfo = await db.rawQuery('PRAGMA table_info(stock_movements)');
+        final smCols = smInfo.map((c) => c['name'] as String).toSet();
+        if (!smCols.contains('supplier')) {
+          await db.execute('ALTER TABLE stock_movements ADD COLUMN supplier TEXT');
+        }
+
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS product_movements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('PRODUCE','PURCHASE','SALE','WASTE','ADJUST')),
+            qty REAL NOT NULL,
+            ref_table TEXT,
+            ref_id TEXT,
+            cost_price REAL DEFAULT 0,
+            supplier TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            created_by INTEGER,
+            FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_product_movements_lookup ON product_movements (product_id, created_at)',
+        );
+      } catch (e) {
+        print('Error upgrading database to v55 (ombor): $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -1167,7 +1340,9 @@ CREATE TABLE IF NOT EXISTS products (
   sort_order INTEGER DEFAULT 0,
   quantity REAL,
   unit TEXT,
-  no_service_charge INTEGER DEFAULT 0
+  no_service_charge INTEGER DEFAULT 0,
+  product_type TEXT DEFAULT 'prepared',
+  avg_cost REAL DEFAULT 0
 )
 ''');
 
@@ -1213,7 +1388,11 @@ CREATE TABLE IF NOT EXISTS orders (
   delivery_note TEXT,
   zone_id INTEGER,
   is_synced INTEGER DEFAULT 0,
-  bill_requested_at TEXT
+  bill_requested INTEGER DEFAULT 0,
+  bill_requested_at TEXT,
+  discount_type TEXT DEFAULT NULL,
+  discount_value REAL DEFAULT 0,
+  discount_note TEXT DEFAULT NULL
 )
 ''');
 
@@ -1228,6 +1407,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   price $realType,
   bundle_items_json TEXT,
   printed_qty REAL DEFAULT 0,
+  discount_amount REAL DEFAULT 0,
   FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
 )
 ''');
@@ -1342,6 +1522,7 @@ CREATE TABLE IF NOT EXISTS users (
         category_id $integerType,
         amount $realType,
         note TEXT,
+        shift_id INTEGER DEFAULT NULL,
         created_at $textType,
         is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (category_id) REFERENCES expense_categories (id)
@@ -1355,6 +1536,9 @@ CREATE TABLE IF NOT EXISTS users (
         phone TEXT,
         debt REAL DEFAULT 0,
         credit REAL DEFAULT 0,
+        bonus_balance REAL DEFAULT 0,
+        total_spent REAL DEFAULT 0,
+        visit_count INTEGER DEFAULT 0,
         created_at $textType
       )
     ''');
@@ -1366,6 +1550,7 @@ CREATE TABLE IF NOT EXISTS users (
         type $textType,
         amount $realType,
         note TEXT,
+        order_id TEXT DEFAULT NULL,
         created_at $textType,
         is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (customer_id) REFERENCES customers (id)
@@ -1389,7 +1574,9 @@ CREATE TABLE IF NOT EXISTS users (
         ip_address TEXT,
         port INTEGER,
         printer_name TEXT,
-        category_ids TEXT
+        category_ids TEXT,
+        is_main INTEGER DEFAULT 0,
+        location_id INTEGER DEFAULT NULL
       )
     ''');
 
@@ -1399,7 +1586,9 @@ CREATE TABLE IF NOT EXISTS users (
         name $textType,
         base_unit TEXT NOT NULL CHECK (base_unit IN ('g', 'ml', 'pcs')),
         min_stock REAL DEFAULT 0,
-        is_active $integerType DEFAULT 1
+        is_active $integerType DEFAULT 1,
+        image_path TEXT,
+        avg_cost REAL DEFAULT 0
       )
     ''');
 
@@ -1424,6 +1613,8 @@ CREATE TABLE IF NOT EXISTS users (
         note TEXT,
         created_at $textType,
         created_by INTEGER,
+        cost_price REAL DEFAULT 0,
+        supplier TEXT,
         FOREIGN KEY (ingredient_id) REFERENCES ingredients (id) ON DELETE CASCADE
       )
     ''');
@@ -1459,6 +1650,27 @@ CREATE TABLE IF NOT EXISTS users (
         reversed_at TEXT
       )
     ''');
+
+    // Tayyor mahsulot harakatlari jurnali (pishirish/kirim/sotuv/waste/adjust)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS product_movements (
+        id $idType,
+        product_id INTEGER NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('PRODUCE','PURCHASE','SALE','WASTE','ADJUST')),
+        qty REAL NOT NULL,
+        ref_table TEXT,
+        ref_id TEXT,
+        cost_price REAL DEFAULT 0,
+        supplier TEXT,
+        note TEXT,
+        created_at $textType,
+        created_by INTEGER,
+        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_product_movements_lookup ON product_movements (product_id, created_at)',
+    );
 
     // Add new indexes for v23
     await db.execute(
@@ -1566,9 +1778,27 @@ CREATE TABLE IF NOT EXISTS users (
         name TEXT NOT NULL,
         fee REAL DEFAULT 0,
         color TEXT DEFAULT '#6366F1',
-        is_active INTEGER DEFAULT 1
+        is_active INTEGER DEFAULT 1,
+        polygon_json TEXT DEFAULT NULL
       )
     ''');
+
+    // order_payments: split payment jadvali
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS order_payments (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id     TEXT    NOT NULL,
+        payment_type TEXT    NOT NULL,
+        amount       REAL    NOT NULL DEFAULT 0,
+        note         TEXT    DEFAULT NULL,
+        created_at   TEXT    NOT NULL,
+        is_synced    INTEGER DEFAULT 0,
+        FOREIGN KEY (order_id) REFERENCES orders(id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_order_payments_order_id ON order_payments(order_id)',
+    );
 
     // Sync indices
     await db.execute('CREATE INDEX IF NOT EXISTS idx_orders_is_synced ON orders (is_synced)');
@@ -1658,6 +1888,359 @@ CREATE TABLE IF NOT EXISTS users (
     }
     return DateTime(now.year, now.month, now.day);
   }
+
+  // ── order_payments ────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getOrderPayments(String orderId) async {
+    final db = await database;
+    return db.query(
+      'order_payments',
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+      orderBy: 'created_at ASC',
+    );
+  }
+
+  Future<void> insertOrderPayment(Map<String, dynamic> payment) async {
+    final db = await database;
+    await db.insert('order_payments', payment);
+  }
+
+  Future<void> deleteOrderPayments(String orderId) async {
+    final db = await database;
+    await db.delete(
+      'order_payments',
+      where: 'order_id = ?',
+      whereArgs: [orderId],
+    );
+  }
+
+  // To'lov turlari bo'yicha smena jami (order_payments dan)
+  Future<Map<String, double>> getPaymentTotalsByShift(int shiftId) async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT op.payment_type, SUM(op.amount) as total_sum
+      FROM order_payments op
+      JOIN orders o ON op.order_id = o.id
+      WHERE o.shift_id = ? AND o.status = 1
+      GROUP BY op.payment_type
+    ''', [shiftId]);
+    return _rowsToPaymentMap(rows);
+  }
+
+  // To'lov turlari bo'yicha sana oralig'i jami (order_payments dan)
+  Future<Map<String, double>> getPaymentTotalsByDate(String start, String end) async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT op.payment_type, SUM(op.amount) as total_sum
+      FROM order_payments op
+      JOIN orders o ON op.order_id = o.id
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at <= ?
+      GROUP BY op.payment_type
+    ''', [start, end]);
+    return _rowsToPaymentMap(rows);
+  }
+
+  // ── Chegirma statistikasi ─────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getDiscountStatsByShift(int shiftId) async {
+    final db = await database;
+    final orderDisc = await db.rawQuery('''
+      SELECT
+        COUNT(*) as discount_count,
+        SUM(
+          CASE
+            WHEN discount_type = 'percent' THEN (food_total * discount_value / 100)
+            WHEN discount_type = 'fixed'   THEN discount_value
+            ELSE 0
+          END
+        ) as total_discount_amount
+      FROM orders
+      WHERE shift_id = ? AND status = 1 AND discount_value > 0
+    ''', [shiftId]);
+    final itemDisc = await db.rawQuery('''
+      SELECT
+        COUNT(*) as discount_count,
+        SUM(oi.discount_amount) as total_discount_amount
+      FROM order_items oi
+      INNER JOIN orders o ON o.id = oi.order_id
+      WHERE o.shift_id = ? AND o.status = 1 AND oi.discount_amount > 0
+    ''', [shiftId]);
+    final orderTotal = (orderDisc.first['total_discount_amount'] as num?)?.toDouble() ?? 0.0;
+    final itemTotal  = (itemDisc.first['total_discount_amount']  as num?)?.toDouble() ?? 0.0;
+    return {
+      'order_discount_total': orderTotal,
+      'item_discount_total':  itemTotal,
+      'total_discount':       orderTotal + itemTotal,
+      'order_discount_count': orderDisc.first['discount_count'] ?? 0,
+      'item_discount_count':  itemDisc.first['discount_count']  ?? 0,
+    };
+  }
+
+  Future<Map<String, dynamic>> getDiscountStatsByDateRange(String start, String end) async {
+    final db = await database;
+    final orderDisc = await db.rawQuery('''
+      SELECT
+        COUNT(*) as discount_count,
+        SUM(
+          CASE
+            WHEN discount_type = 'percent' THEN (food_total * discount_value / 100)
+            WHEN discount_type = 'fixed'   THEN discount_value
+            ELSE 0
+          END
+        ) as total_discount_amount
+      FROM orders
+      WHERE status = 1 AND created_at >= ? AND created_at <= ? AND discount_value > 0
+    ''', [start, end]);
+    final itemDisc = await db.rawQuery('''
+      SELECT
+        SUM(oi.discount_amount) as total_discount_amount,
+        COUNT(*) as discount_count
+      FROM order_items oi
+      INNER JOIN orders o ON o.id = oi.order_id
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at <= ? AND oi.discount_amount > 0
+    ''', [start, end]);
+    final orderTotal = (orderDisc.first['total_discount_amount'] as num?)?.toDouble() ?? 0.0;
+    final itemTotal  = (itemDisc.first['total_discount_amount']  as num?)?.toDouble() ?? 0.0;
+    return {
+      'order_discount_total': orderTotal,
+      'item_discount_total':  itemTotal,
+      'total_discount':       orderTotal + itemTotal,
+      'order_discount_count': orderDisc.first['discount_count'] ?? 0,
+      'item_discount_count':  itemDisc.first['discount_count']  ?? 0,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getDiscountedOrders({
+    int? shiftId,
+    String? start,
+    String? end,
+  }) async {
+    final db = await database;
+    final List<dynamic> args = [];
+    String where = "o.status = 1 AND (o.discount_value > 0 OR item_disc.total > 0)";
+    if (shiftId != null) { where += " AND o.shift_id = ?"; args.add(shiftId); }
+    if (start != null)   { where += " AND o.created_at >= ?"; args.add(start); }
+    if (end != null)     { where += " AND o.created_at <= ?"; args.add(end); }
+    return db.rawQuery('''
+      SELECT
+        o.id, o.daily_number, o.grand_total, o.food_total,
+        o.discount_type, o.discount_value, o.discount_note, o.closed_at,
+        COALESCE(item_disc.total, 0) as item_discount_total
+      FROM orders o
+      LEFT JOIN (
+        SELECT order_id, SUM(discount_amount) as total
+        FROM order_items WHERE discount_amount > 0 GROUP BY order_id
+      ) item_disc ON item_disc.order_id = o.id
+      WHERE $where
+      ORDER BY o.closed_at DESC
+    ''', args);
+  }
+
+  // ── Xarajatlar (Expenses) ──────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getExpensesByShift(int shiftId) async {
+    final db = await database;
+    return db.rawQuery('''
+      SELECT e.*, ec.name as category_name
+      FROM expenses e
+      LEFT JOIN expense_categories ec ON ec.id = e.category_id
+      WHERE e.shift_id = ?
+      ORDER BY e.created_at DESC
+    ''', [shiftId]);
+  }
+
+  Future<List<Map<String, dynamic>>> getTodayExpenses() async {
+    final db = await database;
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day).toIso8601String();
+    final end = DateTime(today.year, today.month, today.day, 23, 59, 59).toIso8601String();
+    return db.rawQuery('''
+      SELECT e.*, ec.name as category_name
+      FROM expenses e
+      LEFT JOIN expense_categories ec ON ec.id = e.category_id
+      WHERE e.created_at >= ? AND e.created_at <= ?
+      ORDER BY e.created_at DESC
+    ''', [start, end]);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllExpenses({int? shiftId}) async {
+    final db = await database;
+    if (shiftId != null) {
+      return db.rawQuery('''
+        SELECT e.*, ec.name as category_name
+        FROM expenses e
+        LEFT JOIN expense_categories ec ON ec.id = e.category_id
+        WHERE e.shift_id = ?
+        ORDER BY e.created_at DESC
+      ''', [shiftId]);
+    }
+    return db.rawQuery('''
+      SELECT e.*, ec.name as category_name
+      FROM expenses e
+      LEFT JOIN expense_categories ec ON ec.id = e.category_id
+      ORDER BY e.created_at DESC
+    ''');
+  }
+
+  Future<Map<String, double>> getExpenseTotalsByCategory({
+    int? shiftId,
+    String? start,
+    String? end,
+  }) async {
+    final db = await database;
+    final List<dynamic> args = [];
+    String where = '1=1';
+    if (shiftId != null) { where += ' AND e.shift_id = ?'; args.add(shiftId); }
+    if (start != null)   { where += ' AND e.created_at >= ?'; args.add(start); }
+    if (end != null)     { where += ' AND e.created_at <= ?'; args.add(end); }
+    final rows = await db.rawQuery('''
+      SELECT ec.name as category_name, SUM(e.amount) as total
+      FROM expenses e
+      LEFT JOIN expense_categories ec ON ec.id = e.category_id
+      WHERE $where
+      GROUP BY e.category_id
+      ORDER BY total DESC
+    ''', args);
+    final result = <String, double>{};
+    for (final row in rows) {
+      final name = (row['category_name'] as String?) ?? 'Boshqa';
+      result[name] = (row['total'] as num?)?.toDouble() ?? 0;
+    }
+    return result;
+  }
+
+  Future<double> getShiftExpenseTotal(int shiftId) async {
+    final db = await database;
+    final res = await db.rawQuery(
+      'SELECT SUM(amount) as total FROM expenses WHERE shift_id = ?',
+      [shiftId],
+    );
+    return (res.first['total'] as num?)?.toDouble() ?? 0;
+  }
+
+  Future<int> insertExpenseCategory(String name) async {
+    final db = await database;
+    return db.insert('expense_categories', {'name': name});
+  }
+
+  // ── Ofisant to'lovlari ────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getWaiterStats({
+    required int waiterId,
+    String? fromDate,
+    String? toDate,
+    int? shiftId,
+  }) async {
+    final db = await database;
+    final List<dynamic> orderArgs = [waiterId];
+    String orderWhere = 'waiter_id = ? AND status = 1';
+    if (shiftId != null) {
+      orderWhere += ' AND shift_id = ?';
+      orderArgs.add(shiftId);
+    } else {
+      if (fromDate != null) { orderWhere += " AND DATE(closed_at) >= ?"; orderArgs.add(fromDate); }
+      if (toDate != null)   { orderWhere += " AND DATE(closed_at) <= ?"; orderArgs.add(toDate); }
+    }
+
+    final orderRes = await db.rawQuery(
+      'SELECT COUNT(*) as cnt, COALESCE(SUM(grand_total),0) as total FROM orders WHERE $orderWhere',
+      orderArgs,
+    );
+
+    final List<dynamic> payArgs = [waiterId];
+    String payWhere = 'waiter_id = ?';
+    if (fromDate != null) { payWhere += " AND DATE(paid_at) >= ?"; payArgs.add(fromDate); }
+    if (toDate != null)   { payWhere += " AND DATE(paid_at) <= ?"; payArgs.add(toDate); }
+
+    final payRes = await db.rawQuery(
+      'SELECT COALESCE(SUM(amount),0) as paid FROM waiter_payments WHERE $payWhere',
+      payArgs,
+    );
+
+    return {
+      'order_count': (orderRes.first['cnt'] as num?)?.toInt() ?? 0,
+      'total_sales': (orderRes.first['total'] as num?)?.toDouble() ?? 0.0,
+      'total_paid':  (payRes.first['paid']  as num?)?.toDouble() ?? 0.0,
+    };
+  }
+
+  Future<void> insertWaiterPayment({
+    required int waiterId,
+    required double amount,
+    String? note,
+    required String createdBy,
+  }) async {
+    final db = await database;
+    await db.insert('waiter_payments', {
+      'waiter_id': waiterId,
+      'amount': amount.toInt(),
+      'paid_at': DateTime.now().toIso8601String(),
+      'note': note,
+      'created_by': createdBy,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getWaiterPaymentHistory(int waiterId) async {
+    final db = await database;
+    return db.query(
+      'waiter_payments',
+      where: 'waiter_id = ?',
+      whereArgs: [waiterId],
+      orderBy: 'paid_at DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAllWaitersStats({
+    String? fromDate,
+    String? toDate,
+    int? shiftId,
+  }) async {
+    final db = await database;
+    final waiters = await db.query('waiters', where: 'is_active = 1');
+    final result = <Map<String, dynamic>>[];
+    for (final w in waiters) {
+      final stats = await getWaiterStats(
+        waiterId: w['id'] as int,
+        fromDate: fromDate,
+        toDate: toDate,
+        shiftId: shiftId,
+      );
+      result.add({...w, ...stats});
+    }
+    return result;
+  }
+
+  // Public alias uchun (report_provider da ishlatiladi)
+  Map<String, double> buildPaymentMap(List<Map<String, dynamic>> rows) =>
+      _rowsToPaymentMap(rows);
+
+  Map<String, double> _rowsToPaymentMap(List<Map<String, dynamic>> rows) {
+    final result = <String, double>{
+      'cash': 0, 'card': 0, 'terminal': 0,
+      'debt': 0, 'bonus': 0, 'transfer': 0,
+    };
+    for (final row in rows) {
+      final type = (row['payment_type'] as String? ?? '').toLowerCase();
+      final sum = (row['total_sum'] as num?)?.toDouble() ?? 0.0;
+      if (type == 'cash' || type == 'naqd') {
+        result['cash'] = (result['cash'] ?? 0) + sum;
+      } else if (type == 'card' || type == 'karta') {
+        result['card'] = (result['card'] ?? 0) + sum;
+      } else if (type == 'terminal') {
+        result['terminal'] = (result['terminal'] ?? 0) + sum;
+      } else if (type == 'debt' || type == 'nasiya') {
+        result['debt'] = (result['debt'] ?? 0) + sum;
+      } else if (type == 'bonus') {
+        result['bonus'] = (result['bonus'] ?? 0) + sum;
+      } else if (type == 'transfer') {
+        result['transfer'] = (result['transfer'] ?? 0) + sum;
+      }
+    }
+    return result;
+  }
+
+  // ── General ───────────────────────────────────────────────────────────────
 
   Future<String> getDatabasePath() async {
     final dbPath = await getApplicationSupportDirectory();

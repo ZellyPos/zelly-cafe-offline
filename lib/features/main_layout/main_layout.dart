@@ -30,6 +30,8 @@ import './widgets/menu_dialog.dart';
 import '../../providers/shift_provider.dart';
 import '../shift/screens/shift_hub_screen.dart';
 import '../saboy/saboy_orders_screen.dart';
+import '../../features/settings/about_screen.dart';
+import '../../features/mgmt/waiter_payments_screen.dart';
 
 const _kAccent = Color(0xFF6366F1);
 const _kSidebarBg = Color(0xFF0F172A);
@@ -56,9 +58,9 @@ class MainLayoutState extends State<MainLayout> {
 
   static const Map<String, List<int>> _groupIndices = {
     'boshqaruv': [1, 2, 3, 4, 5, 13, 19, 20],
-    'moliya': [17, 14, 15],
+    'moliya': [17, 14, 15, 23],
     'hisobot': [6],
-    'sozlamalar': [7, 8, 9, 10, 11, 12, 16],
+    'sozlamalar': [7, 8, 9, 10, 11, 12, 16, 22],
   };
 
   @override
@@ -106,7 +108,9 @@ class MainLayoutState extends State<MainLayout> {
     const DeliveryScreen(),        // 18
     const CouriersMgmtScreen(),    // 19
     const DeliveryZonesScreen(),   // 20
-    const SaboyOrdersScreen(),     // 21
+    const SaboyOrdersScreen(),       // 21
+    const AboutScreen(),             // 22
+    const WaiterPaymentsScreen(),    // 23
   ];
 
   void _logout() {
@@ -370,6 +374,7 @@ class MainLayoutState extends State<MainLayout> {
           _shiftStatusTile(),
           _item(17, Icons.work_history_rounded, 'Smena'),
           _item(14, Icons.payments_outlined, AppStrings.expensesNav),
+          _item(23, Icons.badge_outlined, 'Ofisant to\'lovlari'),
           _item(15, Icons.groups_outlined, AppStrings.customersNav),
         ]),
         _divider(),
@@ -387,8 +392,8 @@ class MainLayoutState extends State<MainLayout> {
           _item(9, Icons.lock_outline_rounded, AppStrings.pinNav),
           _item(10, Icons.branding_watermark_outlined, AppStrings.brandNav),
           _item(11, Icons.settings_ethernet_outlined, AppStrings.connectionNav),
-          _item(12, Icons.send_outlined, AppStrings.telegramNav),
           if (enableInventory) _item(16, Icons.warehouse_outlined, 'Ombor'),
+          _item(22, Icons.info_outline_rounded, 'Ilova haqida'),
         ]),
       ];
     }
@@ -412,6 +417,7 @@ class MainLayoutState extends State<MainLayout> {
         _group('moliya', 'Moliya', Icons.account_balance_wallet_outlined, [
           _shiftStatusTile(),
           _item(14, Icons.payments_outlined, AppStrings.expensesNav),
+          _item(23, Icons.badge_outlined, 'Ofisant to\'lovlari'),
         ]),
       ],
 

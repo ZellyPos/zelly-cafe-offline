@@ -4,6 +4,8 @@ class Ingredient {
   final String baseUnit; // 'g', 'ml', 'pcs'
   final double minStock;
   final bool isActive;
+  final String? imagePath;
+  final double avgCost; // o'rtacha tannarx (food-cost uchun)
 
   Ingredient({
     this.id,
@@ -11,6 +13,8 @@ class Ingredient {
     required this.baseUnit,
     this.minStock = 0,
     this.isActive = true,
+    this.imagePath,
+    this.avgCost = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +24,8 @@ class Ingredient {
       'base_unit': baseUnit,
       'min_stock': minStock,
       'is_active': isActive ? 1 : 0,
+      'image_path': imagePath,
+      'avg_cost': avgCost,
     };
   }
 
@@ -30,6 +36,28 @@ class Ingredient {
       baseUnit: map['base_unit'],
       minStock: (map['min_stock'] as num).toDouble(),
       isActive: map['is_active'] == 1,
+      imagePath: map['image_path'] as String?,
+      avgCost: (map['avg_cost'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  Ingredient copyWith({
+    int? id,
+    String? name,
+    String? baseUnit,
+    double? minStock,
+    bool? isActive,
+    String? imagePath,
+    double? avgCost,
+  }) {
+    return Ingredient(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      baseUnit: baseUnit ?? this.baseUnit,
+      minStock: minStock ?? this.minStock,
+      isActive: isActive ?? this.isActive,
+      imagePath: imagePath ?? this.imagePath,
+      avgCost: avgCost ?? this.avgCost,
     );
   }
 }
@@ -77,6 +105,8 @@ class StockMovement {
   final String? note;
   final DateTime createdAt;
   final int? createdBy;
+  final double costPrice;
+  final String? supplier; // "kimdan olingani" (kirim uchun)
 
   StockMovement({
     this.id,
@@ -89,6 +119,8 @@ class StockMovement {
     this.note,
     required this.createdAt,
     this.createdBy,
+    this.costPrice = 0,
+    this.supplier,
   });
 
   Map<String, dynamic> toMap() {
@@ -103,6 +135,8 @@ class StockMovement {
       'note': note,
       'created_at': createdAt.toIso8601String(),
       'created_by': createdBy,
+      'cost_price': costPrice,
+      'supplier': supplier,
     };
   }
 
@@ -118,6 +152,8 @@ class StockMovement {
       note: map['note'],
       createdAt: DateTime.parse(map['created_at']),
       createdBy: map['created_by'],
+      costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0,
+      supplier: map['supplier'] as String?,
     );
   }
 }

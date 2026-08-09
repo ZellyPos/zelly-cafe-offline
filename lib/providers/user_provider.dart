@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../data/repositories/user_repository.dart';
 import '../models/user.dart';
 import 'connectivity_provider.dart';
 
 class UserProvider with ChangeNotifier {
+  final UserRepository _repo;
+
+  UserProvider({UserRepository? repository})
+    : _repo = repository ?? UserRepository();
+
   List<AppUser> _users = [];
   bool _isLoading = false;
 
@@ -20,15 +25,10 @@ class UserProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final List<Map<String, dynamic>> data;
-      if (connectivity != null &&
-          connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
-        final remoteData = await connectivity.getRemoteData('/users');
-        data = List<Map<String, dynamic>>.from(remoteData);
-      } else {
-        data = await DatabaseHelper.instance.queryAll('users');
-      }
-      _users = data.map((item) => AppUser.fromMap(item)).toList();
+      _users = await _repo.getAll(
+        connectivity: connectivity,
+        forceRemote: forceRemote,
+      );
     } catch (e) {
       debugPrint("Error loading users: $e");
     } finally {
@@ -41,11 +41,7 @@ class UserProvider with ChangeNotifier {
     AppUser user, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/users', user.toMap());
-    } else {
-      await DatabaseHelper.instance.insert('users', user.toMap());
-    }
+    await _repo.add(user, connectivity: connectivity);
     await loadUsers(connectivity: connectivity);
   }
 
@@ -54,35 +50,25 @@ class UserProvider with ChangeNotifier {
     ConnectivityProvider? connectivity,
   }) async {
     if (user.id == null) return;
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/users', user.toMap());
-    } else {
-      await DatabaseHelper.instance.update('users', user.toMap(), 'id = ?', [
-        user.id,
-      ]);
-    }
+    await _repo.update(user, connectivity: connectivity);
     await loadUsers(connectivity: connectivity);
   }
 
   Future<bool> deleteUser(int id, {ConnectivityProvider? connectivity}) async {
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      final success = await connectivity.deleteRemoteData('/users/$id');
+      final success = await _repo.deleteById(id, connectivity: connectivity);
       if (success) {
         await loadUsers(connectivity: connectivity);
       }
       return success;
     } else {
-      // Prevent deleting Admin (usually ID 1, but let's check role)
-      final userRes = await DatabaseHelper.instance.queryByColumn(
-        'users',
-        'id',
-        id,
-      );
-      if (userRes.isNotEmpty && userRes.first['role'] == 'admin') {
+      // Admin'ni o'chirishni oldini olish (odatda ID 1, lekin rol bo'yicha tekshiramiz)
+      final role = await _repo.getRoleById(id);
+      if (role == 'admin') {
         return false;
       }
 
-      await DatabaseHelper.instance.delete('users', 'id = ?', [id]);
+      await _repo.deleteById(id);
       await loadUsers(connectivity: connectivity);
       return true;
     }

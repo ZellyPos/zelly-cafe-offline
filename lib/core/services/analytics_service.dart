@@ -27,18 +27,31 @@ class AnalyticsService {
     }
 
     final db = await _dbHelper.database;
+    // Ichki so'rov: har bir buyurtma uchun to'lov turlarini agrega qiladi,
+    // tashqi so'rov esa kunlik guruhga o'tkazadi.
+    // Bu usul split-payment buyurtmalarida grand_total ni ikki marta sanashni oldini oladi.
     final results = await db.rawQuery(
       '''
-      SELECT 
-        DATE(created_at) as date,
+      SELECT
+        date,
         SUM(grand_total) as total,
-        SUM(CASE WHEN LOWER(payment_type) LIKE '%naqd%' OR LOWER(payment_type) LIKE '%cash%' THEN grand_total ELSE 0 END) as cash,
-        SUM(CASE WHEN LOWER(payment_type) LIKE '%karta%' OR LOWER(payment_type) LIKE '%card%' THEN grand_total ELSE 0 END) as card,
-        SUM(CASE WHEN LOWER(payment_type) LIKE '%nasiya%' OR LOWER(payment_type) LIKE '%debt%' THEN grand_total ELSE 0 END) as debt,
-        COUNT(id) as orders_count
-      FROM orders
-      WHERE status = 1 AND created_at BETWEEN ? AND ?
-      GROUP BY DATE(created_at)
+        SUM(cash)        as cash,
+        SUM(card)        as card,
+        SUM(debt)        as debt,
+        COUNT(*)         as orders_count
+      FROM (
+        SELECT
+          DATE(o.created_at) as date,
+          o.grand_total,
+          COALESCE(SUM(CASE WHEN op.payment_type = 'cash'     THEN op.amount ELSE 0 END), 0) as cash,
+          COALESCE(SUM(CASE WHEN op.payment_type = 'card'     THEN op.amount ELSE 0 END), 0) as card,
+          COALESCE(SUM(CASE WHEN op.payment_type = 'debt'     THEN op.amount ELSE 0 END), 0) as debt
+        FROM orders o
+        LEFT JOIN order_payments op ON o.id = op.order_id
+        WHERE o.status = 1 AND o.created_at >= ? AND o.created_at < ?
+        GROUP BY o.id
+      ) sub
+      GROUP BY date
       ORDER BY date DESC
     ''',
       [start.toIso8601String(), end.toIso8601String()],
@@ -72,7 +85,7 @@ class AnalyticsService {
         SUM(oi.qty * oi.price) as revenue
       FROM order_items oi
       JOIN orders o ON oi.order_id = o.id
-      WHERE o.status = 1 AND o.created_at BETWEEN ? AND ?
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at < ?
       GROUP BY oi.product_id
       ORDER BY qty DESC
       LIMIT ?
@@ -110,7 +123,7 @@ class AnalyticsService {
         COALESCE(w.value, 0.0) as waiter_value
       FROM orders o
       LEFT JOIN waiters w ON o.waiter_id = w.id
-      WHERE o.status = 1 AND o.created_at BETWEEN ? AND ?
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at < ?
       GROUP BY o.waiter_id
       ORDER BY revenue DESC
     ''',
@@ -145,7 +158,7 @@ class AnalyticsService {
         SUM(o.grand_total) as revenue
       FROM orders o
       JOIN tables t ON o.table_id = t.id
-      WHERE o.status = 1 AND o.created_at BETWEEN ? AND ?
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at < ?
       GROUP BY o.table_id
       ORDER BY revenue DESC
       LIMIT ?
@@ -179,7 +192,7 @@ class AnalyticsService {
         SUM(o.grand_total) as revenue
       FROM orders o
       JOIN locations l ON o.location_id = l.id
-      WHERE o.status = 1 AND o.created_at BETWEEN ? AND ?
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at < ?
       GROUP BY o.location_id
       ORDER BY revenue DESC
     ''',
@@ -211,7 +224,7 @@ class AnalyticsService {
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       JOIN orders o ON oi.order_id = o.id
-      WHERE o.status = 1 AND o.created_at BETWEEN ? AND ?
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at < ?
       GROUP BY p.category ORDER BY revenue DESC
     ''',
       [start.toIso8601String(), end.toIso8601String()],
@@ -238,7 +251,7 @@ class AnalyticsService {
       SELECT CAST(strftime('%H', created_at) AS INTEGER) as hour,
              COUNT(*) as orders_count,
              SUM(grand_total) as revenue
-      FROM orders WHERE status = 1 AND created_at BETWEEN ? AND ?
+      FROM orders WHERE status = 1 AND created_at >= ? AND created_at < ?
       GROUP BY hour ORDER BY hour ASC
     ''',
       [start.toIso8601String(), end.toIso8601String()],
@@ -270,19 +283,18 @@ class AnalyticsService {
 
     final db = await _dbHelper.database;
     final totalResult = await db.rawQuery(
-      'SELECT SUM(grand_total) as total FROM orders WHERE status = 1 AND created_at BETWEEN ? AND ?',
+      'SELECT SUM(grand_total) as total FROM orders WHERE status = 1 AND created_at >= ? AND created_at < ?',
       [start.toIso8601String(), end.toIso8601String()],
     );
     final total = (totalResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
     final results = await db.rawQuery(
       '''
-      SELECT 
-        payment_type,
-        SUM(grand_total) as amount
-      FROM orders
-      WHERE status = 1 AND created_at BETWEEN ? AND ?
-      GROUP BY payment_type
+      SELECT op.payment_type, SUM(op.amount) as amount
+      FROM order_payments op
+      JOIN orders o ON op.order_id = o.id
+      WHERE o.status = 1 AND o.created_at >= ? AND o.created_at < ?
+      GROUP BY op.payment_type
       ORDER BY amount DESC
     ''',
       [start.toIso8601String(), end.toIso8601String()],

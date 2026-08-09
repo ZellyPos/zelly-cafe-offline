@@ -8,6 +8,7 @@ class OrderItem {
   final double price;
   final String? bundleItemsJson;
   final double printedQty;
+  final double discountAmount;
 
   OrderItem({
     this.id,
@@ -19,6 +20,7 @@ class OrderItem {
     required this.price,
     this.bundleItemsJson,
     this.printedQty = 0,
+    this.discountAmount = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,6 +33,7 @@ class OrderItem {
       'price': price,
       'bundle_items_json': bundleItemsJson,
       'printed_qty': printedQty,
+      'discount_amount': discountAmount,
     };
   }
 
@@ -40,8 +43,8 @@ class OrderItem {
   }) {
     return OrderItem(
       id: map['id'],
-      orderId: map['order_id'],
-      productId: map['product_id'],
+      orderId: (map['order_id'] as String?) ?? '',
+      productId: (map['product_id'] as num?)?.toInt() ?? 0,
       productName: productName.isNotEmpty
           ? productName
           : (map['product_name'] as String? ?? ''),
@@ -50,6 +53,7 @@ class OrderItem {
       price: (map['price'] as num).toDouble(),
       bundleItemsJson: map['bundle_items_json'],
       printedQty: (map['printed_qty'] as num? ?? 0).toDouble(),
+      discountAmount: (map['discount_amount'] as num? ?? 0).toDouble(),
     );
   }
 }
@@ -108,6 +112,11 @@ class Order {
   // Bill request flag — set when waiter prints temp receipt
   final bool billRequested;
 
+  // Discount fields
+  final String? discountType;  // 'percent' or 'fixed'
+  final double discountValue;
+  final String? discountNote;
+
   Order({
     required this.id,
     required this.total,
@@ -143,6 +152,9 @@ class Order {
     this.deliveryNote,
     this.zoneId,
     this.billRequested = false,
+    this.discountType,
+    this.discountValue = 0,
+    this.discountNote,
   });
 
   Map<String, dynamic> toMap() {
@@ -178,6 +190,9 @@ class Order {
       'delivery_note': deliveryNote,
       'zone_id': zoneId,
       'bill_requested': billRequested ? 1 : 0,
+      'discount_type': discountType,
+      'discount_value': discountValue,
+      'discount_note': discountNote,
     };
   }
 
@@ -210,10 +225,12 @@ class Order {
     List<OrderItem> items = const [],
   }) {
     return Order(
-      id: map['id'],
-      total: (map['total'] as num).toDouble(),
-      paymentType: map['payment_type'],
-      createdAt: DateTime.parse(map['created_at']),
+      id: (map['id'] as String?) ?? '',
+      total: (map['total'] as num?)?.toDouble() ?? 0.0,
+      paymentType: (map['payment_type'] as String?) ?? 'Cash',
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'] as String)
+          : DateTime.now(),
       items: items,
       orderType: map['order_type'] ?? 0,
       tableId: map['table_id'],
@@ -248,6 +265,9 @@ class Order {
       deliveryNote: map['delivery_note'] as String?,
       zoneId: map['zone_id'] as int?,
       billRequested: (map['bill_requested'] as int? ?? 0) == 1,
+      discountType: map['discount_type'] as String?,
+      discountValue: (map['discount_value'] as num?)?.toDouble() ?? 0,
+      discountNote: map['discount_note'] as String?,
     );
   }
 }

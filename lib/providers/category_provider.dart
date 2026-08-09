@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../data/repositories/category_repository.dart';
 import '../models/category.dart';
 import 'connectivity_provider.dart';
 
 class CategoryProvider extends ChangeNotifier {
+  final CategoryRepository _repo;
+
+  CategoryProvider({CategoryRepository? repository})
+    : _repo = repository ?? CategoryRepository();
+
   List<Category> _categories = [];
   bool _isLoading = false;
 
@@ -18,27 +23,10 @@ class CategoryProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final List<Map<String, dynamic>> data;
-      if (connectivity != null &&
-          connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
-        final remoteData = await connectivity.getRemoteData('/categories');
-        data = List<Map<String, dynamic>>.from(remoteData);
-
-        // Sync to local DB for components that depend on it (like PrinterService)
-        final db = await DatabaseHelper.instance.database;
-        await db.transaction((txn) async {
-          await txn.delete('categories');
-          for (var item in data) {
-            final categoryForDb = Map<String, dynamic>.from(item);
-            // Ensure ID is present if it's sent from remote
-            await txn.insert('categories', categoryForDb);
-          }
-        });
-      } else {
-        final db = await DatabaseHelper.instance.database;
-        data = await db.query('categories', orderBy: 'sort_order ASC');
-      }
-      _categories = data.map((item) => Category.fromMap(item)).toList();
+      _categories = await _repo.getAll(
+        connectivity: connectivity,
+        forceRemote: forceRemote,
+      );
     } catch (e) {
       debugPrint("Error loading categories: $e");
     } finally {
@@ -58,22 +46,11 @@ class CategoryProvider extends ChangeNotifier {
     final Category category = _categories.removeAt(oldIndex);
     _categories.insert(newIndex, category);
 
-    // Update all indices
+    // Barcha indekslarni yangilash
     for (int i = 0; i < _categories.length; i++) {
       final updatedCat = _categories[i].copyWith(sortOrder: i);
       _categories[i] = updatedCat;
-
-      if (connectivity != null &&
-          connectivity.mode == ConnectivityMode.client) {
-        await connectivity.postRemoteData('/categories', updatedCat.toMap());
-      } else {
-        await DatabaseHelper.instance.update(
-          'categories',
-          updatedCat.toMap(),
-          'id = ?',
-          [updatedCat.id],
-        );
-      }
+      await _repo.update(updatedCat, connectivity: connectivity);
     }
     notifyListeners();
   }
@@ -82,14 +59,9 @@ class CategoryProvider extends ChangeNotifier {
     Category category, {
     ConnectivityProvider? connectivity,
   }) async {
-    // Add to the end
+    // Ro'yxat oxiriga qo'shiladi
     final newCategory = category.copyWith(sortOrder: _categories.length);
-
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/categories', newCategory.toMap());
-    } else {
-      await DatabaseHelper.instance.insert('categories', newCategory.toMap());
-    }
+    await _repo.add(newCategory, connectivity: connectivity);
     await loadCategories(connectivity: connectivity);
   }
 
@@ -97,16 +69,7 @@ class CategoryProvider extends ChangeNotifier {
     Category category, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/categories', category.toMap());
-    } else {
-      await DatabaseHelper.instance.update(
-        'categories',
-        category.toMap(),
-        'id = ?',
-        [category.id],
-      );
-    }
+    await _repo.update(category, connectivity: connectivity);
     await loadCategories(connectivity: connectivity);
   }
 
@@ -114,11 +77,7 @@ class CategoryProvider extends ChangeNotifier {
     int id, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.deleteRemoteData('/categories/$id');
-    } else {
-      await DatabaseHelper.instance.delete('categories', 'id = ?', [id]);
-    }
+    await _repo.deleteById(id, connectivity: connectivity);
     await loadCategories(connectivity: connectivity);
   }
 }

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../core/server/api_server.dart';
 import '../core/server/websocket_manager.dart';
 import '../core/services/ws_client_service.dart';
+import '../core/services/tunnel_service.dart';
 import '../models/order.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -116,16 +117,17 @@ class ConnectivityProvider extends ChangeNotifier {
     final success = await ApiServer.start(_port);
     if (success != null) {
       _isServerRunning = true;
-      // Agar ApiServer 0.0.0.0 qaytarsa, biz topgan aniq IP ni saqlaymiz
       if (success != '0.0.0.0') {
         _serverIp = success;
       }
+      TunnelService.instance.start(_port);
     }
     notifyListeners();
   }
 
   void stopServer() {
     ApiServer.stop();
+    TunnelService.instance.stop();
     _isServerRunning = false;
     notifyListeners();
   }

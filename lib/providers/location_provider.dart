@@ -1,9 +1,22 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../core/app_logger.dart';
+import '../data/repositories/location_repository.dart';
 import '../models/location.dart';
 import 'connectivity_provider.dart';
 
+String _actor(ConnectivityProvider? connectivity) {
+  final name = connectivity?.currentUser?['name'] as String? ?? 'Admin';
+  final role = connectivity?.currentUser?['role'] as String? ?? 'admin';
+  return '$name ($role) @ ${Platform.localHostname}';
+}
+
 class LocationProvider extends ChangeNotifier {
+  final LocationRepository _repo;
+
+  LocationProvider({LocationRepository? repository})
+    : _repo = repository ?? LocationRepository();
+
   List<Location> _locations = [];
   bool _isLoading = false;
 
@@ -18,24 +31,10 @@ class LocationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final List<Map<String, dynamic>> data;
-      if (connectivity != null &&
-          connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
-        final remoteData = await connectivity.getRemoteData('/locations');
-        data = List<Map<String, dynamic>>.from(remoteData);
-
-        // Sync to local DB
-        final db = await DatabaseHelper.instance.database;
-        await db.transaction((txn) async {
-          await txn.delete('locations');
-          for (var item in data) {
-            await txn.insert('locations', Map<String, dynamic>.from(item));
-          }
-        });
-      } else {
-        data = await DatabaseHelper.instance.queryAll('locations');
-      }
-      _locations = data.map((item) => Location.fromMap(item)).toList();
+      _locations = await _repo.getAll(
+        connectivity: connectivity,
+        forceRemote: forceRemote,
+      );
     } catch (e) {
       debugPrint("Error loading locations: $e");
     } finally {
@@ -48,53 +47,55 @@ class LocationProvider extends ChangeNotifier {
     Location location, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/locations', location.toMap());
-    } else {
-      await DatabaseHelper.instance.insert('locations', location.toMap());
+    try {
+      await _repo.add(location, connectivity: connectivity);
+      AppLogger.i('LocationProvider', 'Joy QOSHILDI | Nomi: ${location.name} | ${_actor(connectivity)}');
+      await loadLocations(connectivity: connectivity);
+    } catch (e) {
+      AppLogger.e('LocationProvider', 'Joy QOSHISHDA XATO | Nomi: ${location.name} | ${_actor(connectivity)}', e);
+      rethrow;
     }
-    await loadLocations(connectivity: connectivity);
   }
 
   Future<void> updateLocation(
     Location location, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/locations', location.toMap());
-    } else {
-      await DatabaseHelper.instance.update(
-        'locations',
-        location.toMap(),
-        'id = ?',
-        [location.id],
-      );
+    try {
+      await _repo.update(location, connectivity: connectivity);
+      AppLogger.i('LocationProvider', 'Joy TAHRIRLANDI | ID: ${location.id}, Nomi: ${location.name} | ${_actor(connectivity)}');
+      await loadLocations(connectivity: connectivity);
+    } catch (e) {
+      AppLogger.e('LocationProvider', 'Joy TAHRIRLASHDA XATO | ID: ${location.id}, Nomi: ${location.name} | ${_actor(connectivity)}', e);
+      rethrow;
     }
-    await loadLocations(connectivity: connectivity);
   }
 
   Future<bool> deleteLocation(
     int id, {
     ConnectivityProvider? connectivity,
   }) async {
+    final locationName = _locations.firstWhere((l) => l.id == id, orElse: () => Location(id: id, name: 'ID:$id')).name;
+
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      final success = await connectivity.deleteRemoteData('/locations/$id');
+      final success = await _repo.deleteById(id, connectivity: connectivity);
       if (success) {
+        AppLogger.i('LocationProvider', 'Joy O\'CHIRILDI | ID: $id, Nomi: $locationName | ${_actor(connectivity)}');
         await loadLocations(connectivity: connectivity);
+      } else {
+        AppLogger.e('LocationProvider', 'Joy O\'CHIRILMADI (server xato) | ID: $id, Nomi: $locationName | ${_actor(connectivity)}');
       }
       return success;
     } else {
-      // Check if tables exist for this location
-      final tables = await DatabaseHelper.instance.queryByColumn(
-        'tables',
-        'location_id',
-        id,
-      );
-      if (tables.isNotEmpty) {
-        return false; // Cannot delete
+      // Bu joyga biriktirilgan stollar bor-yo'qligini tekshirish
+      final tableCount = await _repo.countTablesForLocation(id);
+      if (tableCount > 0) {
+        AppLogger.w('LocationProvider', 'Joy O\'CHIRILMADI (stollar bor) | ID: $id, Nomi: $locationName, Stollar: $tableCount ta | ${_actor(connectivity)}');
+        return false;
       }
 
-      await DatabaseHelper.instance.delete('locations', 'id = ?', [id]);
+      await _repo.deleteById(id);
+      AppLogger.i('LocationProvider', 'Joy O\'CHIRILDI | ID: $id, Nomi: $locationName | ${_actor(connectivity)}');
       await loadLocations();
       return true;
     }

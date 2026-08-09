@@ -1,9 +1,22 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../core/app_logger.dart';
+import '../data/repositories/table_repository.dart';
 import '../models/table.dart';
 import 'connectivity_provider.dart';
 
+String _actor(ConnectivityProvider? connectivity) {
+  final name = connectivity?.currentUser?['name'] as String? ?? 'Admin';
+  final role = connectivity?.currentUser?['role'] as String? ?? 'admin';
+  return '$name ($role) @ ${Platform.localHostname}';
+}
+
 class TableProvider extends ChangeNotifier {
+  final TableRepository _repo;
+
+  TableProvider({TableRepository? repository})
+    : _repo = repository ?? TableRepository();
+
   List<TableModel> _tables = [];
   bool _isLoading = false;
 
@@ -15,80 +28,17 @@ class TableProvider extends ChangeNotifier {
     bool silent = false,
     bool forceRemote = false,
   }) async {
-    // Only show loading indicator on initial load
+    // Faqat dastlabki yuklashda indikator ko'rsatiladi
     if (!silent) {
       _isLoading = true;
       notifyListeners();
     }
 
     try {
-      List<Map<String, dynamic>> data;
-
-      if (connectivity != null &&
-          connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
-        final remoteData = await connectivity.getRemoteData('/tables/summary');
-        data = List<Map<String, dynamic>>.from(remoteData);
-
-        // Sync to local DB for components that depend on it
-        final db = await DatabaseHelper.instance.database;
-        await db.transaction((txn) async {
-          await txn.delete('tables');
-          for (var item in data) {
-            final tableForDb = {
-              'id': item['id'],
-              'location_id': item['location_id'],
-              'name': item['name'],
-              'status': item['status'],
-              'pricing_type': item['pricing_type'],
-              'hourly_rate': item['hourly_rate'],
-              'fixed_amount': item['fixed_amount'],
-              'active_order_id': item['active_order_id'],
-              'x': item['x'],
-              'y': item['y'],
-              'width': item['width'],
-              'height': item['height'],
-              'shape': item['shape'],
-              'service_percentage': item['service_percentage'],
-            };
-            await txn.insert('tables', tableForDb);
-          }
-        });
-      } else {
-        final db = await DatabaseHelper.instance.database;
-        data = await db.rawQuery('''
-      SELECT t.*,
-             o.id as order_id,
-             o.waiter_id,
-             o.opened_at,
-             o.total as order_total,
-             o.bill_requested,
-             o.bill_requested_at,
-             w.name as waiter_name
-      FROM tables t
-      LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
-      LEFT JOIN waiters w ON o.waiter_id = w.id
-    ''');
-      }
-
-      _tables = data.map((item) {
-        ActiveOrderInfo? activeOrder;
-        if (item['order_id'] != null) {
-          activeOrder = ActiveOrderInfo(
-            orderId: item['order_id'] as String,
-            waiterId: item['waiter_id'] as int?,
-            waiterName: item['waiter_name'] as String?,
-            totalAmount: (item['order_total'] as num).toDouble(),
-            openedAt: item['opened_at'] != null
-                ? DateTime.parse(item['opened_at'] as String)
-                : null,
-            billRequested: (item['bill_requested'] as int? ?? 0) == 1,
-            billRequestedAt: item['bill_requested_at'] != null
-                ? DateTime.parse(item['bill_requested_at'] as String)
-                : null,
-          );
-        }
-        return TableModel.fromMap(item, activeOrder: activeOrder);
-      }).toList();
+      _tables = await _repo.getAllWithOrders(
+        connectivity: connectivity,
+        forceRemote: forceRemote,
+      );
     } catch (e) {
       debugPrint("Error loading tables: $e");
     }
@@ -101,16 +51,18 @@ class TableProvider extends ChangeNotifier {
     TableModel table, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/tables', table.toMap());
-    } else {
-      await DatabaseHelper.instance.insert('tables', table.toMap());
+    try {
+      await _repo.add(table, connectivity: connectivity);
+      AppLogger.i('TableProvider', 'Stol QOSHILDI | Nomi: ${table.name}, Joy ID: ${table.locationId}, Narx turi: ${table.pricingType} | ${_actor(connectivity)}');
+      await loadTables(connectivity: connectivity);
+    } catch (e) {
+      AppLogger.e('TableProvider', 'Stol QOSHISHDA XATO | Nomi: ${table.name} | ${_actor(connectivity)}', e);
+      rethrow;
     }
-    await loadTables(connectivity: connectivity);
   }
 
-  /// Creates multiple tables at once (from [start] to [end] inclusive).
-  /// Returns the number of tables successfully created.
+  /// Bir vaqtda bir nechta stol yaratadi ([start] dan [end] gacha, ikkalasi ham
+  /// kiritilgan). Muvaffaqiyatli yaratilgan stollar sonini qaytaradi.
   Future<int> addTablesBulk({
     required String prefix,
     required int start,
@@ -125,26 +77,27 @@ class TableProvider extends ChangeNotifier {
   }) async {
     final total = end - start + 1;
     int done = 0;
-    for (int i = start; i <= end; i++) {
-      final name = prefix.isEmpty ? '$i' : '$prefix $i';
-      final table = TableModel(
-        name: name,
-        locationId: locationId,
-        status: 0,
-        pricingType: pricingType,
-        hourlyRate: hourlyRate,
-        fixedAmount: fixedAmount,
-        servicePercentage: servicePercentage,
-      );
-      if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-        await connectivity.postRemoteData('/tables', table.toMap());
-      } else {
-        await DatabaseHelper.instance.insert('tables', table.toMap());
+    try {
+      for (int i = start; i <= end; i++) {
+        final name = prefix.isEmpty ? '$i' : '$prefix $i';
+        final table = TableModel(
+          name: name,
+          locationId: locationId,
+          status: 0,
+          pricingType: pricingType,
+          hourlyRate: hourlyRate,
+          fixedAmount: fixedAmount,
+          servicePercentage: servicePercentage,
+        );
+        await _repo.add(table, connectivity: connectivity);
+        done++;
+        onProgress?.call(done, total);
       }
-      done++;
-      onProgress?.call(done, total);
+      AppLogger.i('TableProvider', 'OMMAVIY stol QOSHILDI | Prefiks: "${prefix.isEmpty ? "-" : prefix}", $start–$end, Jami: $done ta, Joy ID: $locationId, Narx turi: $pricingType | ${_actor(connectivity)}');
+      await loadTables(connectivity: connectivity);
+    } catch (e) {
+      AppLogger.e('TableProvider', 'OMMAVIY stol QOSHISHDA XATO | $done/$total qo\'shildi | ${_actor(connectivity)}', e);
     }
-    await loadTables(connectivity: connectivity);
     return done;
   }
 
@@ -152,44 +105,38 @@ class TableProvider extends ChangeNotifier {
     TableModel table, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/tables', table.toMap());
-    } else {
-      // active_order_id ni o'zgartirmaymiz — bu faqat buyurtma ochilganda/yopilganda yangilanadi.
-      // Aks holda admin stol sozlamalarini o'zgartirganda aktiv buyurtma bog'liqligi o'chib ketadi.
-      final updateMap = Map<String, dynamic>.from(table.toMap())
-        ..remove('active_order_id');
-      await DatabaseHelper.instance.update('tables', updateMap, 'id = ?', [
-        table.id,
-      ]);
+    try {
+      await _repo.updatePreservingOrder(table, connectivity: connectivity);
+      AppLogger.i('TableProvider', 'Stol TAHRIRLANDI | ID: ${table.id}, Nomi: ${table.name}, Joy ID: ${table.locationId}, Narx turi: ${table.pricingType} | ${_actor(connectivity)}');
+      await loadTables(connectivity: connectivity);
+    } catch (e) {
+      AppLogger.e('TableProvider', 'Stol TAHRIRLASHDA XATO | ID: ${table.id}, Nomi: ${table.name} | ${_actor(connectivity)}', e);
+      rethrow;
     }
-    await loadTables(connectivity: connectivity);
   }
 
   Future<bool> deleteTable(int id, {ConnectivityProvider? connectivity}) async {
+    final tableName = _tables.firstWhere((t) => t.id == id, orElse: () => TableModel(name: 'ID:$id', locationId: 0)).name;
+
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      // In client mode, we trust the server to handle validation if needed,
-      // but for better UX we could check local state if it's mirrored correctly.
-      final success = await connectivity.deleteRemoteData('/tables/$id');
+      final success = await _repo.deleteById(id, connectivity: connectivity);
       if (success) {
+        AppLogger.i('TableProvider', 'Stol O\'CHIRILDI | ID: $id, Nomi: $tableName | ${_actor(connectivity)}');
         await loadTables(connectivity: connectivity);
+      } else {
+        AppLogger.e('TableProvider', 'Stol O\'CHIRILMADI (server xato) | ID: $id, Nomi: $tableName | ${_actor(connectivity)}');
       }
       return success;
     } else {
-      // Check if table has an OPEN order
-      final openOrders = await DatabaseHelper.instance.database.then(
-        (db) => db.query(
-          'orders',
-          where: 'table_id = ? AND status = 0',
-          whereArgs: [id],
-        ),
-      );
-
-      if (openOrders.isNotEmpty) {
-        return false; // Cannot delete
+      // Stolda OCHIQ buyurtma bor-yo'qligini tekshirish
+      final openOrders = await _repo.countOpenOrders(id);
+      if (openOrders > 0) {
+        AppLogger.w('TableProvider', 'Stol O\'CHIRILMADI (ochiq buyurtma bor) | ID: $id, Nomi: $tableName | ${_actor(connectivity)}');
+        return false;
       }
 
-      await DatabaseHelper.instance.delete('tables', 'id = ?', [id]);
+      await _repo.deleteById(id);
+      AppLogger.i('TableProvider', 'Stol O\'CHIRILDI | ID: $id, Nomi: $tableName | ${_actor(connectivity)}');
       await loadTables();
       return true;
     }
@@ -200,19 +147,10 @@ class TableProvider extends ChangeNotifier {
     int status, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/tables', {
-        'id': id,
-        'status': status,
-      });
-    } else {
-      await DatabaseHelper.instance.update(
-        'tables',
-        {'status': status},
-        'id = ?',
-        [id],
-      );
-    }
+    final tableName = _tables.firstWhere((t) => t.id == id, orElse: () => TableModel(name: 'ID:$id', locationId: 0)).name;
+    await _repo.updateStatus(id, status, connectivity: connectivity);
+    final statusLabel = status == 0 ? 'bo\'sh' : 'band';
+    AppLogger.d('TableProvider', 'Stol holati O\'ZGARTIRILDI | ID: $id, Nomi: $tableName → $statusLabel | ${_actor(connectivity)}');
     await loadTables(connectivity: connectivity);
   }
 
@@ -224,24 +162,9 @@ class TableProvider extends ChangeNotifier {
     double height, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/tables', {
-        'id': id,
-        'x': x,
-        'y': y,
-        'width': width,
-        'height': height,
-      });
-    } else {
-      await DatabaseHelper.instance.update(
-        'tables',
-        {'x': x, 'y': y, 'width': width, 'height': height},
-        'id = ?',
-        [id],
-      );
-    }
+    await _repo.updateLayout(id, x, y, width, height, connectivity: connectivity);
 
-    // Locally update the table in the list to avoid full reload
+    // To'liq qayta yuklamaslik uchun ro'yxatdagi stolni lokal yangilaymiz
     final index = _tables.indexWhere((t) => t.id == id);
     if (index != -1) {
       _tables[index] = _tables[index].copyWith(
@@ -256,48 +179,7 @@ class TableProvider extends ChangeNotifier {
 
   Future<List<TableModel>> getTablesForLocation(int? locationId) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      String query = '''
-        SELECT t.*,
-               o.id as order_id,
-               o.waiter_id,
-               o.opened_at,
-               o.total as order_total,
-               o.bill_requested,
-               o.bill_requested_at,
-               w.name as waiter_name
-        FROM tables t
-        LEFT JOIN orders o ON t.active_order_id = o.id AND o.status = 0
-        LEFT JOIN waiters w ON o.waiter_id = w.id
-      ''';
-
-      List<dynamic> whereArgs = [];
-      if (locationId != null) {
-        query += ' WHERE t.location_id = ?';
-        whereArgs.add(locationId);
-      }
-
-      final data = await db.rawQuery(query, whereArgs);
-
-      return data.map((item) {
-        ActiveOrderInfo? activeOrder;
-        if (item['order_id'] != null) {
-          activeOrder = ActiveOrderInfo(
-            orderId: item['order_id'] as String,
-            waiterId: item['waiter_id'] as int?,
-            waiterName: item['waiter_name'] as String?,
-            totalAmount: (item['order_total'] as num).toDouble(),
-            openedAt: item['opened_at'] != null
-                ? DateTime.parse(item['opened_at'] as String)
-                : null,
-            billRequested: (item['bill_requested'] as int? ?? 0) == 1,
-            billRequestedAt: item['bill_requested_at'] != null
-                ? DateTime.parse(item['bill_requested_at'] as String)
-                : null,
-          );
-        }
-        return TableModel.fromMap(item, activeOrder: activeOrder);
-      }).toList();
+      return await _repo.getTablesForLocation(locationId);
     } catch (e) {
       debugPrint("Error getting tables for location: $e");
       return [];
@@ -309,25 +191,22 @@ class TableProvider extends ChangeNotifier {
     required double value,
     int? onlyLocationId,
     int? onlyCurrentPricingType,
+    ConnectivityProvider? connectivity,
   }) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      final conditions = <String>[];
-      if (onlyLocationId != null) conditions.add('location_id = $onlyLocationId');
-      if (onlyCurrentPricingType != null) conditions.add('pricing_type = $onlyCurrentPricingType');
-      final where = conditions.isEmpty ? '1=1' : conditions.join(' AND ');
-
-      final double hourlyRate = pricingType == 1 ? value : 0;
-      final double fixedAmount = pricingType == 2 ? value : 0;
-      final double servicePercentage = pricingType == 3 ? value : 0;
-
-      await db.rawUpdate(
-        'UPDATE tables SET pricing_type = ?, hourly_rate = ?, fixed_amount = ?, service_percentage = ? WHERE $where',
-        [pricingType, hourlyRate, fixedAmount, servicePercentage],
+      await _repo.bulkUpdatePricing(
+        pricingType: pricingType,
+        value: value,
+        onlyLocationId: onlyLocationId,
+        onlyCurrentPricingType: onlyCurrentPricingType,
       );
+      final typeLabels = ['Oddiy', 'Soatlik', 'Belgilangan', 'Xizmat%'];
+      final typeLabel = pricingType < typeLabels.length ? typeLabels[pricingType] : '$pricingType';
+      AppLogger.i('TableProvider', 'OMMAVIY narx turi YANGILANDI | Tur: $typeLabel, Qiymat: $value${onlyLocationId != null ? ", Joy ID: $onlyLocationId" : ""}${onlyCurrentPricingType != null ? ", Faqat tur: $onlyCurrentPricingType" : ""} | ${_actor(connectivity)}');
       await loadTables();
       return null;
     } catch (e) {
+      AppLogger.e('TableProvider', 'OMMAVIY narx turi YANGILASHDA XATO | ${_actor(connectivity)}', e);
       return 'Xatolik: $e';
     }
   }

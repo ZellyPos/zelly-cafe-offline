@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum PrinterType { network, windows, usb_legacy }
+enum PrinterType { network, windows, usb_legacy, receipt }
 
 class PrinterSettings {
   final int? id;
@@ -11,6 +11,7 @@ class PrinterSettings {
   final int port;
   final List<int> categoryIds;
   final bool isMain;
+  final int? locationId;
 
   PrinterSettings({
     this.id,
@@ -21,6 +22,7 @@ class PrinterSettings {
     this.port = 9100,
     this.categoryIds = const [],
     this.isMain = false,
+    this.locationId,
   });
 
   Map<String, dynamic> toMap() {
@@ -32,6 +34,7 @@ class PrinterSettings {
       'port': port,
       'category_ids': jsonEncode(categoryIds),
       'is_main': isMain ? 1 : 0,
+      'location_id': locationId,
     };
     if (id != null) map['id'] = id;
     return map;
@@ -44,6 +47,8 @@ class PrinterSettings {
       type = PrinterType.windows;
     } else if (typeStr == 'usb' || typeStr == 'usb_legacy') {
       type = PrinterType.usb_legacy;
+    } else if (typeStr == 'receipt') {
+      type = PrinterType.receipt;
     }
 
     List<int> catIds = [];
@@ -66,6 +71,7 @@ class PrinterSettings {
       port: int.tryParse(map['port']?.toString() ?? '9100') ?? 9100,
       categoryIds: catIds,
       isMain: (map['is_main'] as int? ?? 0) == 1,
+      locationId: map['location_id'] as int?,
     );
   }
 
@@ -78,6 +84,7 @@ class PrinterSettings {
     int? port,
     List<int>? categoryIds,
     bool? isMain,
+    Object? locationId = _sentinel,
   }) {
     return PrinterSettings(
       id: id ?? this.id,
@@ -88,6 +95,9 @@ class PrinterSettings {
       port: port ?? this.port,
       categoryIds: categoryIds ?? this.categoryIds,
       isMain: isMain ?? this.isMain,
+      locationId: locationId == _sentinel ? this.locationId : locationId as int?,
     );
   }
 }
+
+const _sentinel = Object();

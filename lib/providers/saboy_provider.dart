@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../data/repositories/saboy_repository.dart';
 
 class SaboyOrderSummary {
   final String id;
@@ -24,6 +24,11 @@ class SaboyOrderSummary {
 }
 
 class SaboyProvider extends ChangeNotifier {
+  final SaboyRepository _repo;
+
+  SaboyProvider({SaboyRepository? repository})
+    : _repo = repository ?? SaboyRepository();
+
   List<SaboyOrderSummary> _openOrders = [];
   List<SaboyOrderSummary> _closedOrders = [];
   bool _isLoading = false;
@@ -37,20 +42,7 @@ class SaboyProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final db = await DatabaseHelper.instance.database;
-
-      final rows = await db.rawQuery('''
-        SELECT o.id, o.daily_number, o.grand_total, o.opened_at,
-               o.status, o.waiter_id, w.name as waiter_name,
-               COUNT(oi.id) as item_count
-        FROM orders o
-        LEFT JOIN waiters w ON o.waiter_id = w.id
-        LEFT JOIN order_items oi ON oi.order_id = o.id
-        WHERE o.order_type = 1
-        GROUP BY o.id
-        ORDER BY o.opened_at DESC
-        LIMIT 60
-      ''');
+      final rows = await _repo.getTodayOrders();
 
       final open = <SaboyOrderSummary>[];
       final closed = <SaboyOrderSummary>[];

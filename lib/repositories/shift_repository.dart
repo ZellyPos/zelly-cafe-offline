@@ -116,27 +116,35 @@ class ShiftRepository {
   Future<ShiftSummary> getShiftSalesSummary(int shiftId) async {
     final db = await _dbHelper.database;
 
-    // To'lov turi bo'yicha sotuvlar
+    // To'lov turi bo'yicha sotuvlar — order_payments jadvalidan
     final salesData = await db.rawQuery(
       '''
-      SELECT payment_type, SUM(total) as total_sum 
-      FROM orders 
-      WHERE shift_id = ? AND status = 1
-      GROUP BY payment_type
-    ''',
+      SELECT op.payment_type, SUM(op.amount) as total_sum
+      FROM order_payments op
+      JOIN orders o ON op.order_id = o.id
+      WHERE o.shift_id = ? AND o.status = 1
+      GROUP BY op.payment_type
+      ''',
       [shiftId],
     );
 
-    double cash = 0, card = 0, debt = 0;
+    double cash = 0, card = 0, terminal = 0, debt = 0, bonus = 0, transfer = 0;
     for (var row in salesData) {
       final type = row['payment_type'].toString().toLowerCase();
       final sum = (row['total_sum'] as num?)?.toDouble() ?? 0.0;
-      if (type.contains('naqd') || type.contains('cash')) {
+      if (type == 'cash' || type == 'naqd') {
         cash += sum;
-      } else if (type.contains('karta') || type.contains('card'))
+      } else if (type == 'card' || type == 'karta') {
         card += sum;
-      else if (type.contains('nasiya') || type.contains('debt'))
+      } else if (type == 'terminal') {
+        terminal += sum;
+      } else if (type == 'debt' || type == 'nasiya') {
         debt += sum;
+      } else if (type == 'bonus') {
+        bonus += sum;
+      } else if (type == 'transfer') {
+        transfer += sum;
+      }
     }
 
     // Kassa harakatlari
@@ -171,13 +179,77 @@ class ShiftRepository {
       openingCash = (shiftRes.first['opening_cash'] as num?)?.toDouble() ?? 0.0;
     }
 
+    // Chegirma statistikasi
+    final discountStats = await _dbHelper.getDiscountStatsByShift(shiftId);
+
+    // Xarajatlar
+    final totalExpenses = await _dbHelper.getShiftExpenseTotal(shiftId);
+
     return ShiftSummary(
       totalCashSales: cash,
       totalCardSales: card,
+      totalTerminalSales: terminal,
       totalDebtSales: debt,
+      totalBonusSales: bonus,
+      totalTransferSales: transfer,
       totalInMovements: inSum,
       totalOutMovements: outSum,
       expectedCashBalance: openingCash + cash + inSum - outSum,
+      totalOrderDiscount: (discountStats['order_discount_total'] as num?)?.toDouble() ?? 0,
+      totalItemDiscount:  (discountStats['item_discount_total']  as num?)?.toDouble() ?? 0,
+      totalExpenses: totalExpenses,
     );
+  }
+
+  // --- Avtomatik smena sozlamalari (settings jadvali) ---
+
+  /// Avtomatik smena bilan bog'liq sozlamalarni (kalit→qiymat) qaytaradi.
+  Future<Map<String, String>> getAutoShiftSettings() async {
+    final db = await _dbHelper.database;
+    final rows = await db.query(
+      'settings',
+      where:
+          "key IN ('auto_shift_enabled', 'auto_shift_start', 'auto_shift_end', 'day_reset_time')",
+    );
+    return {
+      for (final r in rows) r['key'] as String: (r['value'] as String? ?? ''),
+    };
+  }
+
+  /// Avtomatik smena sozlamalarini saqlaydi (upsert).
+  Future<void> saveAutoShiftSettings({
+    required bool enabled,
+    required String start,
+    required String end,
+    required String dayResetTime,
+  }) async {
+    final db = await _dbHelper.database;
+    await db.rawInsert(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+      ['auto_shift_enabled', enabled ? '1' : '0'],
+    );
+    await db.rawInsert(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+      ['auto_shift_start', start],
+    );
+    await db.rawInsert(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+      ['day_reset_time', dayResetTime],
+    );
+    await db.rawInsert(
+      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+      ['auto_shift_end', end],
+    );
+  }
+
+  /// Birinchi faol admin foydalanuvchi ID'sini qaytaradi; topilmasa 0 (tizim).
+  Future<int> getFirstAdminUserId() async {
+    final db = await _dbHelper.database;
+    final adminRes = await db.query(
+      'users',
+      where: "role = 'admin' AND is_active = 1",
+      limit: 1,
+    );
+    return adminRes.isNotEmpty ? (adminRes.first['id'] as int) : 0;
   }
 }

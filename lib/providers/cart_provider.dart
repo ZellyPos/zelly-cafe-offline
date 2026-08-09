@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../core/app_logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:provider/provider.dart';
-import '../core/database_helper.dart';
+import '../data/repositories/order_repository.dart';
 import '../core/app_strings.dart';
 import '../models/order.dart';
 import '../models/product.dart';
@@ -24,19 +26,38 @@ class CartItem {
   Product product;
   double quantity;
   double printedQuantity;
+  double discountAmount;
 
   CartItem({
     required this.product,
     this.quantity = 1.0,
     this.printedQuantity = 0.0,
+    this.discountAmount = 0.0,
   });
 
-  double get total => product.price * quantity;
+  double get total =>
+      (product.price * quantity - discountAmount).clamp(0.0, double.infinity);
+  double get originalTotal => product.price * quantity;
 }
 
 class CartProvider extends ChangeNotifier {
+  final OrderRepository _repo;
+
+  CartProvider({OrderRepository? repository})
+    : _repo = repository ?? OrderRepository();
+
   final Map<int, CartItem> _items = {};
   String? _lastPrintError;
+
+  Timer? _syncDebounce;
+  // Faqat bitta _syncItems bir vaqtda ishlashi uchun mutex
+  bool _isSyncing = false;
+
+  @override
+  void dispose() {
+    _syncDebounce?.cancel();
+    super.dispose();
+  }
 
   // Restaurant Mode state
   int? _activeTableId;
@@ -48,12 +69,30 @@ class CartProvider extends ChangeNotifier {
 
   bool _isNewOrderSession = false;
 
+  // Order-level discount state
+  String? _orderDiscountType;   // 'percent' | 'fixed'
+  double _orderDiscountValue = 0;
+  String? _orderDiscountNote;
+
   Map<int, CartItem> get items => _items;
   String? get lastPrintError => _lastPrintError;
   int? get activeTableId => _activeTableId;
   int? get activeWaiterId => _activeWaiterId;
   String? get activeOrderId => _activeOrderId;
   DateTime? get activeOpenedAt => _activeOpenedAt;
+
+  String? get orderDiscountType => _orderDiscountType;
+  double get orderDiscountValue => _orderDiscountValue;
+  String? get orderDiscountNote => _orderDiscountNote;
+
+  double get orderDiscountAmount {
+    if (_orderDiscountType == null || _orderDiscountValue <= 0) return 0;
+    final food = totalAmount; // already includes item discounts
+    if (_orderDiscountType == 'percent') {
+      return (food * _orderDiscountValue / 100).clamp(0.0, food);
+    }
+    return _orderDiscountValue.clamp(0.0, food);
+  }
 
   bool get hasUnconfirmedChanges {
     return _items.values.any((item) => item.quantity != item.printedQuantity);
@@ -190,13 +229,7 @@ class CartProvider extends ChangeNotifier {
       } else {
         // standalone/server mode: immediately update local SQLite orders table
         if (_activeOrderId != null) {
-          final db = await DatabaseHelper.instance.database;
-          await db.update(
-            'orders',
-            {'waiter_id': waiterId},
-            where: 'id = ?',
-            whereArgs: [_activeOrderId],
-          );
+          await _repo.updateOrderWaiter(_activeOrderId!, waiterId);
         }
         // Broadcast the update so other terminals and the local TablesScreen immediately reload
         if (_activeTableId != null) {
@@ -208,13 +241,7 @@ class CartProvider extends ChangeNotifier {
     } else {
       // Fallback update without context
       if (_activeOrderId != null) {
-        final db = await DatabaseHelper.instance.database;
-        await db.update(
-          'orders',
-          {'waiter_id': waiterId},
-          where: 'id = ?',
-          whereArgs: [_activeOrderId],
-        );
+        await _repo.updateOrderWaiter(_activeOrderId!, waiterId);
       }
     }
 
@@ -247,33 +274,23 @@ class CartProvider extends ChangeNotifier {
     _activeWaiterId = null;
     _activeOpenedAt = null;
     _isNewOrderSession = false;
+    _orderDiscountType = null;
+    _orderDiscountValue = 0;
+    _orderDiscountNote = null;
 
     // Load a specific order by ID (e.g. a specific saboy order)
     if (orderId != null && tableId == null) {
-      final db = await DatabaseHelper.instance.database;
-      final orderRes = await db.query(
-        'orders',
-        where: 'id = ? AND status = 0',
-        whereArgs: [orderId],
-      );
-      if (orderRes.isNotEmpty) {
-        final orderMap = orderRes.first;
+      final orderMap = await _repo.getOpenOrderById(orderId);
+      if (orderMap != null) {
         _activeOrderId = orderMap['id'] as String;
         _activeWaiterId = orderMap['waiter_id'] as int?;
         _activeOpenedAt = orderMap['opened_at'] != null
             ? DateTime.parse(orderMap['opened_at'] as String)
             : null;
-        final itemsRes = await db.rawQuery(
-          '''
-          SELECT oi.*, p.name as product_name, p.price as product_price,
-                 p.category as product_category, p.quantity as product_quantity,
-                 p.no_service_charge
-          FROM order_items oi
-          JOIN products p ON oi.product_id = p.id
-          WHERE oi.order_id = ?
-        ''',
-          [_activeOrderId],
-        );
+        _orderDiscountType = orderMap['discount_type'] as String?;
+        _orderDiscountValue = (orderMap['discount_value'] as num?)?.toDouble() ?? 0;
+        _orderDiscountNote = orderMap['discount_note'] as String?;
+        final itemsRes = await _repo.getOrderItemsWithProduct(_activeOrderId!);
         for (var row in itemsRes) {
           final product = Product(
             id: (row['product_id'] as num).toInt(),
@@ -287,6 +304,7 @@ class CartProvider extends ChangeNotifier {
             product: product,
             quantity: (row['qty'] as num).toDouble(),
             printedQuantity: (row['printed_qty'] as num? ?? 0).toDouble(),
+            discountAmount: (row['discount_amount'] as num? ?? 0).toDouble(),
           );
         }
       }
@@ -346,54 +364,32 @@ class CartProvider extends ChangeNotifier {
           }
         }
       } else {
-        final db = await DatabaseHelper.instance.database;
-
         // 1. First find which order is active for THIS table
-        final tableRes = await db.query(
-          'tables',
-          columns: ['active_order_id'],
-          where: 'id = ?',
-          whereArgs: [tableId],
-        );
-        final String? activeId = tableRes.isNotEmpty
-            ? tableRes.first['active_order_id'] as String?
-            : null;
+        final activeId = await _repo.getActiveOrderIdForTable(tableId);
 
         if (activeId != null) {
-          final orderRes = await db.query(
-            'orders',
-            where: 'id = ? AND status = 0',
-            whereArgs: [activeId],
-          );
+          final orderMap = await _repo.getOpenOrderById(activeId);
 
-          if (orderRes.isNotEmpty) {
-            final orderMap = orderRes.first;
+          if (orderMap != null) {
             _activeOrderId = orderMap['id'] as String;
             _activeWaiterId = orderMap['waiter_id'] as int?;
 
+            // Load order-level discount
+            _orderDiscountType = orderMap['discount_type'] as String?;
+            _orderDiscountValue = (orderMap['discount_value'] as num?)?.toDouble() ?? 0;
+            _orderDiscountNote = orderMap['discount_note'] as String?;
+
+            bool needsDefaultWaiterSync = false;
             if (_activeWaiterId == null) {
-              _activeWaiterId = await DatabaseHelper.instance
-                  .getDefaultWaiterId();
-              if (_activeWaiterId != null) {
-                await _syncOrderHeader();
-              }
+              _activeWaiterId = await _repo.getDefaultWaiterId();
+              needsDefaultWaiterSync = _activeWaiterId != null;
             }
 
             _activeOpenedAt = orderMap['opened_at'] != null
                 ? DateTime.parse(orderMap['opened_at'] as String)
                 : null;
 
-            final itemsRes = await db.rawQuery(
-              '''
-              SELECT oi.*, p.name as product_name, p.price as product_price, 
-                     p.category as product_category, p.quantity as product_quantity,
-                     p.no_service_charge
-              FROM order_items oi
-              JOIN products p ON oi.product_id = p.id
-              WHERE oi.order_id = ?
-            ''',
-              [_activeOrderId],
-            );
+            final itemsRes = await _repo.getOrderItemsWithProduct(_activeOrderId!);
 
             for (var row in itemsRes) {
               final product = Product(
@@ -408,7 +404,15 @@ class CartProvider extends ChangeNotifier {
                 product: product,
                 quantity: (row['qty'] as num).toDouble(),
                 printedQuantity: (row['printed_qty'] as num? ?? 0).toDouble(),
+                discountAmount: (row['discount_amount'] as num? ?? 0).toDouble(),
               );
+            }
+
+            // Items endi yuklandi — faqat shu paytda header'ni sinxronlash
+            // xavfsiz, aks holda totalAmount bo'sh _items'dan 0 hisoblanib,
+            // grand_total bazada noto'g'ri nolga tushib qolardi.
+            if (needsDefaultWaiterSync) {
+              await _syncOrderHeader();
             }
           }
         }
@@ -500,16 +504,7 @@ class CartProvider extends ChangeNotifier {
 
     int? currentDailyNo;
     try {
-      final db = await DatabaseHelper.instance.database;
-      final existingOrderMap = await db.query(
-        'orders',
-        columns: ['daily_number'],
-        where: 'id = ?',
-        whereArgs: [_activeOrderId],
-      );
-      if (existingOrderMap.isNotEmpty) {
-        currentDailyNo = existingOrderMap.first['daily_number'] as int?;
-      }
+      currentDailyNo = await _repo.getOrderDailyNumber(_activeOrderId!);
     } catch (e) {
       debugPrint("Could not fetch daily number for confirm: $e");
     }
@@ -594,13 +589,7 @@ class CartProvider extends ChangeNotifier {
 
       // Assign the waiter to the order only now — not when the table was opened
       if (_activeWaiterId != null && _activeOrderId != null) {
-        final db = await DatabaseHelper.instance.database;
-        await db.update(
-          'orders',
-          {'waiter_id': _activeWaiterId},
-          where: 'id = ?',
-          whereArgs: [_activeOrderId],
-        );
+        await _repo.updateOrderWaiter(_activeOrderId!, _activeWaiterId);
       }
 
       await _syncItems(connectivity, context);
@@ -621,7 +610,7 @@ class CartProvider extends ChangeNotifier {
         // No snackbar
       }
     } catch (e) {
-      debugPrint('confirmOrder error: $e');
+      AppLogger.e('ConfirmOrder', 'Buyurtma tasdiqlashda xato | stol=$_activeTableId', e);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
@@ -675,8 +664,7 @@ class CartProvider extends ChangeNotifier {
           _activeOrderId = data['order_id'];
           _activeOpenedAt = DateTime.now();
 
-          final db = await DatabaseHelper.instance.database;
-          await db.insert('orders', {
+          await _repo.insertOrder({
             'id': _activeOrderId,
             'total': 0.0,
             'payment_type': 'Pending',
@@ -691,11 +679,10 @@ class CartProvider extends ChangeNotifier {
           });
 
           if (tableId != null) {
-            await db.update(
-              'tables',
-              {'status': 1, 'active_order_id': _activeOrderId},
-              where: 'id = ?',
-              whereArgs: [tableId],
+            await _repo.updateTableLink(
+              tableId,
+              status: 1,
+              activeOrderId: _activeOrderId,
             );
           }
         }
@@ -714,8 +701,6 @@ class CartProvider extends ChangeNotifier {
     _isNewOrderSession = true;
 
     try {
-      final db = await DatabaseHelper.instance.database;
-
       // If a waiter is logged in, use their ID; otherwise fall back to default waiter
       if (_activeWaiterId == null && connectivity != null) {
         final role = connectivity.currentUser?['role'] ?? '';
@@ -728,9 +713,9 @@ class CartProvider extends ChangeNotifier {
           }
         }
       }
-      _activeWaiterId ??= await DatabaseHelper.instance.getDefaultWaiterId();
+      _activeWaiterId ??= await _repo.getDefaultWaiterId();
 
-      await db.insert('orders', {
+      await _repo.insertOrder({
         'id': newOrderId,
         'total': 0.0,
         'payment_type': 'Pending',
@@ -744,12 +729,7 @@ class CartProvider extends ChangeNotifier {
       });
 
       if (tableId != null) {
-        await db.update(
-          'tables',
-          {'status': 1, 'active_order_id': newOrderId},
-          where: 'id = ?',
-          whereArgs: [tableId],
-        );
+        await _repo.updateTableLink(tableId, status: 1, activeOrderId: newOrderId);
         WebSocketManager.instance.broadcast('tables_updated', {
           'table_id': tableId,
         });
@@ -757,12 +737,7 @@ class CartProvider extends ChangeNotifier {
 
       // Assign daily number
       final dailyNo = await _getNextDailyNumber();
-      await db.update(
-        'orders',
-        {'daily_number': dailyNo},
-        where: 'id = ?',
-        whereArgs: [newOrderId],
-      );
+      await _repo.updateOrderDailyNumber(newOrderId, dailyNo);
     } catch (e) {
       // If DB operations fail, reset the in-memory state so the next call retries
       // instead of silently skipping order creation (order ID was set before awaits).
@@ -773,24 +748,11 @@ class CartProvider extends ChangeNotifier {
     }
   }
 
-  Future<int> _getNextDailyNumber() async {
-    final db = await DatabaseHelper.instance.database;
-    final dayStart = await DatabaseHelper.instance.getDayStartTime();
-    final res = await db.rawQuery(
-      'SELECT MAX(daily_number) as max_no FROM orders WHERE created_at >= ?',
-      [dayStart.toIso8601String()],
-    );
-    int nextNo = 1;
-    if (res.isNotEmpty && res.first['max_no'] != null) {
-      nextNo = (res.first['max_no'] as int) + 1;
-    }
-    return nextNo;
-  }
+  Future<int> _getNextDailyNumber() => _repo.getNextDailyNumber();
 
   Future<void> _syncOrderHeader([BuildContext? context]) async {
     final orderId = _activeOrderId;
     if (orderId == null) return;
-    final db = await DatabaseHelper.instance.database;
 
     double roomTotal = 0;
     double serviceTotal = 0;
@@ -799,20 +761,31 @@ class CartProvider extends ChangeNotifier {
       serviceTotal = calculateWaiterServiceFee(context);
     }
 
-    await db.update(
-      'orders',
-      {
-        'total': totalAmount + roomTotal + serviceTotal,
-        'food_total': totalAmount,
-        'room_charge': roomTotal,
-        'room_total': roomTotal,
-        'service_total': serviceTotal,
-        'grand_total': totalAmount + roomTotal + serviceTotal,
-        'waiter_id': _activeWaiterId,
-      },
-      where: 'id = ?',
-      whereArgs: [orderId],
+    final discountAmt = orderDiscountAmount;
+    final grandTotal = (totalAmount - discountAmt + roomTotal + serviceTotal).clamp(0.0, double.infinity);
+    await _repo.updateOrderHeader(
+      orderId,
+      foodTotal: totalAmount,
+      roomTotal: roomTotal,
+      serviceTotal: serviceTotal,
+      grandTotal: grandTotal,
+      waiterId: _activeWaiterId,
+      discountType: _orderDiscountType,
+      discountValue: _orderDiscountValue,
+      discountNote: _orderDiscountNote,
     );
+  }
+
+  // Debounce + mutex: addItem/removeItem/updateQuantity dan keladigan tez-tez
+  // chaqiruvlarni birlashtiradi va parallelda ikki yozuv bo'lishini oldini oladi.
+  void _scheduleSyncItems([
+    ConnectivityProvider? connectivity,
+    BuildContext? context,
+  ]) {
+    _syncDebounce?.cancel();
+    _syncDebounce = Timer(const Duration(milliseconds: 400), () {
+      _syncItems(connectivity, context);
+    });
   }
 
   Future<void> _syncItems([
@@ -822,64 +795,69 @@ class CartProvider extends ChangeNotifier {
     if (_activeTableId == null && _activeOrderType == 0) return;
 
     // Don't write to DB until SAQLASH is pressed — items stay in memory only.
-    // Only skip in standalone/server mode; client mode always syncs to server.
     if (connectivity?.mode != ConnectivityMode.client) {
       final anyPrinted = _items.values.any((i) => i.printedQuantity > 0);
       if (!anyPrinted) return;
     }
 
-    await _ensureOrderExists(connectivity);
-    await _syncOrderHeader(context);
+    // Parallelda ikki _syncItems transaction bo'lmasligi uchun
+    if (_isSyncing) return;
+    _isSyncing = true;
 
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      if (_activeOrderId == null) return;
+    try {
+      await _ensureOrderExists(connectivity);
+      await _syncOrderHeader(context);
 
-      final itemsList = _items.values
-          .map(
-            (item) => {
-              'product_id': item.product.id,
-              'product_name': item.product.name,
-              'qty': item.quantity,
-              'unit': item.product.unit,
-              'price': item.product.price,
-              'printed_qty': item.printedQuantity,
-            },
-          )
-          .toList();
+      // orderId va itemsSnapshot ni async gapdan OLDIN mahalliy o'zgaruvchiga olamiz.
+      // Checkout yoki loadTableOrder _activeOrderId ni null qilib qo'ysa ham
+      // bu snapshot to'g'ri qiymatni saqlaydi.
+      final orderId = _activeOrderId;
+      if (orderId == null) return;
 
-      await http.post(
-        Uri.parse('${connectivity.clientBaseUrl}/orders/$_activeOrderId/items'),
-        body: jsonEncode({'items': itemsList, 'waiter_id': _activeWaiterId}),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${connectivity.authToken}',
-        },
-      );
-      return;
-    }
+      final itemsSnapshot = Map<int, CartItem>.from(_items);
+      final waiterId = _activeWaiterId;
 
-    final db = await DatabaseHelper.instance.database;
-    await db.transaction((txn) async {
-      await txn.delete(
-        'order_items',
-        where: 'order_id = ?',
-        whereArgs: [_activeOrderId],
-      );
+      if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
+        final itemsList = itemsSnapshot.values
+            .map((item) => {
+                  'product_id': item.product.id,
+                  'product_name': item.product.name,
+                  'qty': item.quantity,
+                  'unit': item.product.unit,
+                  'price': item.product.price,
+                  'printed_qty': item.printedQuantity,
+                })
+            .toList();
 
-      for (var item in _items.values) {
+        await http.post(
+          Uri.parse('${connectivity.clientBaseUrl}/orders/$orderId/items'),
+          body: jsonEncode({'items': itemsList, 'waiter_id': waiterId}),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${connectivity.authToken}',
+          },
+        );
+        return;
+      }
+
+      final itemRows = <Map<String, dynamic>>[];
+      for (var item in itemsSnapshot.values) {
         if (item.quantity == 0 && item.printedQuantity == 0) continue;
-
-        await txn.insert('order_items', {
-          'order_id': _activeOrderId,
+        itemRows.add({
+          'order_id': orderId,
           'product_id': item.product.id,
           'product_name': item.product.name,
           'qty': item.quantity,
           'unit': item.product.unit,
           'price': item.product.price,
           'printed_qty': item.printedQuantity,
+          'discount_amount': item.discountAmount,
         });
       }
-    });
+      await _repo.replaceOrderItems(orderId, itemRows);
+    } finally {
+      _isSyncing = false;
+    }
   }
 
   void addItem(
@@ -904,13 +882,12 @@ class CartProvider extends ChangeNotifier {
 
     if (_items.containsKey(product.id)) {
       _items.update(product.id!, (existing) {
-        final newItem = CartItem(
-          product:
-              product, // use the passed product which might have updated price
+        return CartItem(
+          product: product,
           quantity: existing.quantity + quantity,
           printedQuantity: existing.printedQuantity,
+          discountAmount: existing.discountAmount, // preserve discount
         );
-        return newItem;
       });
     } else {
       _items.putIfAbsent(
@@ -918,7 +895,7 @@ class CartProvider extends ChangeNotifier {
         () => CartItem(product: product, quantity: quantity),
       );
     }
-    _syncItems(connectivity, context);
+    _scheduleSyncItems(connectivity, context);
     notifyListeners();
     Future.microtask(() => _checkAutoConfirm(context));
   }
@@ -935,7 +912,7 @@ class CartProvider extends ChangeNotifier {
       } else {
         _items.remove(productId);
       }
-      _syncItems(connectivity, context);
+      _scheduleSyncItems(connectivity, context);
       notifyListeners();
       Future.microtask(() => _checkAutoConfirm(context));
     }
@@ -970,7 +947,7 @@ class CartProvider extends ChangeNotifier {
       } else {
         _items[productId]!.quantity = quantity;
       }
-      _syncItems(connectivity, context);
+      _scheduleSyncItems(connectivity, context);
       notifyListeners();
       Future.microtask(() => _checkAutoConfirm(context));
     }
@@ -1015,7 +992,7 @@ class CartProvider extends ChangeNotifier {
         );
       }
 
-      _syncItems(connectivity, context);
+      _scheduleSyncItems(connectivity, context);
       notifyListeners();
       Future.microtask(() => _checkAutoConfirm(context));
     }
@@ -1038,15 +1015,65 @@ class CartProvider extends ChangeNotifier {
     }
   }
 
+  void setOrderDiscount(
+    String type,
+    double value, [
+    String? note,
+    ConnectivityProvider? connectivity,
+    BuildContext? context,
+  ]) {
+    _orderDiscountType = type;
+    _orderDiscountValue = value;
+    _orderDiscountNote = note;
+    _scheduleSyncItems(connectivity, context);
+    notifyListeners();
+  }
+
+  void removeOrderDiscount([
+    ConnectivityProvider? connectivity,
+    BuildContext? context,
+  ]) {
+    _orderDiscountType = null;
+    _orderDiscountValue = 0;
+    _orderDiscountNote = null;
+    _scheduleSyncItems(connectivity, context);
+    notifyListeners();
+  }
+
+  void setItemDiscount(
+    int productId,
+    double amount, [
+    ConnectivityProvider? connectivity,
+    BuildContext? context,
+  ]) {
+    if (_items.containsKey(productId)) {
+      _items[productId]!.discountAmount = amount;
+      _scheduleSyncItems(connectivity, context);
+      notifyListeners();
+    }
+  }
+
+  void removeItemDiscount(
+    int productId, [
+    ConnectivityProvider? connectivity,
+    BuildContext? context,
+  ]) {
+    setItemDiscount(productId, 0, connectivity, context);
+  }
+
   void clearCart([ConnectivityProvider? connectivity, BuildContext? context]) {
     _items.clear();
+    _orderDiscountType = null;
+    _orderDiscountValue = 0;
+    _orderDiscountNote = null;
     if (_activeOrderId != null) {
       _syncItems(connectivity, context);
     }
     notifyListeners();
   }
 
-  Future<bool> checkout({
+  // Returns orderId on success, null on failure
+  Future<String?> checkout({
     required BuildContext context,
     required String paymentType,
     int orderType = 0,
@@ -1058,7 +1085,7 @@ class CartProvider extends ChangeNotifier {
     bool shouldPrint = true,
     String? note,
   }) async {
-    if (_items.isEmpty) return false;
+    if (_items.isEmpty) return null;
 
     // ── FIX 2 & 3: Provider reads BEFORE any await (BuildContext async gap lint)
     // context.read<>() must be called synchronously before the first await.
@@ -1117,165 +1144,62 @@ class CartProvider extends ChangeNotifier {
     final List<OrderItem> orderItems = [];
 
     try {
-      final db = await DatabaseHelper.instance.database;
-
-      // ── FIX 1: daily_number ni transaction TASHQARISIDA olish ──────────────
-      // db.transaction() ichida _getNextDailyNumber() chaqirilsa sqflite_common_ffi
-      // da deadlock yuzaga keladi (lock kutadi, lekin hech qachon bo'shatilmaydi).
+      // ── daily_number ni buyurtma yozishdan OLDIN olamiz ────────────────────
+      // (tranzaksiya ichida chaqirilsa sqflite_common_ffi da deadlock bo'ladi)
       int? preDailyNo;
       if (_activeOrderId != null) {
-        final existingMap = await db.query(
-          'orders',
-          columns: ['daily_number'],
-          where: 'id = ?',
-          whereArgs: [orderId],
-        );
-        if (existingMap.isNotEmpty) {
-          preDailyNo = existingMap.first['daily_number'] as int?;
-        }
+        preDailyNo = await _repo.getOrderDailyNumber(orderId);
       }
       preDailyNo ??= await _getNextDailyNumber();
 
-      // ── Transaction: faqat DB operatsiyalari, hech qanday DB.rawQuery chaqirmaydi
-      final totals = await db.transaction((txn) async {
-        double roomCharge = 0;
-        double totalRoomCharge = 0;
-        DateTime now = DateTime.now();
-
-        // 1. Find all tables linked to this order to sum their charges
-        final allLinkedTablesRes = await txn.query(
-          'tables',
-          where: currentTableId != null
-              ? 'active_order_id = ? OR id = ?'
-              : 'active_order_id = ?',
-          whereArgs: currentTableId != null
-              ? [orderId, currentTableId]
-              : [orderId],
-        );
-
-        for (var tableMap in allLinkedTablesRes) {
-          final int pricingType = tableMap['pricing_type'] as int? ?? 0;
-          final double hourlyRate = (tableMap['hourly_rate'] as num? ?? 0)
-              .toDouble();
-          final double fixedAmount = (tableMap['fixed_amount'] as num? ?? 0)
-              .toDouble();
-          final double servicePercentage =
-              (tableMap['service_percentage'] as num? ?? 0).toDouble();
-
-          if (pricingType == 1) {
-            final openedAt = _activeOpenedAt ?? now;
-            final duration = now.difference(openedAt);
-            final hours = duration.inMinutes / 60.0;
-            totalRoomCharge += hours * hourlyRate;
-          } else if (pricingType == 2) {
-            totalRoomCharge += fixedAmount;
-          } else if (pricingType == 3) {
-            totalRoomCharge +=
-                (totalForServiceCharge * servicePercentage / 100);
-          }
-        }
-        roomCharge = totalRoomCharge;
-
-        final double serviceFee = preServiceFee;
-        final double foodTotal = totalAmount;
-        final double grandTotal = foodTotal + roomCharge + serviceFee;
-
-        if (_activeOrderId != null) {
-          await txn.update(
-            'orders',
-            {
-              'total': grandTotal,
-              'payment_type': paymentType,
-              'status': 1,
-              'waiter_id': resolvedWaiterId,
-              'closed_at': now.toIso8601String(),
-              'room_charge': roomCharge,
-              'paid_amount': paidAmount,
-              'receipt_change': change,
-              'food_total': foodTotal,
-              'room_total': roomCharge,
-              'service_total': serviceFee,
-              'grand_total': grandTotal,
-              'daily_number': preDailyNo,
-              'shift_id': activeShiftId,
-              'note': (note != null && note.trim().isNotEmpty)
-                  ? note.trim()
-                  : null,
-            },
-            where: 'id = ?',
-            whereArgs: [orderId],
-          );
-        } else {
-          final order = Order(
-            id: orderId,
-            total: grandTotal,
-            paymentType: paymentType,
-            createdAt: now,
-            orderType: orderType,
-            tableId: resolvedTableId,
-            waiterId: resolvedWaiterId,
-            locationId: resolvedLocationId,
-            status: 1,
-            paidAmount: paidAmount,
-            change: change,
-            foodTotal: foodTotal,
-            roomTotal: roomCharge,
-            serviceTotal: serviceFee,
-            grandTotal: grandTotal,
-            openedAt: now,
-            closedAt: now,
-            dailyNumber: preDailyNo,
-            shiftId: activeShiftId,
-            note: (note != null && note.trim().isNotEmpty) ? note.trim() : null,
-          );
-          await txn.insert('orders', order.toMap());
-        }
-
-        if (_activeOrderId != null) {
-          await txn.delete(
-            'order_items',
-            where: 'order_id = ?',
-            whereArgs: [orderId],
+      // Buyurtma qatorlarini tayyorlash (bundle JSON biznes logikasi bilan)
+      for (var item in _items.values) {
+        String? bundleJson;
+        if (item.product.isSet && item.product.bundleItems != null) {
+          bundleJson = jsonEncode(
+            item.product.bundleItems!.map((bi) => bi.toMap()).toList(),
           );
         }
+        orderItems.add(OrderItem(
+          orderId: orderId,
+          productId: item.product.id!,
+          qty: item.quantity,
+          unit: item.product.unit,
+          price: item.product.price,
+          productName: item.product.name,
+          bundleItemsJson: bundleJson,
+          discountAmount: item.discountAmount,
+        ));
+      }
 
-        for (var item in _items.values) {
-          String? bundleJson;
-          if (item.product.isSet && item.product.bundleItems != null) {
-            bundleJson = jsonEncode(
-              item.product.bundleItems!.map((bi) => bi.toMap()).toList(),
-            );
-          }
+      final cleanedNote =
+          (note != null && note.trim().isNotEmpty) ? note.trim() : null;
 
-          final orderItem = OrderItem(
-            orderId: orderId,
-            productId: item.product.id!,
-            qty: item.quantity,
-            unit: item.product.unit,
-            price: item.product.price,
-            productName: item.product.name,
-            bundleItemsJson: bundleJson,
-          );
-          await txn.insert('order_items', orderItem.toMap());
-          orderItems.add(orderItem);
-        }
-
-        if (tableId != null || _activeTableId != null) {
-          await txn.update(
-            'tables',
-            {'status': 0, 'active_order_id': null},
-            where: 'active_order_id = ?',
-            whereArgs: [orderId],
-          );
-        }
-
-        return {
-          'roomCharge': roomCharge,
-          'serviceFee': serviceFee,
-          'foodTotal': foodTotal,
-          'grandTotal': grandTotal,
-        };
-      });
+      // To'lovni yakunlash (xona narxi hisobi + yozuv) — bitta tranzaksiyada
+      final totals = await _repo.commitCheckout(
+        orderId: orderId,
+        isExistingOrder: _activeOrderId != null,
+        currentTableId: currentTableId,
+        resolvedTableId: resolvedTableId,
+        resolvedLocationId: resolvedLocationId,
+        resolvedWaiterId: resolvedWaiterId,
+        orderType: orderType,
+        paymentType: paymentType,
+        paidAmount: paidAmount,
+        change: change,
+        preDailyNo: preDailyNo,
+        activeShiftId: activeShiftId,
+        cleanedNote: cleanedNote,
+        discountType: _orderDiscountType,
+        discountValue: _orderDiscountValue,
+        discountNote: _orderDiscountNote,
+        foodTotal: totalAmount,
+        discountAmount: orderDiscountAmount,
+        serviceFee: preServiceFee,
+        totalForServiceCharge: totalForServiceCharge,
+        openedAt: _activeOpenedAt,
+        items: orderItems,
+      );
 
       final double currentRoomCharge = totals['roomCharge']!;
       final double currentServiceFee = totals['serviceFee']!;
@@ -1306,6 +1230,9 @@ class CartProvider extends ChangeNotifier {
         paidAmount: paidAmount,
         change: change,
         note: (note != null && note.trim().isNotEmpty) ? note.trim() : null,
+        discountType: _orderDiscountType,
+        discountValue: _orderDiscountValue,
+        discountNote: _orderDiscountNote,
       );
 
       final connectivity = context.read<ConnectivityProvider>();
@@ -1330,7 +1257,7 @@ class CartProvider extends ChangeNotifier {
 
         if (!paySuccess) {
           debugPrint("Server payOrder failed");
-          return false;
+          return null;
         }
       } else {
         // Local or Server mode
@@ -1344,15 +1271,7 @@ class CartProvider extends ChangeNotifier {
           }
         } else {
           // Basic stock tracking: always decrement products.quantity in DB
-          final db = await DatabaseHelper.instance.database;
-          for (final item in orderItems) {
-            await db.rawUpdate(
-              'UPDATE products '
-              'SET quantity = MAX(0, COALESCE(quantity, 0) - ?) '
-              'WHERE id = ? AND quantity IS NOT NULL',
-              [item.qty, item.productId],
-            );
-          }
+          await _repo.decrementProductStock(orderItems);
         }
       }
 
@@ -1370,11 +1289,15 @@ class CartProvider extends ChangeNotifier {
         );
       }
 
+      AppLogger.i('Checkout', 'To\'lov qabul qilindi | buyurtma=${populatedOrder.id} | jami=${currentGrandTotal.toStringAsFixed(0)} | to\'lov=$paymentType | stol=$safeTableName');
+
       _lastPrintError = null;
       if (shouldPrint) {
         try {
           await PrintingService.printReceipt(order: populatedOrder);
+          AppLogger.i('Checkout', 'Chek chop etildi | buyurtma=${populatedOrder.id}');
         } catch (printError) {
+          AppLogger.e('Checkout', 'Chek chop etishda xato | buyurtma=${populatedOrder.id}', printError);
           _lastPrintError = 'Printer xatoligi: $printError';
           notifyListeners();
         }
@@ -1386,6 +1309,9 @@ class CartProvider extends ChangeNotifier {
       _activeLocationId = null;
       _activeOpenedAt = null;
       _items.clear();
+      _orderDiscountType = null;
+      _orderDiscountValue = 0;
+      _orderDiscountNote = null;
       notifyListeners();
 
       // ShiftProvider live summaryni yangilash
@@ -1395,10 +1321,10 @@ class CartProvider extends ChangeNotifier {
         } catch (_) {}
       }
 
-      return true;
-    } catch (e) {
-      debugPrint("Checkout error: $e");
-      return false;
+      return orderId;
+    } catch (e, st) {
+      AppLogger.e('Checkout', 'To\'lov jarayonida kritik xato', e, st);
+      return null;
     }
   }
 
@@ -1408,30 +1334,12 @@ class CartProvider extends ChangeNotifier {
     // If neither order nor table is known, no charge possible
     if (orderId == null && currentTableId == null) return 0;
     try {
-      final db = await DatabaseHelper.instance.database;
       // Include current table by id too (same as checkout) in case active_order_id
       // is not yet written to DB for a brand-new order.
-      late List<Map<String, dynamic>> linkedTables;
-      if (orderId != null && currentTableId != null) {
-        linkedTables = await db.query(
-          'tables',
-          where: 'active_order_id = ? OR id = ?',
-          whereArgs: [orderId, currentTableId],
-        );
-      } else if (orderId != null) {
-        linkedTables = await db.query(
-          'tables',
-          where: 'active_order_id = ?',
-          whereArgs: [orderId],
-        );
-      } else {
-        // orderId is null but tableId is known — fresh order not yet in DB
-        linkedTables = await db.query(
-          'tables',
-          where: 'id = ?',
-          whereArgs: [currentTableId],
-        );
-      }
+      final linkedTables = await _repo.getLinkedTables(
+        orderId: orderId,
+        tableId: currentTableId,
+      );
 
       double totalCharge = 0;
       final now = DateTime.now();
@@ -1533,12 +1441,10 @@ class CartProvider extends ChangeNotifier {
         (connectivity == null ||
             connectivity.mode != ConnectivityMode.client)) {
       try {
-        final db = await DatabaseHelper.instance.database;
-        await db.update(
-          'tables',
-          {'status': 1, 'active_order_id': _activeOrderId},
-          where: 'id = ?',
-          whereArgs: [_activeTableId],
+        await _repo.updateTableLink(
+          _activeTableId!,
+          status: 1,
+          activeOrderId: _activeOrderId,
         );
         WebSocketManager.instance.broadcast('tables_updated', {
           'table_id': _activeTableId,
@@ -1572,30 +1478,7 @@ class CartProvider extends ChangeNotifier {
         }
       } else {
         // Local mode: delete from local database
-        final db = await DatabaseHelper.instance.database;
-        await db.transaction((txn) async {
-          // Delete order items
-          await txn.delete(
-            'order_items',
-            where: 'order_id = ?',
-            whereArgs: [_activeOrderId],
-          );
-
-          // Delete order
-          await txn.delete(
-            'orders',
-            where: 'id = ?',
-            whereArgs: [_activeOrderId],
-          );
-
-          // Reset tables linked to this order
-          await txn.update(
-            'tables',
-            {'status': 0, 'active_order_id': null},
-            where: 'active_order_id = ?',
-            whereArgs: [_activeOrderId],
-          );
-        });
+        await _repo.cancelOrderLocal(_activeOrderId!);
         WebSocketManager.instance.broadcast('tables_updated');
       }
 
@@ -1691,36 +1574,12 @@ class CartProvider extends ChangeNotifier {
         }
       } else {
         // Local mode: update in local database
-        final db = await DatabaseHelper.instance.database;
-        await db.transaction((txn) async {
-          // Update order with new table
-          await txn.update(
-            'orders',
-            {'table_id': newTableId, 'location_id': newLocationId},
-            where: 'id = ?',
-            whereArgs: [_activeOrderId],
-          );
-
-          // OLD TABLE: handle multi-table cleanup
-          // If this was the ONLY table for this order, we'd clear it.
-          // But to be safe and simple for "Move", we clear current table and set new one.
-          if (_activeTableId != null) {
-            await txn.update(
-              'tables',
-              {'status': 0, 'active_order_id': null},
-              where: 'id = ?',
-              whereArgs: [_activeTableId],
-            );
-          }
-
-          // NEW TABLE: occupy
-          await txn.update(
-            'tables',
-            {'status': 1, 'active_order_id': _activeOrderId},
-            where: 'id = ?',
-            whereArgs: [newTableId],
-          );
-        });
+        await _repo.moveOrderLocal(
+          orderId: _activeOrderId!,
+          newTableId: newTableId,
+          newLocationId: newLocationId,
+          oldTableId: _activeTableId,
+        );
       }
 
       // Audit: Stol o'zgarganda
@@ -1778,106 +1637,22 @@ class CartProvider extends ChangeNotifier {
         return success;
       }
 
-      final db = await DatabaseHelper.instance.database;
-
-      // 1. Get source and target table info
-      final sourceTableRes = await db.query(
-        'tables',
-        where: 'id = ?',
-        whereArgs: [sourceTableId],
+      final finalOrderId = await _repo.mergeTablesLocal(
+        sourceTableId,
+        targetTableId,
       );
-      final targetTableRes = await db.query(
-        'tables',
-        where: 'id = ?',
-        whereArgs: [targetTableId],
+      if (finalOrderId == null) return false; // Birlashtirishga narsa yo'q
+
+      // Audit log
+      AuditService.instance.logAction(
+        action: 'merge_table',
+        entity: 'order',
+        entityId: finalOrderId,
+        after: {
+          'source_table_id': sourceTableId,
+          'target_table_id': targetTableId,
+        },
       );
-
-      if (sourceTableRes.isEmpty || targetTableRes.isEmpty) return false;
-
-      final String? sourceOrderId =
-          sourceTableRes.first['active_order_id'] as String?;
-      final String? targetOrderId =
-          targetTableRes.first['active_order_id'] as String?;
-
-      if (sourceOrderId == null && targetOrderId == null) {
-        return false; // Both empty? Nothing to merge.
-      }
-
-      await db.transaction((txn) async {
-        String finalOrderId;
-
-        if (targetOrderId != null) {
-          finalOrderId = targetOrderId;
-          if (sourceOrderId != null && sourceOrderId != targetOrderId) {
-            // TRANSFER Items from source to target
-            final sourceItems = await txn.query(
-              'order_items',
-              where: 'order_id = ?',
-              whereArgs: [sourceOrderId],
-            );
-            for (var item in sourceItems) {
-              // Check if same product exists in target
-              final existing = await txn.query(
-                'order_items',
-                where: 'order_id = ? AND product_id = ?',
-                whereArgs: [finalOrderId, item['product_id']],
-              );
-
-              if (existing.isNotEmpty) {
-                final srcPrintedQty =
-                    (item['printed_qty'] as num? ?? item['qty'] as num)
-                        .toDouble();
-                await txn.rawUpdate(
-                  'UPDATE order_items SET qty = qty + ?, printed_qty = printed_qty + ? WHERE id = ?',
-                  [item['qty'], srcPrintedQty, existing.first['id']],
-                );
-              } else {
-                await txn.insert('order_items', {
-                  'order_id': finalOrderId,
-                  'product_id': item['product_id'],
-                  'qty': item['qty'],
-                  'price': item['price'],
-                  'bundle_items_json': item['bundle_items_json'],
-                  'printed_qty': item['printed_qty'] ?? item['qty'],
-                });
-              }
-            }
-            // Delete source order
-            await txn.delete(
-              'order_items',
-              where: 'order_id = ?',
-              whereArgs: [sourceOrderId],
-            );
-            await txn.delete(
-              'orders',
-              where: 'id = ?',
-              whereArgs: [sourceOrderId],
-            );
-          }
-        } else {
-          // target is empty, source has order. Just link target to source order.
-          finalOrderId = sourceOrderId!;
-        }
-
-        // Link both tables to the same order ID
-        await txn.update(
-          'tables',
-          {'status': 1, 'active_order_id': finalOrderId},
-          where: 'id = ? OR id = ?',
-          whereArgs: [sourceTableId, targetTableId],
-        );
-
-        // Audit log
-        AuditService.instance.logAction(
-          action: 'merge_table',
-          entity: 'order',
-          entityId: finalOrderId,
-          after: {
-            'source_table_id': sourceTableId,
-            'target_table_id': targetTableId,
-          },
-        );
-      });
 
       // Notify other connected devices
       WebSocketManager.instance.broadcast('tables_updated');

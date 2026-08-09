@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../models/shift_models.dart';
 import '../repositories/shift_repository.dart';
 import '../core/services/shift_service.dart';
-import '../core/database_helper.dart';
 
 class ShiftProvider extends ChangeNotifier {
   final ShiftRepository _repo = ShiftRepository();
@@ -215,29 +214,13 @@ class ShiftProvider extends ChangeNotifier {
   // ── Avtomatik smena ───────────────────────────────────────────────────────
 
   Future<void> _loadAutoShiftSettings() async {
-    final db = await DatabaseHelper.instance.database;
-    final rows = await db.query(
-      'settings',
-      where: "key IN ('auto_shift_enabled', 'auto_shift_start', 'auto_shift_end', 'day_reset_time')",
-    );
-    for (final row in rows) {
-      final key = row['key'] as String;
-      final val = row['value'] as String? ?? '';
-      switch (key) {
-        case 'auto_shift_enabled':
-          _autoShiftEnabled = val == '1';
-          break;
-        case 'auto_shift_start':
-          if (val.isNotEmpty) _autoShiftStart = val;
-          break;
-        case 'auto_shift_end':
-          if (val.isNotEmpty) _autoShiftEnd = val;
-          break;
-        case 'day_reset_time':
-          _dayResetTime = val;
-          break;
-      }
-    }
+    final settings = await _repo.getAutoShiftSettings();
+    _autoShiftEnabled = settings['auto_shift_enabled'] == '1';
+    final start = settings['auto_shift_start'];
+    if (start != null && start.isNotEmpty) _autoShiftStart = start;
+    final end = settings['auto_shift_end'];
+    if (end != null && end.isNotEmpty) _autoShiftEnd = end;
+    _dayResetTime = settings['day_reset_time'] ?? '';
   }
 
   Future<void> saveAutoShiftSettings({
@@ -246,24 +229,13 @@ class ShiftProvider extends ChangeNotifier {
     required String end,
     required String dayResetTime,
   }) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.rawInsert(
-      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-      ['auto_shift_enabled', enabled ? '1' : '0'],
-    );
-    await db.rawInsert(
-      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-      ['auto_shift_start', start],
-    );
-    await db.rawInsert(
-      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-      ['day_reset_time', dayResetTime],
+    await _repo.saveAutoShiftSettings(
+      enabled: enabled,
+      start: start,
+      end: end,
+      dayResetTime: dayResetTime,
     );
     _dayResetTime = dayResetTime;
-    await db.rawInsert(
-      'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
-      ['auto_shift_end', end],
-    );
     _autoShiftEnabled = enabled;
     _autoShiftStart = start;
     _autoShiftEnd = end;
@@ -305,13 +277,7 @@ class ShiftProvider extends ChangeNotifier {
   Future<void> _autoOpenShift() async {
     try {
       // Use first admin user; fall back to 0 (system) if none found
-      final db = await DatabaseHelper.instance.database;
-      final adminRes = await db.query(
-        'users',
-        where: "role = 'admin' AND is_active = 1",
-        limit: 1,
-      );
-      final userId = adminRes.isNotEmpty ? (adminRes.first['id'] as int) : 0;
+      final userId = await _repo.getFirstAdminUserId();
 
       await _service.openShift(0, userId);
       _activeShift = await _repo.getOpenShift();

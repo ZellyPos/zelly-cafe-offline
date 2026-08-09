@@ -4,6 +4,7 @@ class Transaction {
   final String type; // 'outlay', 'payment', 'expense_outlay'
   final double amount;
   final String? note;
+  final String? orderId;
   final DateTime createdAt;
 
   Transaction({
@@ -12,6 +13,7 @@ class Transaction {
     required this.type,
     required this.amount,
     this.note,
+    this.orderId,
     required this.createdAt,
   });
 
@@ -22,6 +24,7 @@ class Transaction {
       'type': type,
       'amount': amount,
       'note': note,
+      'order_id': orderId,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -33,6 +36,7 @@ class Transaction {
       type: map['type'] as String,
       amount: (map['amount'] as num).toDouble(),
       note: map['note'] as String?,
+      orderId: map['order_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }

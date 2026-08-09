@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_onscreen_keyboard/flutter_onscreen_keyboard.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +10,7 @@ import '../../providers/category_provider.dart';
 import '../../core/theme.dart';
 import '../../core/app_strings.dart';
 import '../../core/printing_service.dart';
-import '../../core/database_helper.dart';
+import '../../data/repositories/order_repository.dart';
 import '../../core/server/websocket_manager.dart';
 import '../../providers/waiter_provider.dart';
 import '../../providers/connectivity_provider.dart';
@@ -325,7 +326,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildDineInHeader(BuildContext context, bool isCompact) {
-    final cartProvider = context.read<CartProvider>();
+    final cartProvider = context.watch<CartProvider>();
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -877,6 +878,7 @@ class _PosScreenState extends State<PosScreen> {
                 final isSelected = selectedCategory == cat;
 
                 Color? catColor;
+                String? catImagePath;
                 if (cat != AppStrings.all) {
                   try {
                     final category = categoryProvider.categories.firstWhere(
@@ -887,10 +889,13 @@ class _PosScreenState extends State<PosScreen> {
                         int.parse(category.color!.replaceFirst('#', '0xFF')),
                       );
                     }
+                    catImagePath = category.imagePath;
                   } catch (_) {}
                 }
 
                 final effectiveColor = catColor ?? theme.colorScheme.primary;
+                final hasImage =
+                    catImagePath != null && File(catImagePath).existsSync();
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
@@ -906,38 +911,102 @@ class _PosScreenState extends State<PosScreen> {
                     borderRadius: BorderRadius.circular(10),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 14,
-                      ),
+                      height: hasImage ? 72 : null,
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? effectiveColor.withValues(alpha: 0.12)
-                            : Colors.transparent,
+                        color: hasImage
+                            ? Colors.transparent
+                            : (isSelected
+                                  ? effectiveColor.withValues(alpha: 0.12)
+                                  : Colors.transparent),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border(
-                          left: BorderSide(
-                            color: isSelected
-                                ? effectiveColor
-                                : Colors.transparent,
-                            width: 3,
-                          ),
-                        ),
-                      ),
-                      child: Text(
-                        cat,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: isSelected
-                              ? effectiveColor
-                              : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.75,
+                        border: hasImage
+                            ? Border.all(
+                                color: isSelected
+                                    ? AppTheme.primaryColor
+                                    : Colors.transparent,
+                                width: 2,
+                              )
+                            : Border(
+                                left: BorderSide(
+                                  color: isSelected
+                                      ? effectiveColor
+                                      : Colors.transparent,
+                                  width: 3,
                                 ),
-                        ),
+                              ),
                       ),
+                      child: hasImage
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image.file(
+                                    File(catImagePath!),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox.shrink(),
+                                  ),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.6),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Align(
+                                    alignment: Alignment.bottomLeft,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                      child: Text(
+                                        cat,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                          shadows: [
+                                            Shadow(
+                                              blurRadius: 4,
+                                              color: Colors.black54,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 14,
+                              ),
+                              child: Text(
+                                cat,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                  color: isSelected
+                                      ? effectiveColor
+                                      : theme.colorScheme.onSurface.withValues(
+                                          alpha: 0.75,
+                                        ),
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                 );
@@ -992,6 +1061,7 @@ class _PosScreenState extends State<PosScreen> {
         final cat = categories[index];
         final isSelected = selectedCategory == cat;
         Color? catColor;
+        String? catImagePath;
         if (cat != AppStrings.all) {
           try {
             final category = categoryProvider.categories.firstWhere(
@@ -1002,8 +1072,10 @@ class _PosScreenState extends State<PosScreen> {
                 int.parse(category.color!.replaceFirst('#', '0xFF')),
               );
             }
+            catImagePath = category.imagePath;
           } catch (_) {}
         }
+        final hasImage = catImagePath != null && File(catImagePath).existsSync();
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: InkWell(
@@ -1019,7 +1091,9 @@ class _PosScreenState extends State<PosScreen> {
             borderRadius: BorderRadius.circular(12),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(
+                horizontal: hasImage ? 8 : 20,
+              ),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: isSelected
@@ -1033,13 +1107,32 @@ class _PosScreenState extends State<PosScreen> {
                 ),
                 boxShadow: isSelected ? AppTheme.softShadow : null,
               ),
-              child: Text(
-                cat,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: isSelected ? Colors.white : const Color(0xFF64748B),
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (hasImage) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.file(
+                        File(catImagePath!),
+                        width: 32,
+                        height: 32,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    cat,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: isSelected ? Colors.white : const Color(0xFF64748B),
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1063,7 +1156,7 @@ class _PosScreenState extends State<PosScreen> {
       builder: (context) => StandardPaymentDialog(
         orderType: widget.orderType,
         table: widget.table,
-        total: cartProvider.totalAmount + charge + serviceFee,
+        total: (cartProvider.totalAmount - cartProvider.orderDiscountAmount + charge + serviceFee).clamp(0.0, double.infinity),
       ),
     ).then((success) {
       if (success == true) {
@@ -1279,6 +1372,7 @@ class _PosScreenState extends State<PosScreen> {
                       final isSelected = selectedCategory == cat;
 
                       Color? catColor;
+                      String? catImagePath;
                       if (cat != AppStrings.all) {
                         try {
                           final category = categoryProvider.categories
@@ -1290,49 +1384,99 @@ class _PosScreenState extends State<PosScreen> {
                               ),
                             );
                           }
+                          catImagePath = category.imagePath;
                         } catch (_) {}
                       }
 
                       final bool isDark =
                           catColor != null && catColor.computeLuminance() < 0.5;
+                      final hasImage = catImagePath != null &&
+                          File(catImagePath).existsSync();
 
-                      return InkWell(
-                        onTap: () {
-                          setState(() => selectedCategory = cat);
-                          _pageController.jumpToPage(index);
-                          _scrollToCategory(index);
-                          Navigator.pop(context);
-                        },
+                      return ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: catColor ?? theme.colorScheme.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: isSelected
-                                ? Border.all(
-                                    color: AppTheme.primaryColor,
-                                    width: 2,
-                                  )
-                                : null,
-                            boxShadow: [
-                              BoxShadow(
-                                color: theme.shadowColor.withOpacity(0.05),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.all(8),
-                          child: Text(
-                            cat,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: catColor != null
-                                  ? (isDark ? Colors.white : Colors.black)
-                                  : theme.colorScheme.onSurface,
+                        child: InkWell(
+                          onTap: () {
+                            setState(() => selectedCategory = cat);
+                            _pageController.jumpToPage(index);
+                            _scrollToCategory(index);
+                            Navigator.pop(context);
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: catColor ?? theme.colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: isSelected
+                                  ? Border.all(
+                                      color: AppTheme.primaryColor,
+                                      width: 2.5,
+                                    )
+                                  : null,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: theme.shadowColor.withOpacity(0.05),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (hasImage)
+                                  Image.file(
+                                    File(catImagePath!),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox.shrink(),
+                                  ),
+                                if (hasImage)
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.6),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                Align(
+                                  alignment: hasImage
+                                      ? Alignment.bottomCenter
+                                      : Alignment.center,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Text(
+                                      cat,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: hasImage
+                                            ? Colors.white
+                                            : (catColor != null
+                                                  ? (isDark
+                                                        ? Colors.white
+                                                        : Colors.black)
+                                                  : theme
+                                                        .colorScheme.onSurface),
+                                        shadows: hasImage
+                                            ? [
+                                                const Shadow(
+                                                  blurRadius: 4,
+                                                  color: Colors.black54,
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -1482,16 +1626,7 @@ class _PosScreenState extends State<PosScreen> {
               {'bill_requested': 1},
             );
           } else {
-            final db = await DatabaseHelper.instance.database;
-            await db.update(
-              'orders',
-              {
-                'bill_requested': 1,
-                'bill_requested_at': DateTime.now().toIso8601String(),
-              },
-              where: 'id = ?',
-              whereArgs: [orderId],
-            );
+            await OrderRepository().markBillRequested(orderId);
           }
           WebSocketManager.instance.broadcast('tables_updated', {
             'table_id': widget.table?.id,

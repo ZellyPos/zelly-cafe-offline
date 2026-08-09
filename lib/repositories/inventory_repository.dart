@@ -2,6 +2,39 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../core/database_helper.dart';
 import '../models/inventory_models.dart';
 
+/// Ombor birligi turi: xomashyo yoki tayyor mahsulot.
+enum StockItemKind { ingredient, product }
+
+/// Harakat yo'nalishi: kirim yoki chiqim.
+enum StockDirection { inbound, outbound }
+
+/// Kirim/Chiqim sahifasidagi bitta qator (§4.5).
+class StockBatchLine {
+  final StockItemKind kind;
+  final int itemId;
+  final StockDirection direction;
+  final double qty;
+
+  /// Tannarx — faqat kirimda ishlatiladi (o'rtacha tannarx hisobi uchun).
+  final double cost;
+
+  /// "Kimdan olindi" — faqat kirimda.
+  final String? supplier;
+
+  /// Izoh — asosan chiqimda (sabab).
+  final String? note;
+
+  const StockBatchLine({
+    required this.kind,
+    required this.itemId,
+    required this.direction,
+    required this.qty,
+    this.cost = 0,
+    this.supplier,
+    this.note,
+  });
+}
+
 class InventoryRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
@@ -188,5 +221,573 @@ class InventoryRepository {
       ORDER BY sm.created_at DESC
       LIMIT 100
     ''');
+  }
+
+  // --- Kirim / Chiqim (tannarx + yetkazuvchi) ---
+
+  /// Xomashyo kirimi: qoldiq ↑ va o'rtacha tannarx qayta hisoblanadi
+  /// (og'irlikli o'rtacha).
+  Future<void> stockIn({
+    required int ingredientId,
+    required double qty,
+    double cost = 0,
+    String? supplier,
+    int? userId,
+  }) async {
+    final db = await _dbHelper.database;
+    await db.transaction(
+      (txn) => _ingredientIn(
+        txn,
+        DateTime.now().toIso8601String(),
+        ingredientId: ingredientId,
+        qty: qty,
+        cost: cost,
+        supplier: supplier,
+        userId: userId,
+      ),
+    );
+  }
+
+  /// Xomashyo chiqimi (waste yoki boshqa sabab).
+  Future<void> stockOut({
+    required int ingredientId,
+    required double qty,
+    String reason = 'waste',
+    String? note,
+    int? userId,
+  }) async {
+    final db = await _dbHelper.database;
+    await db.transaction(
+      (txn) => _ingredientOut(
+        txn,
+        DateTime.now().toIso8601String(),
+        ingredientId: ingredientId,
+        qty: qty,
+        reason: reason,
+        note: note,
+        userId: userId,
+      ),
+    );
+  }
+
+  /// Resale (sotib olinadigan) mahsulot kirimi: son ↑ va o'rtacha tannarx.
+  Future<void> resaleStockIn({
+    required int productId,
+    required double qty,
+    double cost = 0,
+    String? supplier,
+    int? userId,
+  }) async {
+    final db = await _dbHelper.database;
+    await db.transaction(
+      (txn) => _productIn(
+        txn,
+        DateTime.now().toIso8601String(),
+        productId: productId,
+        qty: qty,
+        cost: cost,
+        supplier: supplier,
+        userId: userId,
+      ),
+    );
+  }
+
+  /// Tayyor mahsulot chiqimi (buzilish / waste).
+  Future<void> productWaste({
+    required int productId,
+    required double qty,
+    String? note,
+    int? userId,
+  }) async {
+    final db = await _dbHelper.database;
+    await db.transaction(
+      (txn) => _productOut(
+        txn,
+        DateTime.now().toIso8601String(),
+        productId: productId,
+        qty: qty,
+        note: note,
+        userId: userId,
+      ),
+    );
+  }
+
+  /// Ko'p qatorli kirim/chiqim (§4.5) — **bitta tranzaksiyada**.
+  ///
+  /// Bitta qator xato bersa hammasi bekor bo'ladi: yarim yozilgan holat
+  /// bo'lmaydi.
+  Future<void> applyStockBatch(
+    List<StockBatchLine> lines, {
+    int? userId,
+  }) async {
+    if (lines.isEmpty) return;
+    final db = await _dbHelper.database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      for (final line in lines) {
+        final isIn = line.direction == StockDirection.inbound;
+        if (line.kind == StockItemKind.ingredient) {
+          if (isIn) {
+            await _ingredientIn(
+              txn,
+              now,
+              ingredientId: line.itemId,
+              qty: line.qty,
+              cost: line.cost,
+              supplier: line.supplier,
+              userId: userId,
+            );
+          } else {
+            await _ingredientOut(
+              txn,
+              now,
+              ingredientId: line.itemId,
+              qty: line.qty,
+              note: line.note,
+              userId: userId,
+            );
+          }
+        } else {
+          if (isIn) {
+            await _productIn(
+              txn,
+              now,
+              productId: line.itemId,
+              qty: line.qty,
+              cost: line.cost,
+              supplier: line.supplier,
+              userId: userId,
+            );
+          } else {
+            await _productOut(
+              txn,
+              now,
+              productId: line.itemId,
+              qty: line.qty,
+              note: line.note,
+              userId: userId,
+            );
+          }
+        }
+      }
+    });
+  }
+
+  // --- Kirim/chiqim primitivlari (tranzaksiya ichida ishlaydi) ---
+
+  Future<void> _ingredientIn(
+    Transaction txn,
+    String now, {
+    required int ingredientId,
+    required double qty,
+    required double cost,
+    String? supplier,
+    int? userId,
+  }) async {
+    final stockRows = await txn.query(
+      'ingredient_stock',
+      where: 'ingredient_id = ?',
+      whereArgs: [ingredientId],
+    );
+    final onHand = stockRows.isNotEmpty
+        ? (stockRows.first['on_hand'] as num).toDouble()
+        : 0.0;
+    final ingRows = await txn.query(
+      'ingredients',
+      columns: ['avg_cost'],
+      where: 'id = ?',
+      whereArgs: [ingredientId],
+    );
+    final oldAvg = ingRows.isNotEmpty
+        ? (ingRows.first['avg_cost'] as num?)?.toDouble() ?? 0
+        : 0;
+
+    // Og'irlikli o'rtacha tannarx. Tannarx kiritilmagan bo'lsa (cost <= 0)
+    // eski o'rtachani nolga tushirib yubormaymiz.
+    final newOnHand = onHand + qty;
+    final double newAvg;
+    if (cost <= 0) {
+      newAvg = oldAvg.toDouble();
+    } else {
+      newAvg = newOnHand > 0
+          ? (onHand * oldAvg + qty * cost) / newOnHand
+          : cost;
+    }
+
+    await txn.insert('stock_movements', {
+      'ingredient_id': ingredientId,
+      'type': 'IN',
+      'qty': qty,
+      'reason': 'purchase',
+      'cost_price': cost,
+      'supplier': supplier,
+      'created_at': now,
+      'created_by': userId,
+    });
+    await txn.rawUpdate(
+      'UPDATE ingredient_stock SET on_hand = on_hand + ?, updated_at = ? WHERE ingredient_id = ?',
+      [qty, now, ingredientId],
+    );
+    await txn.update(
+      'ingredients',
+      {'avg_cost': newAvg},
+      where: 'id = ?',
+      whereArgs: [ingredientId],
+    );
+  }
+
+  Future<void> _ingredientOut(
+    Transaction txn,
+    String now, {
+    required int ingredientId,
+    required double qty,
+    String reason = 'waste',
+    String? note,
+    int? userId,
+  }) async {
+    await txn.insert('stock_movements', {
+      'ingredient_id': ingredientId,
+      'type': 'OUT',
+      'qty': qty,
+      'reason': reason,
+      'note': note,
+      'created_at': now,
+      'created_by': userId,
+    });
+    await txn.rawUpdate(
+      'UPDATE ingredient_stock SET on_hand = on_hand - ?, updated_at = ? WHERE ingredient_id = ?',
+      [qty, now, ingredientId],
+    );
+  }
+
+  Future<void> _productIn(
+    Transaction txn,
+    String now, {
+    required int productId,
+    required double qty,
+    required double cost,
+    String? supplier,
+    int? userId,
+  }) async {
+    final rows = await txn.query(
+      'products',
+      columns: ['quantity', 'avg_cost'],
+      where: 'id = ?',
+      whereArgs: [productId],
+    );
+    final oldQty = rows.isNotEmpty
+        ? (rows.first['quantity'] as num?)?.toDouble() ?? 0
+        : 0;
+    final oldAvg = rows.isNotEmpty
+        ? (rows.first['avg_cost'] as num?)?.toDouble() ?? 0
+        : 0;
+    final newQty = oldQty + qty;
+    final double newAvg;
+    if (cost <= 0) {
+      newAvg = oldAvg.toDouble();
+    } else {
+      newAvg = newQty > 0 ? (oldQty * oldAvg + qty * cost) / newQty : cost;
+    }
+
+    await txn.rawUpdate(
+      'UPDATE products SET quantity = COALESCE(quantity, 0) + ?, avg_cost = ? WHERE id = ?',
+      [qty, newAvg, productId],
+    );
+    await txn.insert('product_movements', {
+      'product_id': productId,
+      'type': 'PURCHASE',
+      'qty': qty,
+      'cost_price': cost,
+      'supplier': supplier,
+      'created_at': now,
+      'created_by': userId,
+    });
+  }
+
+  Future<void> _productOut(
+    Transaction txn,
+    String now, {
+    required int productId,
+    required double qty,
+    String? note,
+    int? userId,
+  }) async {
+    await txn.rawUpdate(
+      'UPDATE products SET quantity = COALESCE(quantity, 0) - ? WHERE id = ?',
+      [qty, productId],
+    );
+    await txn.insert('product_movements', {
+      'product_id': productId,
+      'type': 'WASTE',
+      'qty': qty,
+      'note': note,
+      'created_at': now,
+      'created_by': userId,
+    });
+  }
+
+  // --- Inventarizatsiya (real songa tenglashtirish) ---
+
+  /// Xomashyolarni real songa tenglashtiradi; farqni ADJUST sifatida yozadi.
+  Future<void> reconcileIngredients(
+    Map<int, double> realCounts, {
+    int? userId,
+  }) async {
+    final db = await _dbHelper.database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      for (final entry in realCounts.entries) {
+        final rows = await txn.query(
+          'ingredient_stock',
+          where: 'ingredient_id = ?',
+          whereArgs: [entry.key],
+        );
+        final system = rows.isNotEmpty
+            ? (rows.first['on_hand'] as num).toDouble()
+            : 0.0;
+        final diff = entry.value - system;
+        await txn.update(
+          'ingredient_stock',
+          {'on_hand': entry.value, 'updated_at': now},
+          where: 'ingredient_id = ?',
+          whereArgs: [entry.key],
+        );
+        await txn.insert('stock_movements', {
+          'ingredient_id': entry.key,
+          'type': 'ADJUST',
+          'qty': diff,
+          'reason': 'inventory',
+          'created_at': now,
+          'created_by': userId,
+        });
+      }
+    });
+  }
+
+  /// Tayyor mahsulotlarni real songa tenglashtiradi; farqni ADJUST sifatida yozadi.
+  Future<void> reconcileProducts(
+    Map<int, double> realCounts, {
+    int? userId,
+  }) async {
+    final db = await _dbHelper.database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      for (final entry in realCounts.entries) {
+        final rows = await txn.query(
+          'products',
+          columns: ['quantity'],
+          where: 'id = ?',
+          whereArgs: [entry.key],
+        );
+        final system = rows.isNotEmpty
+            ? (rows.first['quantity'] as num?)?.toDouble() ?? 0
+            : 0;
+        final diff = entry.value - system;
+        await txn.rawUpdate('UPDATE products SET quantity = ? WHERE id = ?', [
+          entry.value,
+          entry.key,
+        ]);
+        await txn.insert('product_movements', {
+          'product_id': entry.key,
+          'type': 'ADJUST',
+          'qty': diff,
+          'note': 'inventory',
+          'created_at': now,
+          'created_by': userId,
+        });
+      }
+    });
+  }
+
+  // --- O'qish (ombor ekranlari uchun) ---
+
+  /// Xomashyolar qoldiq bilan birga (JOIN).
+  Future<List<Map<String, dynamic>>> getIngredientsWithStock() async {
+    final db = await _dbHelper.database;
+    return db.rawQuery('''
+      SELECT i.*, COALESCE(s.on_hand, 0) as on_hand
+      FROM ingredients i
+      LEFT JOIN ingredient_stock s ON s.ingredient_id = i.id
+      WHERE i.is_active = 1
+      ORDER BY i.name ASC
+    ''');
+  }
+
+  /// Tayyor (prepared) mahsulotlar.
+  Future<List<Map<String, dynamic>>> getPreparedProducts() async {
+    final db = await _dbHelper.database;
+    return db.query(
+      'products',
+      where: "product_type = 'prepared' AND is_active = 1",
+      orderBy: 'sort_order ASC',
+    );
+  }
+
+  /// Resale (sotib olinadigan) mahsulotlar.
+  Future<List<Map<String, dynamic>>> getResaleProducts() async {
+    final db = await _dbHelper.database;
+    return db.query(
+      'products',
+      where: "product_type = 'resale' AND is_active = 1",
+      orderBy: 'sort_order ASC',
+    );
+  }
+
+  /// Birlashgan harakatlar tarixi: xomashyo (`stock_movements`) + tayyor
+  /// mahsulot (`product_movements`) — §4.6 ekrani uchun.
+  ///
+  /// Qaytadi: `source` ('ingredient'|'product'), `item_id`, `item_name`,
+  /// `unit`, `type`, `qty`, `cost_price`, `supplier`, `note`, `reason`,
+  /// `created_at`, `created_by`, `user_name`.
+  ///
+  /// [types] — `IN/OUT/ADJUST/RETURN/PRODUCE/PURCHASE/SALE/WASTE`.
+  /// [source] — `'ingredient'` yoki `'product'`; `null` bo'lsa ikkalasi.
+  Future<List<Map<String, dynamic>>> getHistory({
+    DateTime? from,
+    DateTime? to,
+    List<String>? types,
+    int? itemId,
+    String? source,
+    int limit = 200,
+  }) async {
+    final db = await _dbHelper.database;
+    final args = <Object?>[];
+
+    String dateFilter(String alias) {
+      var sql = '';
+      if (from != null) {
+        sql += ' AND $alias.created_at >= ?';
+        args.add(from.toIso8601String());
+      }
+      if (to != null) {
+        sql += ' AND $alias.created_at <= ?';
+        args.add(to.toIso8601String());
+      }
+      return sql;
+    }
+
+    String typeFilter(String alias) {
+      if (types == null || types.isEmpty) return '';
+      final ph = List.filled(types.length, '?').join(',');
+      args.addAll(types);
+      return ' AND $alias.type IN ($ph)';
+    }
+
+    final parts = <String>[];
+
+    if (source == null || source == 'ingredient') {
+      var w = '1=1';
+      if (itemId != null) {
+        w += ' AND sm.ingredient_id = ?';
+        args.add(itemId);
+      }
+      w += dateFilter('sm') + typeFilter('sm');
+      parts.add('''
+        SELECT 'ingredient' AS source, sm.id AS id, sm.ingredient_id AS item_id,
+               i.name AS item_name, i.base_unit AS unit, sm.type AS type,
+               sm.qty AS qty, sm.cost_price AS cost_price,
+               sm.supplier AS supplier, sm.note AS note, sm.reason AS reason,
+               sm.created_at AS created_at, sm.created_by AS created_by,
+               u.name AS user_name
+        FROM stock_movements sm
+        JOIN ingredients i ON sm.ingredient_id = i.id
+        LEFT JOIN users u ON sm.created_by = u.id
+        WHERE $w
+      ''');
+    }
+
+    if (source == null || source == 'product') {
+      var w = '1=1';
+      if (itemId != null) {
+        w += ' AND pm.product_id = ?';
+        args.add(itemId);
+      }
+      w += dateFilter('pm') + typeFilter('pm');
+      parts.add('''
+        SELECT 'product' AS source, pm.id AS id, pm.product_id AS item_id,
+               p.name AS item_name, COALESCE(p.unit, 'dona') AS unit,
+               pm.type AS type, pm.qty AS qty, pm.cost_price AS cost_price,
+               pm.supplier AS supplier, pm.note AS note, NULL AS reason,
+               pm.created_at AS created_at, pm.created_by AS created_by,
+               u.name AS user_name
+        FROM product_movements pm
+        JOIN products p ON pm.product_id = p.id
+        LEFT JOIN users u ON pm.created_by = u.id
+        WHERE $w
+      ''');
+    }
+
+    if (parts.isEmpty) return [];
+    args.add(limit);
+    return db.rawQuery(
+      '${parts.join(' UNION ALL ')} ORDER BY created_at DESC LIMIT ?',
+      args,
+    );
+  }
+
+  // --- Food-cost (§3) ---
+
+  /// Bitta mahsulotning retsept tannarxi:
+  /// `Σ(item.qty × ingredient.avg_cost) / yield_qty`.
+  ///
+  /// Retsepti yo'q bo'lsa `null` qaytadi (hisoblab bo'lmaydi).
+  Future<double?> recipeCost(int productId) async {
+    final costs = await getRecipeCosts(productIds: [productId]);
+    return costs[productId];
+  }
+
+  /// Barcha (yoki berilgan) mahsulotlarning retsept tannarxi — **bitta
+  /// so'rovda**, ro'yxat ekranlari uchun (N+1 so'rovning oldini oladi).
+  ///
+  /// Xomashyoning `avg_cost` i kiritilmagan bo'lsa 0 deb olinadi, ya'ni
+  /// natija to'liq bo'lmasligi mumkin — buni UI "taxminiy" deb ko'rsatadi.
+  Future<Map<int, double>> getRecipeCosts({List<int>? productIds}) async {
+    final db = await _dbHelper.database;
+    final args = <Object?>[];
+    var where = '';
+    if (productIds != null) {
+      if (productIds.isEmpty) return {};
+      where =
+          'WHERE r.product_id IN (${List.filled(productIds.length, '?').join(',')})';
+      args.addAll(productIds);
+    }
+
+    final rows = await db.rawQuery('''
+      SELECT r.product_id AS product_id,
+             r.yield_qty AS yield_qty,
+             SUM(ri.qty * COALESCE(i.avg_cost, 0)) AS total_cost
+      FROM recipes r
+      JOIN recipe_items ri ON ri.recipe_id = r.id
+      JOIN ingredients i ON i.id = ri.ingredient_id
+      $where
+      GROUP BY r.id
+    ''', args);
+
+    final result = <int, double>{};
+    for (final row in rows) {
+      final productId = (row['product_id'] as num?)?.toInt();
+      if (productId == null) continue;
+      final total = (row['total_cost'] as num?)?.toDouble() ?? 0;
+      final yieldQty = (row['yield_qty'] as num?)?.toDouble() ?? 1;
+      result[productId] = yieldQty > 0 ? total / yieldQty : total;
+    }
+    return result;
+  }
+
+  /// Tayyor mahsulot harakatlari tarixi (pishirish/sotuv/waste/adjust).
+  Future<List<Map<String, dynamic>>> getProductMovements({
+    int? productId,
+    int limit = 100,
+  }) async {
+    final db = await _dbHelper.database;
+    final where = productId != null ? 'WHERE pm.product_id = ?' : '';
+    return db.rawQuery('''
+      SELECT pm.*, p.name as product_name
+      FROM product_movements pm
+      JOIN products p ON pm.product_id = p.id
+      $where
+      ORDER BY pm.created_at DESC
+      LIMIT $limit
+    ''', productId != null ? [productId] : []);
   }
 }

@@ -179,27 +179,8 @@ class GeneralReportScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 16,
-                        runSpacing: 16,
-                        children: [
-                          _buildMiniCard(
-                            context,
-                            "Naqd: ${PriceFormatter.format((summary['cash_total'] as num?)?.toDouble() ?? 0)}",
-                            Colors.orange,
-                          ),
-                          _buildMiniCard(
-                            context,
-                            "Karta: ${PriceFormatter.format((summary['card_total'] as num?)?.toDouble() ?? 0)}",
-                            Colors.purple,
-                          ),
-                          _buildMiniCard(
-                            context,
-                            "Terminal: ${PriceFormatter.format((summary['terminal_total'] as num?)?.toDouble() ?? 0)}",
-                            Colors.indigo,
-                          ),
-                        ],
-                      ),
+                      _buildPaymentBreakdown(context, summary),
+                      _buildDiscountBlock(context, summary),
                       const SizedBox(height: 48),
 
                       MediaQuery.of(context).size.width <= 1100
@@ -327,6 +308,169 @@ class GeneralReportScreen extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // To'lov turlari bo'yicha breakdown (6 ta tur)
+  Widget _buildPaymentBreakdown(BuildContext context, Map<String, dynamic> summary) {
+    final theme = Theme.of(context);
+
+    final items = [
+      ('💵 Naqd',     summary['cash_total'],     const Color(0xFF10B981)),
+      ('💳 Karta',    summary['card_total'],     const Color(0xFF3B82F6)),
+      ('🖥️ Terminal', summary['terminal_total'], const Color(0xFF8B5CF6)),
+      ('⭐ Bonus',    summary['bonus_total'],    const Color(0xFFF59E0B)),
+      ('📒 Qarz',     summary['debt_total'],     Colors.red),
+      ('📲 O\'tkazma',summary['transfer_total'], const Color(0xFF06B6D4)),
+    ].where((e) => ((e.$2 as num?)?.toDouble() ?? 0) > 0).toList();
+
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "TO'LOV TURLARI",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...items.map((item) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(
+              children: [
+                Text(item.$1, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                const Spacer(),
+                Text(
+                  '${PriceFormatter.format((item.$2 as num?)?.toDouble() ?? 0)} so\'m',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: item.$3,
+                  ),
+                ),
+              ],
+            ),
+          )),
+          const Divider(height: 20),
+          Row(
+            children: [
+              const Text('Jami:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Spacer(),
+              Text(
+                '${PriceFormatter.format(items.fold(0.0, (s, e) => s + ((e.$2 as num?)?.toDouble() ?? 0)))} so\'m',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Chegirma bloki — faqat total_discount > 0 bo'lganda ko'rinadi
+  Widget _buildDiscountBlock(BuildContext context, Map<String, dynamic> summary) {
+    final totalDiscount = (summary['total_discount'] as num?)?.toDouble() ?? 0;
+    if (totalDiscount <= 0) return const SizedBox.shrink();
+
+    final orderDisc = (summary['order_discount_total'] as num?)?.toDouble() ?? 0;
+    final itemDisc  = (summary['item_discount_total']  as num?)?.toDouble() ?? 0;
+    final orderCount = summary['order_discount_count'] ?? 0;
+    final grossSales = ((summary['total'] as num?)?.toDouble() ?? 0) + totalDiscount;
+    final theme = Theme.of(context);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "CHEGIRMALAR",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: theme.colorScheme.onSurface.withOpacity(0.5),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (orderDisc > 0)
+            _discRow(
+              context,
+              "Buyurtma chegirmalari ($orderCount ta):",
+              orderDisc,
+            ),
+          if (itemDisc > 0)
+            _discRow(context, "Mahsulot chegirmalari:", itemDisc),
+          const Divider(height: 18),
+          _discRow(context, "Jami chegirma:", totalDiscount, bold: true),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Chegirmasiz savdo:",
+                style: TextStyle(
+                  fontSize: 13,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+              Text(
+                "${PriceFormatter.format(grossSales)} so'm",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface.withOpacity(0.8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _discRow(BuildContext context, String label, double value, {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+                color: bold ? Colors.red : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              )),
+          Text(
+            "- ${PriceFormatter.format(value)} so'm",
+            style: TextStyle(
+              fontSize: bold ? 15 : 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
           ),
         ],
       ),

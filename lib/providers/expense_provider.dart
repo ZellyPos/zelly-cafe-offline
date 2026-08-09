@@ -1,17 +1,33 @@
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../data/repositories/expense_repository.dart';
 import '../models/expense_category.dart';
 import '../models/expense.dart';
 import 'connectivity_provider.dart';
 
+enum ExpenseFilter { today, currentShift, all }
+
 class ExpenseProvider extends ChangeNotifier {
+  final ExpenseRepository _repo;
+
+  ExpenseProvider({ExpenseRepository? repository})
+    : _repo = repository ?? ExpenseRepository();
+
   List<ExpenseCategory> _categories = [];
   List<Expense> _expenses = [];
+  Map<String, double> _categoryTotals = {};
   bool _isLoading = false;
+  ExpenseFilter _filter = ExpenseFilter.today;
+  int? _currentShiftId;
 
   List<ExpenseCategory> get categories => _categories;
   List<Expense> get expenses => _expenses;
+  Map<String, double> get categoryTotals => _categoryTotals;
   bool get isLoading => _isLoading;
+  ExpenseFilter get filter => _filter;
+  int? get currentShiftId => _currentShiftId;
+
+  double get totalAmount =>
+      _expenses.fold(0, (sum, e) => sum + e.amount);
 
   Future<void> loadCategories({
     ConnectivityProvider? connectivity,
@@ -19,19 +35,11 @@ class ExpenseProvider extends ChangeNotifier {
   }) async {
     _isLoading = true;
     notifyListeners();
-
     try {
-      final List<Map<String, dynamic>> data;
-      if (connectivity != null &&
-          connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
-        final remoteData = await connectivity.getRemoteData(
-          '/expense_categories',
-        );
-        data = List<Map<String, dynamic>>.from(remoteData);
-      } else {
-        data = await DatabaseHelper.instance.queryAll('expense_categories');
-      }
-      _categories = data.map((e) => ExpenseCategory.fromMap(e)).toList();
+      _categories = await _repo.getCategories(
+        connectivity: connectivity,
+        forceRemote: forceRemote,
+      );
     } catch (e) {
       debugPrint("Error loading expense categories: $e");
     } finally {
@@ -40,53 +48,26 @@ class ExpenseProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addCategory(
-    String name, {
-    ConnectivityProvider? connectivity,
-  }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/expense_categories', {'name': name});
-    } else {
-      await DatabaseHelper.instance.insert('expense_categories', {
-        'name': name,
-      });
-    }
+  Future<void> addCategory(String name, {ConnectivityProvider? connectivity}) async {
+    await _repo.addCategory(name, connectivity: connectivity);
     await loadCategories(connectivity: connectivity);
   }
 
-  Future<void> updateCategory(
-    int id,
-    String name, {
-    ConnectivityProvider? connectivity,
-  }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/expense_categories', {
-        'id': id,
-        'name': name,
-      });
-    } else {
-      await DatabaseHelper.instance.update(
-        'expense_categories',
-        {'name': name},
-        'id = ?',
-        [id],
-      );
-    }
+  Future<void> updateCategory(int id, String name, {ConnectivityProvider? connectivity}) async {
+    await _repo.updateCategory(id, name, connectivity: connectivity);
     await loadCategories(connectivity: connectivity);
   }
 
-  Future<void> deleteCategory(
-    int id, {
-    ConnectivityProvider? connectivity,
-  }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.deleteRemoteData('/expense_categories/$id');
-    } else {
-      await DatabaseHelper.instance.delete('expense_categories', 'id = ?', [
-        id,
-      ]);
-    }
+  Future<void> deleteCategory(int id, {ConnectivityProvider? connectivity}) async {
+    await _repo.deleteCategory(id, connectivity: connectivity);
     await loadCategories(connectivity: connectivity);
+  }
+
+  // Filtr o'rnatish va qayta yuklash
+  Future<void> setFilter(ExpenseFilter filter, {int? shiftId}) async {
+    _filter = filter;
+    if (shiftId != null) _currentShiftId = shiftId;
+    await _loadByFilter();
   }
 
   Future<void> loadExpenses({
@@ -94,56 +75,55 @@ class ExpenseProvider extends ChangeNotifier {
     DateTime? end,
     ConnectivityProvider? connectivity,
     bool forceRemote = false,
+    int? shiftId,
   }) async {
+    if (shiftId != null) _currentShiftId = shiftId;
     _isLoading = true;
     notifyListeners();
-
     try {
-      final List<Map<String, dynamic>> results;
-      if (connectivity != null &&
-          connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
-        final remoteData = await connectivity.getRemoteData('/expenses');
-        // Simple filtering on client side for now if needed, or let server handle it
-        // For simplicity, we fetch all and if dates present, we can filter here
-        results = List<Map<String, dynamic>>.from(remoteData);
-      } else {
-        final db = await DatabaseHelper.instance.database;
-        String where = '';
-        List<dynamic> whereArgs = [];
-
-        if (start != null && end != null) {
-          where = 'date(created_at) BETWEEN date(?) AND date(?)';
-          whereArgs = [
-            start.toIso8601String().split('T')[0],
-            end.toIso8601String().split('T')[0],
-          ];
-        }
-
-        results = await db.query(
-          'expenses',
-          where: where.isEmpty ? null : where,
-          whereArgs: whereArgs.isEmpty ? null : whereArgs,
-          orderBy: 'created_at DESC',
-        );
-      }
-
-      // Filter by date on client side if remote
-      var filteredResults = results;
-      if (connectivity != null &&
-          connectivity.shouldFetchRemote(forceRemote: forceRemote) &&
-          start != null &&
-          end != null) {
-        final startDate = DateTime(start.year, start.month, start.day);
-        final endDate = DateTime(end.year, end.month, end.day, 23, 59, 59);
-        filteredResults = results.where((item) {
-          final createdAt = DateTime.parse(item['created_at'] as String);
-          return createdAt.isAfter(startDate) && createdAt.isBefore(endDate);
-        }).toList();
-      }
-
-      _expenses = filteredResults.map((e) => Expense.fromMap(e)).toList();
+      await _loadByFilter();
     } catch (e) {
       debugPrint("Error loading expenses: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadByFilter() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      List<Expense> rows;
+      Map<String, double> totals;
+
+      switch (_filter) {
+        case ExpenseFilter.today:
+          rows = await _repo.getTodayExpenses();
+          final today = DateTime.now();
+          final start = DateTime(today.year, today.month, today.day).toIso8601String();
+          final end = DateTime(today.year, today.month, today.day, 23, 59, 59).toIso8601String();
+          totals = await _repo.getExpenseTotalsByCategory(start: start, end: end);
+          break;
+        case ExpenseFilter.currentShift:
+          if (_currentShiftId != null) {
+            rows = await _repo.getExpensesByShift(_currentShiftId!);
+            totals = await _repo.getExpenseTotalsByCategory(shiftId: _currentShiftId);
+          } else {
+            rows = await _repo.getTodayExpenses();
+            totals = await _repo.getExpenseTotalsByCategory();
+          }
+          break;
+        case ExpenseFilter.all:
+          rows = await _repo.getAllExpenses();
+          totals = await _repo.getExpenseTotalsByCategory();
+          break;
+      }
+
+      _expenses = rows;
+      _categoryTotals = totals;
+    } catch (e) {
+      debugPrint("Error in _loadByFilter: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -153,24 +133,23 @@ class ExpenseProvider extends ChangeNotifier {
   Future<void> addExpense(
     Expense expense, {
     ConnectivityProvider? connectivity,
+    int? shiftId,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/expenses', expense.toMap());
-    } else {
-      await DatabaseHelper.instance.insert('expenses', expense.toMap());
-    }
-    await loadExpenses(connectivity: connectivity);
+    final expenseWithShift = Expense(
+      id: expense.id,
+      categoryId: expense.categoryId,
+      amount: expense.amount,
+      note: expense.note,
+      createdAt: expense.createdAt,
+      shiftId: shiftId ?? expense.shiftId ?? _currentShiftId,
+    );
+
+    await _repo.addExpense(expenseWithShift, connectivity: connectivity);
+    await _loadByFilter();
   }
 
-  Future<void> deleteExpense(
-    int id, {
-    ConnectivityProvider? connectivity,
-  }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.deleteRemoteData('/expenses/$id');
-    } else {
-      await DatabaseHelper.instance.delete('expenses', 'id = ?', [id]);
-    }
-    await loadExpenses(connectivity: connectivity);
+  Future<void> deleteExpense(int id, {ConnectivityProvider? connectivity}) async {
+    await _repo.deleteExpense(id, connectivity: connectivity);
+    await _loadByFilter();
   }
 }

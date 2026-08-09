@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_onscreen_keyboard/flutter_onscreen_keyboard.dart';
@@ -31,21 +32,33 @@ import 'providers/inventory_provider.dart';
 import 'providers/expense_provider.dart';
 import 'providers/delivery_provider.dart';
 import 'providers/saboy_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'core/supabase_config.dart';
-import 'core/services/sync_service.dart';
+import 'core/app_logger.dart';
 import 'features/login/login_screen.dart';
 
-void main() async {
+void main() {
+  runZonedGuarded(_bootstrap, (err, st) {
+    AppLogger.e('Zone', 'Qayta ushlangan xato', err, st);
+  });
+}
+
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    // 0. Initialize Supabase
-    await Supabase.initialize(
-      url: SupabaseConfig.url,
-      anonKey: SupabaseConfig.anonKey,
+  // Flutter framework xatolarini log ga yuborish
+  FlutterError.onError = (details) {
+    AppLogger.e(
+      'Flutter',
+      details.exceptionAsString(),
+      details.exception,
+      details.stack,
     );
+  };
 
+  // Logger eng birinchi ishga tushadi
+  await AppLogger.init();
+
+  try {
+    AppLogger.i('Startup', 'Ilova ishga tushmoqda');
     // 1. Window management setup
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = const WindowOptions(
@@ -65,10 +78,9 @@ void main() async {
 
     // 2. Initialize Core Services (Database, License)
     await DatabaseHelper.instance.database;
+    AppLogger.i('Startup', 'Ma\'lumotlar bazasi tayyor');
     await LicenseService.instance.init();
-
-    // 3. Initialize background sync service
-    SyncService.instance.startPeriodicSync();
+    AppLogger.i('Startup', 'Litsenziya tekshirildi: ${LicenseService.instance.currentStatus.isValid ? "haqiqiy" : "yaroqsiz"}');
 
     runApp(
       MultiProvider(
@@ -77,19 +89,15 @@ void main() async {
             create: (_) => ProductProvider()..loadProducts(),
           ),
           ChangeNotifierProvider(create: (_) => CartProvider()),
-          ChangeNotifierProvider(
-            create: (_) => CategoryProvider()..loadCategories(),
-          ),
+          // Login ekranida kerak bo'lmaydigan providerlar —
+          // _loadAllDataAndNavigate yoki tegishli ekran initState da yuklanadi.
+          ChangeNotifierProvider(create: (_) => CategoryProvider()),
           ChangeNotifierProvider(
             create: (_) => PrinterProvider()..loadSettings(),
           ),
-          ChangeNotifierProvider(
-            create: (_) => LocationProvider()..loadLocations(),
-          ),
-          ChangeNotifierProvider(create: (_) => TableProvider()..loadTables()),
-          ChangeNotifierProvider(
-            create: (_) => WaiterProvider()..loadWaiters(),
-          ),
+          ChangeNotifierProvider(create: (_) => LocationProvider()),
+          ChangeNotifierProvider(create: (_) => TableProvider()),
+          ChangeNotifierProvider(create: (_) => WaiterProvider()),
           ChangeNotifierProvider(create: (_) => ReportProvider()),
           ChangeNotifierProvider(
             create: (_) => ReceiptSettingsProvider()..loadSettings(),
@@ -100,18 +108,11 @@ void main() async {
           ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (_) => ShiftProvider()..init()),
           ChangeNotifierProvider(create: (_) => DeveloperProvider()),
-          ChangeNotifierProvider(create: (_) => UserProvider()..loadUsers()),
-          ChangeNotifierProvider(
-            create: (_) => ExpenseProvider()
-              ..loadCategories()
-              ..loadExpenses(),
-          ),
-          ChangeNotifierProvider(
-            create: (_) => CustomerProvider()..loadCustomers(),
-          ),
-          ChangeNotifierProvider(
-            create: (_) => InventoryProvider()..loadIngredients(),
-          ),
+          ChangeNotifierProvider(create: (_) => UserProvider()),
+          ChangeNotifierProvider(create: (_) => ExpenseProvider()),
+          ChangeNotifierProvider(create: (_) => CustomerProvider()),
+          // InventoryProvider: faqat Inventory ekrani ochilganda yuklanadi
+          ChangeNotifierProvider(create: (_) => InventoryProvider()),
           ChangeNotifierProvider(create: (_) => DeliveryProvider()),
           ChangeNotifierProvider(create: (_) => SaboyProvider()),
           ChangeNotifierProvider.value(value: LicenseService.instance),
@@ -120,8 +121,8 @@ void main() async {
       ),
     );
   } catch (e, stack) {
-    debugPrint('FATAL STARTUP ERROR: $e');
-    debugPrint(stack.toString());
+    AppLogger.e('Startup', 'KRITIK XATO — ilova ishga tushmadi', e, stack);
+    await AppLogger.flush();
 
     runApp(
       MaterialApp(
@@ -361,14 +362,17 @@ class _UpdateCheckWrapperState extends State<UpdateCheckWrapper> {
   }
 
   Future<void> _checkForUpdates() async {
-    Future.delayed(const Duration(seconds: 2), () async {
-      if (mounted) {
-        final updateInfo = await UpdateService.checkForUpdates();
-        if (updateInfo != null) {
-          UpdateService.showUpdateDialog(context, updateInfo);
-        }
-      }
-    });
+    // Ilova ochilgandan 3 soniya keyin tekshiradi (UI yuklangandan keyin)
+    await Future.delayed(const Duration(seconds: 3));
+    if (!mounted) return;
+
+    // Har soatda bir marta tekshiradi
+    if (!await UpdateService.shouldCheck()) return;
+
+    final updateInfo = await UpdateService.checkForUpdates();
+    if (updateInfo != null && mounted) {
+      await UpdateService.showUpdateDialog(context, updateInfo);
+    }
   }
 
   @override

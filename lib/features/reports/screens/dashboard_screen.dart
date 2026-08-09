@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../../core/services/analytics_service.dart';
 import '../../../models/analytics_models.dart';
 import '../../../models/waiter.dart';
 import '../../../core/utils/price_formatter.dart';
+import '../../../data/repositories/settings_repository.dart';
+import '../../../providers/report_provider.dart';
 import 'orders_report_screen.dart';
 import 'general_report_screen.dart';
 import '../../mgmt/waiter_profile_screen.dart';
@@ -18,8 +21,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   String _periodKey = 'week';
-  late DateTime _start;
-  late DateTime _end;
+  DateTime _start = DateTime.now().subtract(const Duration(days: 6));
+  DateTime _end = DateTime.now();
 
   static const _periods = [
     ('today', 'Bugun'),
@@ -40,41 +43,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _computeDates('week');
-    _loadData();
+    // _dataFuture ni darhol belgilaymiz — async init ichida qaytaradi
+    _dataFuture = _initAndLoad();
   }
 
-  void _computeDates(String key) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+  Future<_DashData> _initAndLoad() async {
+    final rp = context.read<ReportProvider>();
+    if (rp.filterInitialized) {
+      // FilterBar yoki boshqa ekranda o'rnatilgan filterni ishlatamiz
+      _start = rp.dateFrom;
+      _end = rp.dateTo;
+      _periodKey = _fromFilterChip(rp.activeChipKey);
+    } else {
+      await _computeDates('week');
+      _periodKey = 'week';
+    }
+    AnalyticsService.instance.clearCache();
+    return _DashData.load(_start, _end);
+  }
+
+  /// FilterBar chip kalitini DashboardScreen kalitiga o'giradi.
+  String _fromFilterChip(String filterKey) {
+    const map = <String, String>{
+      'today':     'today',
+      'yesterday': 'yesterday',
+      'week':      'week',
+      'month':     'thisMonth',
+    };
+    return map[filterKey] ?? 'custom';
+  }
+
+  /// DashboardScreen chip kalitini FilterBar chip kalitiga o'giradi.
+  String? _toFilterChip(String dashKey) {
+    const map = <String, String>{
+      'today':     'today',
+      'yesterday': 'yesterday',
+      'week':      'week',
+      'thisMonth': 'month',
+    };
+    return map[dashKey];
+  }
+
+  Future<void> _computeDates(String key) async {
+    final dayStart = await SettingsRepository().getDayStartTime();
+    final dayEnd = dayStart.add(const Duration(days: 1));
+
     switch (key) {
       case 'today':
-        _start = today;
-        _end = now;
+        _start = dayStart;
+        _end = dayEnd;
       case 'yesterday':
-        _start = today.subtract(const Duration(days: 1));
-        _end = today.subtract(const Duration(seconds: 1));
+        _start = dayStart.subtract(const Duration(days: 1));
+        _end = dayStart;
       case 'week':
-        _start = today.subtract(const Duration(days: 6));
-        _end = now;
+        _start = dayStart.subtract(const Duration(days: 6));
+        _end = dayEnd;
       case 'thisMonth':
-        _start = DateTime(now.year, now.month, 1);
-        _end = now;
+        _start = DateTime(dayStart.year, dayStart.month, 1, dayStart.hour, dayStart.minute);
+        _end = dayEnd;
       case 'lastMonth':
-        final first = DateTime(now.year, now.month - 1, 1);
-        final last =
-            DateTime(now.year, now.month, 1).subtract(const Duration(seconds: 1));
+        final first = DateTime(dayStart.year, dayStart.month - 1, 1, dayStart.hour, dayStart.minute);
+        final last = DateTime(dayStart.year, dayStart.month, 1, dayStart.hour, dayStart.minute);
         _start = first;
         _end = last;
       default:
-        _start = today.subtract(const Duration(days: 6));
-        _end = now;
+        _start = dayStart.subtract(const Duration(days: 6));
+        _end = dayEnd;
     }
   }
 
   void _loadData() {
     AnalyticsService.instance.clearCache();
-    _dataFuture = _DashData.load(_start, _end);
+    setState(() {
+      _dataFuture = _DashData.load(_start, _end);
+    });
   }
 
   void _setPeriod(String key) async {
@@ -86,18 +128,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         initialDateRange: DateTimeRange(start: _start, end: _end),
       );
       if (range == null) return;
-      setState(() {
-        _periodKey = 'custom';
-        _start = range.start;
-        _end = DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59);
-        _loadData();
-      });
+      final dayStart = await SettingsRepository().getDayStartTime();
+      final h = dayStart.hour;
+      final m = dayStart.minute;
+
+      _periodKey = 'custom';
+      _start = DateTime(range.start.year, range.start.month, range.start.day, h, m);
+      _end = DateTime(range.end.year, range.end.month, range.end.day, h, m).add(const Duration(days: 1));
+      _loadData();
     } else {
+      await _computeDates(key);
       setState(() {
         _periodKey = key;
-        _computeDates(key);
-        _loadData();
       });
+      _loadData();
+    }
+    // ReportProvider'ni yangilaymiz — boshqa hisobot ekranlari ham shu filterni ko'radi
+    if (mounted) {
+      context.read<ReportProvider>().updateFilter(
+        startDate: _start,
+        endDate: _end,
+        chipKey: _toFilterChip(key),
+      );
     }
   }
 

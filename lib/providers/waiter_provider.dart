@@ -1,9 +1,22 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../core/app_logger.dart';
+import '../data/repositories/waiter_repository.dart';
 import '../models/waiter.dart';
 import 'connectivity_provider.dart';
 
+String _actor(ConnectivityProvider? connectivity) {
+  final name = connectivity?.currentUser?['name'] as String? ?? 'Admin';
+  final role = connectivity?.currentUser?['role'] as String? ?? 'admin';
+  return '$name ($role) @ ${Platform.localHostname}';
+}
+
 class WaiterProvider with ChangeNotifier {
+  final WaiterRepository _repo;
+
+  WaiterProvider({WaiterRepository? repository})
+    : _repo = repository ?? WaiterRepository();
+
   List<Waiter> _waiters = [];
   bool _isLoading = false;
 
@@ -18,30 +31,10 @@ class WaiterProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final List<Map<String, dynamic>> data;
-      if (connectivity != null &&
-          connectivity.shouldFetchRemote(forceRemote: forceRemote)) {
-        final remoteData = await connectivity.getRemoteData('/waiters');
-        data = List<Map<String, dynamic>>.from(remoteData);
-
-        // Sync to local DB
-        final db = await DatabaseHelper.instance.database;
-        await db.transaction((txn) async {
-          await txn.delete('waiters');
-          for (var item in data) {
-            final waiterForDb = Map<String, dynamic>.from(item);
-            // permissions is a list from API, but a string in DB
-            if (waiterForDb['permissions'] is List) {
-              waiterForDb['permissions'] =
-                  (waiterForDb['permissions'] as List).join(',');
-            }
-            await txn.insert('waiters', waiterForDb);
-          }
-        });
-      } else {
-        data = await DatabaseHelper.instance.queryAll('waiters');
-      }
-      _waiters = data.map((item) => Waiter.fromMap(item)).toList();
+      _waiters = await _repo.getAll(
+        connectivity: connectivity,
+        forceRemote: forceRemote,
+      );
     } catch (e) {
       debugPrint("Error loading waiters: $e");
     } finally {
@@ -56,18 +49,24 @@ class WaiterProvider with ChangeNotifier {
   }) async {
     try {
       if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-        final ok = await connectivity.postRemoteData('/waiters', waiter.toMap());
-        if (!ok) return 'Serverga qo\'shishda xatolik yuz berdi';
+        final ok = await _repo.add(waiter, connectivity: connectivity);
+        if (!ok) {
+          AppLogger.e('WaiterProvider', 'Ofitsiant QOSHILMADI (server xato) | Ismi: ${waiter.name} | ${_actor(connectivity)}');
+          return 'Serverga qo\'shishda xatolik yuz berdi';
+        }
       } else {
-        final duplicate = await _findPinDuplicate(waiter.pinCode, excludeId: null);
+        final duplicate = await _repo.findPinDuplicate(waiter.pinCode, excludeId: null);
         if (duplicate != null) {
+          AppLogger.w('WaiterProvider', 'Ofitsiant QOSHILMADI (PIN takror) | Ismi: ${waiter.name}, PIN: ${waiter.pinCode} | ${_actor(connectivity)}');
           return 'Bu PIN kod (${waiter.pinCode}) allaqachon "$duplicate" xodimiga biriktirilgan';
         }
-        await DatabaseHelper.instance.insert('waiters', waiter.toMap());
+        await _repo.add(waiter);
       }
+      AppLogger.i('WaiterProvider', 'Ofitsiant QOSHILDI | Ismi: ${waiter.name}, Turi: ${waiter.type}, Qiymati: ${waiter.value} | ${_actor(connectivity)}');
       await loadWaiters(connectivity: connectivity);
       return null;
     } catch (e) {
+      AppLogger.e('WaiterProvider', 'Ofitsiant QOSHISHDA XATO | Ismi: ${waiter.name} | ${_actor(connectivity)}', e);
       return 'Xatolik: $e';
     }
   }
@@ -78,23 +77,24 @@ class WaiterProvider with ChangeNotifier {
   }) async {
     try {
       if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-        final ok = await connectivity.postRemoteData('/waiters', waiter.toMap());
-        if (!ok) return 'Serverda yangilashda xatolik yuz berdi';
+        final ok = await _repo.update(waiter, connectivity: connectivity);
+        if (!ok) {
+          AppLogger.e('WaiterProvider', 'Ofitsiant TAHRIRLANMADI (server xato) | ID: ${waiter.id}, Ismi: ${waiter.name} | ${_actor(connectivity)}');
+          return 'Serverda yangilashda xatolik yuz berdi';
+        }
       } else {
-        final duplicate = await _findPinDuplicate(waiter.pinCode, excludeId: waiter.id);
+        final duplicate = await _repo.findPinDuplicate(waiter.pinCode, excludeId: waiter.id);
         if (duplicate != null) {
+          AppLogger.w('WaiterProvider', 'Ofitsiant TAHRIRLANMADI (PIN takror) | ID: ${waiter.id}, Ismi: ${waiter.name} | ${_actor(connectivity)}');
           return 'Bu PIN kod (${waiter.pinCode}) allaqachon "$duplicate" xodimiga biriktirilgan';
         }
-        await DatabaseHelper.instance.update(
-          'waiters',
-          waiter.toMap(),
-          'id = ?',
-          [waiter.id!],
-        );
+        await _repo.update(waiter);
       }
+      AppLogger.i('WaiterProvider', 'Ofitsiant TAHRIRLANDI | ID: ${waiter.id}, Ismi: ${waiter.name}, Turi: ${waiter.type}, Qiymati: ${waiter.value} | ${_actor(connectivity)}');
       await loadWaiters(connectivity: connectivity);
       return null;
     } catch (e) {
+      AppLogger.e('WaiterProvider', 'Ofitsiant TAHRIRLASHDA XATO | ID: ${waiter.id}, Ismi: ${waiter.name} | ${_actor(connectivity)}', e);
       return 'Xatolik: $e';
     }
   }
@@ -103,19 +103,20 @@ class WaiterProvider with ChangeNotifier {
     required int type,
     required double value,
     int? onlyCurrentType,
+    ConnectivityProvider? connectivity,
   }) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      final where = onlyCurrentType != null
-          ? "name != 'Kassa' AND type = $onlyCurrentType"
-          : "name != 'Kassa'";
-      await db.rawUpdate(
-        "UPDATE waiters SET type = ?, value = ? WHERE $where",
-        [type, value],
+      await _repo.bulkUpdateCommission(
+        type: type,
+        value: value,
+        onlyCurrentType: onlyCurrentType,
       );
+      final typeLabel = type == 0 ? 'Belgilangan' : 'Foiz';
+      AppLogger.i('WaiterProvider', 'OMMAVIY komissiya YANGILANDI | Tur: $typeLabel, Qiymat: $value${onlyCurrentType != null ? ", Faqat tur: $onlyCurrentType" : ""} | ${_actor(connectivity)}');
       await loadWaiters();
       return null;
     } catch (e) {
+      AppLogger.e('WaiterProvider', 'OMMAVIY komissiya YANGILASHDA XATO | ${_actor(connectivity)}', e);
       return 'Xatolik: $e';
     }
   }
@@ -124,50 +125,21 @@ class WaiterProvider with ChangeNotifier {
     required List<String> add,    // qo'shiladigan ruxsatlar
     required List<String> remove, // o'chiriladigan ruxsatlar
     int? onlyCurrentType,         // null=hammasi, 0=fixed, 1=percent
+    ConnectivityProvider? connectivity,
   }) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      final where = onlyCurrentType != null
-          ? "name != 'Kassa' AND type = $onlyCurrentType"
-          : "name != 'Kassa'";
-      final rows = await db.rawQuery(
-        "SELECT id, permissions FROM waiters WHERE $where",
+      await _repo.bulkUpdatePermissions(
+        add: add,
+        remove: remove,
+        onlyCurrentType: onlyCurrentType,
       );
-      final batch = db.batch();
-      for (final row in rows) {
-        final raw = (row['permissions'] as String?) ?? '';
-        final perms = raw.isEmpty
-            ? <String>[]
-            : raw.split(',').where((s) => s.isNotEmpty).toList();
-        for (final p in add) {
-          if (!perms.contains(p)) perms.add(p);
-        }
-        perms.removeWhere((p) => remove.contains(p));
-        batch.rawUpdate(
-          "UPDATE waiters SET permissions = ? WHERE id = ?",
-          [perms.join(','), row['id']],
-        );
-      }
-      await batch.commit(noResult: true);
+      AppLogger.i('WaiterProvider', 'OMMAVIY ruxsatlar YANGILANDI | Qo\'shildi: ${add.join(",")}, O\'chirildi: ${remove.join(",")}${onlyCurrentType != null ? ", Faqat tur: $onlyCurrentType" : ""} | ${_actor(connectivity)}');
       await loadWaiters();
       return null;
     } catch (e) {
+      AppLogger.e('WaiterProvider', 'OMMAVIY ruxsatlar YANGILASHDA XATO | ${_actor(connectivity)}', e);
       return 'Xatolik: $e';
     }
-  }
-
-  /// PIN duplikatini tekshiradi. Mavjud bo'lsa xodim nomini qaytaradi.
-  Future<String?> _findPinDuplicate(String? pin, {required int? excludeId}) async {
-    if (pin == null || pin.isEmpty) return null;
-    final db = await DatabaseHelper.instance.database;
-    final rows = await db.query(
-      'waiters',
-      where: excludeId != null ? 'pin_code = ? AND id != ?' : 'pin_code = ?',
-      whereArgs: excludeId != null ? [pin, excludeId] : [pin],
-      limit: 1,
-    );
-    if (rows.isEmpty) return null;
-    return rows.first['name']?.toString() ?? 'Boshqa xodim';
   }
 
   Future<bool> deleteWaiter(
@@ -175,28 +147,32 @@ class WaiterProvider with ChangeNotifier {
     bool isAdmin = false,
     ConnectivityProvider? connectivity,
   }) async {
+    final waiterName = _waiters.firstWhere((w) => w.id == id, orElse: () => Waiter(name: 'ID:$id', pinCode: '', type: 0, value: 0)).name;
+
     if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      final success = await connectivity.deleteRemoteData('/waiters/$id');
+      final success = await _repo.deleteById(id, connectivity: connectivity);
       if (success) {
+        AppLogger.i('WaiterProvider', 'Ofitsiant O\'CHIRILDI | ID: $id, Ismi: $waiterName | ${_actor(connectivity)}');
         await loadWaiters(connectivity: connectivity);
+      } else {
+        AppLogger.e('WaiterProvider', 'Ofitsiant O\'CHIRILMADI (server xato) | ID: $id, Ismi: $waiterName | ${_actor(connectivity)}');
       }
       return success;
     } else {
       if (!isAdmin) {
-        return false; // Only admin can delete locally
+        AppLogger.w('WaiterProvider', 'Ofitsiant O\'CHIRISHGA RUXSAt YO\'Q | ID: $id, Ismi: $waiterName | ${_actor(connectivity)}');
+        return false;
       }
 
-      // Check if waiter has orders
-      final orders = await DatabaseHelper.instance.queryByColumn(
-        'orders',
-        'waiter_id',
-        id,
-      );
-      if (orders.isNotEmpty) {
-        return false; // Cannot delete if orders exist
+      // Ofitsiantda buyurtmalar bor-yo'qligini tekshirish
+      final orderCount = await _repo.countOrdersForWaiter(id);
+      if (orderCount > 0) {
+        AppLogger.w('WaiterProvider', 'Ofitsiant O\'CHIRILMADI (buyurtmalari bor) | ID: $id, Ismi: $waiterName, Buyurtmalar: $orderCount ta | ${_actor(connectivity)}');
+        return false;
       }
 
-      await DatabaseHelper.instance.delete('waiters', 'id = ?', [id]);
+      await _repo.deleteById(id);
+      AppLogger.i('WaiterProvider', 'Ofitsiant O\'CHIRILDI | ID: $id, Ismi: $waiterName | ${_actor(connectivity)}');
       await loadWaiters(connectivity: connectivity);
       return true;
     }
@@ -206,102 +182,19 @@ class WaiterProvider with ChangeNotifier {
     int waiterId,
     DateTime start,
     DateTime end,
-  ) async {
-    final db = await DatabaseHelper.instance.database;
-    final startStr = start.toIso8601String();
-    final endStr = end.toIso8601String();
-
-    // 1. Get waiter info to know type/value
-    final waiterData = await db.query(
-      'waiters',
-      where: 'id = ?',
-      whereArgs: [waiterId],
-      limit: 1,
-    );
-    if (waiterData.isEmpty) return {};
-    final type = waiterData.first['type'] as int;
-    final value = (waiterData.first['value'] as num).toDouble();
-    final isKassa = waiterData.first['name'] == "Kassa";
-
-    // 2. Get orders summary (only status=1)
-    final ordersRes = await db.rawQuery(
-      '''
-      SELECT COUNT(*) as count, SUM(grand_total) as total
-      FROM orders
-      WHERE waiter_id = ? AND status = 1 AND created_at BETWEEN ? AND ?
-    ''',
-      [waiterId, startStr, endStr],
-    );
-
-    final int orderCount = ordersRes.first['count'] as int? ?? 0;
-    final double totalSales =
-        (ordersRes.first['total'] as num?)?.toDouble() ?? 0.0;
-
-    // 3. Calculate earned
-    double earned = 0;
-    if (!isKassa) {
-      if (type == 1) {
-        // Percentage
-        earned = totalSales * (value / 100);
-      } else {
-        // Fixed per order
-        earned = orderCount * value;
-      }
-    }
-
-    // 4. Get total paid in this period
-    final paymentsRes = await db.rawQuery(
-      '''
-      SELECT SUM(amount) as total 
-      FROM waiter_payments 
-      WHERE waiter_id = ? AND paid_at BETWEEN ? AND ?
-    ''',
-      [waiterId, startStr, endStr],
-    );
-
-    final double totalPaid =
-        (paymentsRes.first['total'] as num?)?.toDouble() ?? 0.0;
-
-    // 5. Calculate payable
-    double payable = earned - totalPaid;
-
-    // 6. Get orders list
-    final orders = await db.query(
-      'orders',
-      where: 'waiter_id = ? AND status = 1 AND created_at BETWEEN ? AND ?',
-      whereArgs: [waiterId, startStr, endStr],
-      orderBy: 'created_at DESC',
-      limit: 50,
-    );
-
-    // 7. Get payments list
-    final payments = await db.query(
-      'waiter_payments',
-      where: 'waiter_id = ? AND paid_at BETWEEN ? AND ?',
-      whereArgs: [waiterId, startStr, endStr],
-      orderBy: 'paid_at DESC',
-    );
-
-    return {
-      'summary': {
-        'order_count': orderCount,
-        'total_sales': totalSales,
-        'earned': earned,
-        'paid': totalPaid,
-        'payable': payable,
-      },
-      'orders': orders,
-      'payments': payments,
-    };
+  ) {
+    return _repo.getWaiterProfileData(waiterId, start, end);
   }
 
-  Future<void> addSalaryPayment(int waiterId, int amount, String? note) async {
-    await DatabaseHelper.instance.insert('waiter_payments', {
-      'waiter_id': waiterId,
-      'amount': amount,
-      'paid_at': DateTime.now().toIso8601String(),
-      'note': note,
-      'created_by': 'Admin', // Default for now
-    });
+  Future<void> addSalaryPayment(int waiterId, int amount, String? note, {ConnectivityProvider? connectivity}) async {
+    final waiterName = _waiters.firstWhere((w) => w.id == waiterId, orElse: () => Waiter(name: 'ID:$waiterId', pinCode: '', type: 0, value: 0)).name;
+    final actor = _actor(connectivity);
+    await _repo.addWaiterPayment(
+      waiterId: waiterId,
+      amount: amount,
+      note: note,
+      createdBy: actor,
+    );
+    AppLogger.i('WaiterProvider', 'Maosh TO\'LOVI qo\'shildi | Ofitsiant: $waiterName (ID: $waiterId), Summa: $amount${note != null ? ", Izoh: $note" : ""} | $actor');
   }
 }

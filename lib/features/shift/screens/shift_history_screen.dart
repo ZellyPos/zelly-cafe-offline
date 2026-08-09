@@ -371,6 +371,8 @@ class _ShiftDetailDialogState extends State<_ShiftDetailDialog> {
         _section(theme, 'Savdo', [
           _kv('Naqd', PriceFormatter.format(r.summary.totalCashSales), theme),
           _kv('Karta', PriceFormatter.format(r.summary.totalCardSales), theme),
+          if (r.summary.totalTerminalSales > 0)
+            _kv('Terminal', PriceFormatter.format(r.summary.totalTerminalSales), theme),
           if (r.summary.totalDebtSales > 0)
             _kv('Nasiya', PriceFormatter.format(r.summary.totalDebtSales), theme),
           _kv('Jami', PriceFormatter.format(r.summary.totalSales), theme, bold: true),

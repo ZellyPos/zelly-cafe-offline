@@ -1,11 +1,24 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../core/app_logger.dart';
+import '../data/repositories/product_repository.dart';
 import '../models/product.dart';
 import 'connectivity_provider.dart';
 import '../core/services/audit_service.dart';
 import '../models/order.dart';
 
+String _actor(ConnectivityProvider? connectivity) {
+  final name = connectivity?.currentUser?['name'] as String? ?? 'Admin';
+  final role = connectivity?.currentUser?['role'] as String? ?? 'admin';
+  return '$name ($role) @ ${Platform.localHostname}';
+}
+
 class ProductProvider extends ChangeNotifier {
+  final ProductRepository _repo;
+
+  ProductProvider({ProductRepository? repository})
+    : _repo = repository ?? ProductRepository();
+
   List<Product> _products = [];
   bool _isLoading = false;
   final Map<int, int> _salesCountCache = {}; // Cache for sales counts
@@ -21,70 +34,15 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final List<Map<String, dynamic>> data;
-      bool fetchRemote =
-          connectivity != null &&
+      final bool fetchRemote = connectivity != null &&
           connectivity.shouldFetchRemote(forceRemote: forceRemote);
 
-      if (fetchRemote) {
-        final remoteData = await connectivity.getRemoteData('/products');
-        data = List<Map<String, dynamic>>.from(remoteData);
+      _products = await _repo.getProducts(
+        connectivity: connectivity,
+        forceRemote: forceRemote,
+      );
 
-        // Sync to local DB for components that depend on it (like PrinterService)
-        final db = await DatabaseHelper.instance.database;
-        await db.transaction((txn) async {
-          await txn.delete('products');
-          await txn.delete('product_bundles');
-          for (var item in data) {
-            final productForDb = Map<String, dynamic>.from(item);
-            // bundle_items is only for memory/API, not for DB column
-            productForDb.remove('bundle_items');
-            await txn.insert('products', productForDb);
-
-            // Sync bundles if present
-            if (item['is_set'] == 1 && item['bundle_items'] != null) {
-              for (var bi in item['bundle_items']) {
-                await txn.insert('product_bundles', {
-                  'bundle_id': productForDb['id'],
-                  'product_id': bi['product_id'],
-                  'qty': bi['qty'],
-                });
-              }
-            }
-          }
-        });
-      } else {
-        data = await DatabaseHelper.instance.database.then(
-          (db) => db.query('products', orderBy: 'sort_order ASC'),
-        );
-      }
-
-      final List<Product> loadedProducts = [];
-      for (var item in data) {
-        List<BundleItem>? bundleItems;
-        if (item['is_set'] == 1) {
-          if (fetchRemote) {
-            if (item['bundle_items'] != null) {
-              bundleItems = (item['bundle_items'] as List)
-                  .map((bi) => BundleItem.fromMap(bi))
-                  .toList();
-            }
-          } else {
-            final bundleData = await DatabaseHelper.instance.queryByColumn(
-              'product_bundles',
-              'bundle_id',
-              item['id'],
-            );
-            bundleItems = bundleData
-                .map((bi) => BundleItem.fromMap(bi))
-                .toList();
-          }
-        }
-        loadedProducts.add(Product.fromMap(item, bundleItems: bundleItems));
-      }
-      _products = loadedProducts;
-
-      // Load sales counts - only if NOT in remote mode
+      // Sotuvlar sonini yuklash — faqat remote rejimda EMAS
       if (!fetchRemote) {
         await _loadSalesCounts();
       }
@@ -97,21 +55,10 @@ class ProductProvider extends ChangeNotifier {
   }
 
   Future<void> _loadSalesCounts() async {
-    final db = await DatabaseHelper.instance.database;
-    final result = await db.rawQuery('''
-      SELECT oi.product_id, SUM(oi.qty) as total_sold
-      FROM order_items oi
-      INNER JOIN orders o ON oi.order_id = o.id
-      WHERE o.created_at >= date('now', '-30 days')
-      GROUP BY oi.product_id
-    ''');
-
-    _salesCountCache.clear();
-    for (var row in result) {
-      final productId = (row['product_id'] as num).toInt();
-      final totalSold = (row['total_sold'] as num).toInt();
-      _salesCountCache[productId] = totalSold;
-    }
+    final counts = await _repo.getSalesCounts();
+    _salesCountCache
+      ..clear()
+      ..addAll(counts);
   }
 
   int getProductSalesCount(int productId) {
@@ -122,91 +69,60 @@ class ProductProvider extends ChangeNotifier {
     Product product, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/products', product.toMap());
-    } else {
-      final id = await DatabaseHelper.instance.insert(
-        'products',
-        product.toMap(),
-      );
-
-      // Save bundle items if it's a SET
-      if (product.isSet && product.bundleItems != null) {
-        for (var item in product.bundleItems!) {
-          await DatabaseHelper.instance.insert(
-            'product_bundles',
-            item.copyWith(bundleId: id).toMap(),
-          );
-        }
-      }
+    try {
+      await _repo.addProduct(product, connectivity: connectivity);
+      AppLogger.i('ProductProvider', 'Taom QOSHILDI | Nomi: ${product.name}, Narxi: ${product.price}, Kategoriya: ${product.category}${product.isSet ? " (SET)" : ""} | ${_actor(connectivity)}');
+      await loadProducts(connectivity: connectivity);
+    } catch (e) {
+      AppLogger.e('ProductProvider', 'Taom QOSHISHDA XATO | Nomi: ${product.name} | ${_actor(connectivity)}', e);
+      rethrow;
     }
-
-    await loadProducts(connectivity: connectivity);
   }
 
   Future<void> updateProduct(
     Product product, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.postRemoteData('/products', product.toMap());
-    } else {
-      final oldProductMap = await DatabaseHelper.instance.queryByColumn(
-        'products',
-        'id',
-        product.id,
-      );
-      final oldProduct = oldProductMap.isNotEmpty ? oldProductMap.first : null;
+    try {
+      final bool isClient =
+          connectivity != null && connectivity.mode == ConnectivityMode.client;
 
-      await DatabaseHelper.instance.update(
-        'products',
-        product.toMap(),
-        'id = ?',
-        [product.id],
+      final oldProduct = await _repo.updateProduct(
+        product,
+        connectivity: connectivity,
       );
 
-      // Audit: Mahsulot tahrirlanganda
-      AuditService.instance.logAction(
-        action: 'edit_product',
-        entity: 'product',
-        entityId: product.id.toString(),
-        before: oldProduct,
-        after: product.toMap(),
-      );
-
-      // Update bundle items if it's a SET
-      if (product.id != null) {
-        // Clear existing and re-insert
-        await DatabaseHelper.instance.delete(
-          'product_bundles',
-          'bundle_id = ?',
-          [product.id],
+      // Audit: Mahsulot tahrirlanganda (faqat lokal/server rejimda)
+      if (!isClient) {
+        AuditService.instance.logAction(
+          action: 'edit_product',
+          entity: 'product',
+          entityId: product.id.toString(),
+          before: oldProduct,
+          after: product.toMap(),
         );
-
-        if (product.isSet && product.bundleItems != null) {
-          for (var item in product.bundleItems!) {
-            await DatabaseHelper.instance.insert(
-              'product_bundles',
-              item.copyWith(bundleId: product.id!).toMap(),
-            );
-          }
-        }
       }
+      AppLogger.i('ProductProvider', 'Taom TAHRIRLANDI | ID: ${product.id}, Nomi: ${product.name}, Narxi: ${product.price}, Kategoriya: ${product.category} | ${_actor(connectivity)}');
+      await loadProducts(connectivity: connectivity);
+    } catch (e) {
+      AppLogger.e('ProductProvider', 'Taom TAHRIRLASHDA XATO | ID: ${product.id}, Nomi: ${product.name} | ${_actor(connectivity)}', e);
+      rethrow;
     }
-
-    await loadProducts(connectivity: connectivity);
   }
 
   Future<void> deleteProduct(
     int id, {
     ConnectivityProvider? connectivity,
   }) async {
-    if (connectivity != null && connectivity.mode == ConnectivityMode.client) {
-      await connectivity.deleteRemoteData('/products/$id');
-    } else {
-      await DatabaseHelper.instance.delete('products', 'id = ?', [id]);
+    final productName = _products.firstWhere((p) => p.id == id, orElse: () => Product(name: 'ID:$id', price: 0, category: '')).name;
+    try {
+      await _repo.deleteProduct(id, connectivity: connectivity);
+      AppLogger.i('ProductProvider', 'Taom O\'CHIRILDI | ID: $id, Nomi: $productName | ${_actor(connectivity)}');
+      await loadProducts(connectivity: connectivity);
+    } catch (e) {
+      AppLogger.e('ProductProvider', 'Taom O\'CHIRISHDA XATO | ID: $id, Nomi: $productName | ${_actor(connectivity)}', e);
+      rethrow;
     }
-    await loadProducts(connectivity: connectivity);
   }
 
   Future<void> reorderProducts(
@@ -221,28 +137,17 @@ class ProductProvider extends ChangeNotifier {
         .toList();
 
     if (newIndex > oldIndex) newIndex--;
-    final item = categoryProducts.removeAt(oldIndex);
-    categoryProducts.insert(newIndex, item);
+    final movedItem = categoryProducts[oldIndex];
+    categoryProducts.removeAt(oldIndex);
+    categoryProducts.insert(newIndex, movedItem);
 
     // Update sort_order for all products in this category
     for (int i = 0; i < categoryProducts.length; i++) {
       final updatedProduct = categoryProducts[i].copyWith(sortOrder: i);
-
-      if (connectivity != null &&
-          connectivity.mode == ConnectivityMode.client) {
-        // In client mode, we might want a batch update if API supports it,
-        // otherwise single updates. For now, following the pattern of single update.
-        await connectivity.postRemoteData('/products', updatedProduct.toMap());
-      } else {
-        await DatabaseHelper.instance.update(
-          'products',
-          updatedProduct.toMap(),
-          'id = ?',
-          [updatedProduct.id],
-        );
-      }
+      await _repo.updateProductRow(updatedProduct, connectivity: connectivity);
     }
 
+    AppLogger.i('ProductProvider', 'Taomlar TARTIBI O\'ZGARTIRILDI | Kategoriya: $category, Ko\'chirildi: ${movedItem.name} ($oldIndex → $newIndex) | ${_actor(connectivity)}');
     await loadProducts(connectivity: connectivity);
   }
 

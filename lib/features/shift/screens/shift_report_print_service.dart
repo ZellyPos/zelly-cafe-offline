@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../../core/database_helper.dart';
+import '../../../data/repositories/expense_repository.dart';
+import '../../../data/repositories/printer_repository.dart';
 import '../../../core/windows_printing_helper.dart';
 import '../../../models/shift_models.dart';
 import '../../../models/printer_settings.dart';
@@ -19,9 +20,17 @@ class ShiftReportPrintService {
         return;
       }
 
+      Map<String, double> expenseCats = {};
+      if (report.shift.id != null && report.summary.totalExpenses > 0) {
+        try {
+          expenseCats = await ExpenseRepository()
+              .getExpenseTotalsByCategory(shiftId: report.shift.id);
+        } catch (_) {}
+      }
+
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
-      final List<int> bytes = _buildBytes(generator, report);
+      final List<int> bytes = _buildBytes(generator, report, expenseCats);
 
       await _sendBytes(bytes, settings);
     } catch (e) {
@@ -29,7 +38,11 @@ class ShiftReportPrintService {
     }
   }
 
-  static List<int> _buildBytes(Generator g, ShiftReport report) {
+  static List<int> _buildBytes(
+    Generator g,
+    ShiftReport report,
+    Map<String, double> expenseCats,
+  ) {
     var b = <int>[];
 
     b += g.setGlobalCodeTable('CP1252');
@@ -70,8 +83,17 @@ class ShiftReportPrintService {
     );
     b += g.text(_kv('Naqd:', PriceFormatter.format(report.summary.totalCashSales)));
     b += g.text(_kv('Karta:', PriceFormatter.format(report.summary.totalCardSales)));
+    if (report.summary.totalTerminalSales > 0) {
+      b += g.text(_kv('Terminal:', PriceFormatter.format(report.summary.totalTerminalSales)));
+    }
+    if (report.summary.totalBonusSales > 0) {
+      b += g.text(_kv('Bonus:', PriceFormatter.format(report.summary.totalBonusSales)));
+    }
     if (report.summary.totalDebtSales > 0) {
       b += g.text(_kv('Nasiya:', PriceFormatter.format(report.summary.totalDebtSales)));
+    }
+    if (report.summary.totalTransferSales > 0) {
+      b += g.text(_kv("O'tkazma:", PriceFormatter.format(report.summary.totalTransferSales)));
     }
     b += g.text(
       _kv('Jami savdo:', PriceFormatter.format(report.summary.totalSales)),
@@ -79,6 +101,27 @@ class ShiftReportPrintService {
     );
     b += g.text(_kv('Buyurtmalar:', '${report.orderCount} ta'));
     b += g.hr();
+
+    // ── Xarajatlar ───────────────────────────────────────────────────────────
+    if (report.summary.totalExpenses > 0) {
+      b += g.text(
+        _center('XARAJATLAR'),
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      );
+      for (final entry in expenseCats.entries) {
+        b += g.text(_kv('${entry.key}:', PriceFormatter.format(entry.value)));
+      }
+      b += g.text(_line());
+      b += g.text(
+        _kv('Jami xarajat:', '- ${PriceFormatter.format(report.summary.totalExpenses)}'),
+        styles: const PosStyles(bold: true),
+      );
+      b += g.text(
+        _kv('Sof foyda:', PriceFormatter.format(report.summary.netProfit)),
+        styles: const PosStyles(bold: true),
+      );
+      b += g.hr();
+    }
 
     // ── Kassa hisobi ─────────────────────────────────────────────────────────
     b += g.text(
@@ -154,19 +197,9 @@ class ShiftReportPrintService {
 
   static Future<PrinterSettings?> _loadPrinterSettings() async {
     try {
-      final db = await DatabaseHelper.instance.database;
       final prefs = await SharedPreferences.getInstance();
       final selectedId = prefs.getInt('selected_receipt_printer_id');
-
-      if (selectedId != null) {
-        final res = await db.query('printers', where: 'id = ?', whereArgs: [selectedId]);
-        if (res.isNotEmpty) return PrinterSettings.fromMap(res.first);
-      }
-      final main = await db.query('printers', where: 'is_main = 1');
-      if (main.isNotEmpty) return PrinterSettings.fromMap(main.first);
-
-      final all = await db.query('printers');
-      if (all.isNotEmpty) return PrinterSettings.fromMap(all.first);
+      return await PrinterRepository().resolvePrinter(selectedId);
     } catch (_) {}
     return null;
   }

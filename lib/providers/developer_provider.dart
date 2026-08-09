@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
-import '../core/database_helper.dart';
+import '../data/repositories/developer_repository.dart';
 
 class DeveloperProvider with ChangeNotifier {
+  final DeveloperRepository _repo;
+
+  DeveloperProvider({DeveloperRepository? repository})
+    : _repo = repository ?? DeveloperRepository();
+
   List<String> _tables = [];
   List<String> get tables => _tables;
 
@@ -13,13 +18,7 @@ class DeveloperProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final db = await DatabaseHelper.instance.database;
-      final result = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_metadata'",
-      );
-
-      _tables = result.map((row) => row['name'] as String).toList();
-      _tables.sort();
+      _tables = await _repo.getTableNames();
     } catch (e) {
       debugPrint('Error loading tables: $e');
     } finally {
@@ -30,8 +29,7 @@ class DeveloperProvider with ChangeNotifier {
 
   Future<List<Map<String, dynamic>>> getTableData(String tableName) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      return await db.query(tableName);
+      return await _repo.getTableData(tableName);
     } catch (e) {
       debugPrint('Error loading table data for $tableName: $e');
       return [];
@@ -40,8 +38,7 @@ class DeveloperProvider with ChangeNotifier {
 
   Future<bool> deleteRow(String tableName, String idColumn, dynamic id) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      await db.delete(tableName, where: '$idColumn = ?', whereArgs: [id]);
+      await _repo.deleteRow(tableName, idColumn, id);
       return true;
     } catch (e) {
       debugPrint('Error deleting row from $tableName: $e');
@@ -56,8 +53,7 @@ class DeveloperProvider with ChangeNotifier {
     Map<String, dynamic> data,
   ) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      await db.update(tableName, data, where: '$idColumn = ?', whereArgs: [id]);
+      await _repo.updateRow(tableName, idColumn, id, data);
       return true;
     } catch (e) {
       debugPrint('Error updating row in $tableName: $e');
@@ -67,8 +63,7 @@ class DeveloperProvider with ChangeNotifier {
 
   Future<bool> addRow(String tableName, Map<String, dynamic> data) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      await db.insert(tableName, data);
+      await _repo.addRow(tableName, data);
       return true;
     } catch (e) {
       debugPrint('Error adding row to $tableName: $e');
@@ -78,8 +73,7 @@ class DeveloperProvider with ChangeNotifier {
 
   Future<void> executeRawQuery(String query) async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      await db.execute(query);
+      await _repo.executeRawQuery(query);
     } catch (e) {
       debugPrint('Error executing raw query: $e');
       rethrow;

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/utils/price_formatter.dart';
+import '../../../core/utils/qty_formatter.dart';
 import '../../../providers/inventory_provider.dart';
 
 /// Kirim/Chiqim + Inventarizatsiya tarixi (§4.6).
@@ -42,12 +43,24 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
     'RETURN': 'Qaytarish',
   };
 
+  /// Bir sahifadagi yozuvlar soni (§15) — ekranga sig'adigan, lekin
+  /// yuklashni og'irlashtirmaydigan miqdor.
+  static const _pageSize = 50;
+
   List<Map<String, dynamic>> _rows = [];
   bool _loading = true;
 
   DateTimeRange? _range;
   final _selectedTypes = <String>{};
   late String? _source;
+
+  /// Joriy sahifa (0 dan) va filtrga mos jami yozuvlar soni.
+  int _page = 0;
+  int _total = 0;
+
+  final _scrollController = ScrollController();
+
+  int get _pageCount => _total == 0 ? 1 : ((_total - 1) ~/ _pageSize) + 1;
 
   @override
   void initState() {
@@ -56,32 +69,57 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Tanlangan kunning oxirigacha kirsin.
+  DateTime? get _to => _range == null
+      ? null
+      : DateTime(_range!.end.year, _range!.end.month, _range!.end.day, 23, 59, 59);
+
+  /// Filtr o'zgarganda birinchi sahifadan boshlanadi.
+  Future<void> _reload() {
+    _page = 0;
+    return _load();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final rows = await context.read<InventoryProvider>().getHistory(
+      final provider = context.read<InventoryProvider>();
+      final types = _selectedTypes.isEmpty ? null : _selectedTypes.toList();
+      final total = await provider.getHistoryCount(
         from: _range?.start,
-        // Tanlangan kunning oxirigacha kirsin.
-        to: _range == null
-            ? null
-            : DateTime(
-                _range!.end.year,
-                _range!.end.month,
-                _range!.end.day,
-                23,
-                59,
-                59,
-              ),
-        types: _selectedTypes.isEmpty ? null : _selectedTypes.toList(),
+        to: _to,
+        types: types,
         itemId: widget.itemId,
         source: _source,
-        limit: 500,
+      );
+      // Filtr toraysa joriy sahifa bo'sh qolishi mumkin — oxirgisiga tushamiz.
+      final maxPage = total == 0 ? 0 : (total - 1) ~/ _pageSize;
+      final page = _page > maxPage ? maxPage : _page;
+
+      final rows = await provider.getHistory(
+        from: _range?.start,
+        to: _to,
+        types: types,
+        itemId: widget.itemId,
+        source: _source,
+        limit: _pageSize,
+        offset: page * _pageSize,
       );
       if (!mounted) return;
       setState(() {
         _rows = rows;
+        _total = total;
+        _page = page;
         _loading = false;
       });
+      // Yangi sahifa boshidan ko'rinsin.
+      if (_scrollController.hasClients) _scrollController.jumpTo(0);
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -105,13 +143,19 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
     );
     if (picked == null) return;
     setState(() => _range = picked);
-    await _load();
+    await _reload();
   }
 
   void _toggleType(String type) {
     setState(() {
       if (!_selectedTypes.remove(type)) _selectedTypes.add(type);
     });
+    _reload();
+  }
+
+  void _goToPage(int page) {
+    if (page < 0 || page >= _pageCount || page == _page || _loading) return;
+    _page = page;
     _load();
   }
 
@@ -163,9 +207,102 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
                   )
                 : _table(theme),
           ),
+          // Sahifalash (§15) — bitta sahifada $_pageSize ta yozuv.
+          if (!_loading && _total > _pageSize) _pager(theme),
         ],
       ),
     );
+  }
+
+  /// Sahifalar paneli: oldingi/keyingi + raqamlar (uzun ro'yxatda `…` bilan).
+  Widget _pager(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.15)),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            tooltip: 'Oldingi sahifa',
+            onPressed: _page == 0 ? null : () => _goToPage(_page - 1),
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          for (final p in _pageNumbers())
+            p == null
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Text('…', style: TextStyle(color: theme.hintColor)),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: _pageButton(theme, p),
+                  ),
+          IconButton(
+            tooltip: 'Keyingi sahifa',
+            onPressed: _page >= _pageCount - 1
+                ? null
+                : () => _goToPage(_page + 1),
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pageButton(ThemeData theme, int page) {
+    final selected = page == _page;
+    return Material(
+      color: selected
+          ? theme.colorScheme.primary
+          : theme.colorScheme.onSurface.withValues(alpha: 0.05),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: selected ? null : () => _goToPage(page),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          alignment: Alignment.center,
+          child: Text(
+            '${page + 1}',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: selected
+                  ? theme.colorScheme.onPrimary
+                  : theme.colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Ko'rsatiladigan sahifa raqamlari; `null` — uzilish (`…`).
+  ///
+  /// Har doim birinchi va oxirgi sahifa, hamda joriysining atrofidagi 1 ta
+  /// sahifa ko'rinadi — 100 sahifada ham panel ekranga sig'adi.
+  List<int?> _pageNumbers() {
+    final count = _pageCount;
+    if (count <= 7) return List<int?>.generate(count, (i) => i);
+
+    final pages = <int?>{0, count - 1};
+    for (var p = _page - 1; p <= _page + 1; p++) {
+      if (p > 0 && p < count - 1) pages.add(p);
+    }
+    final sorted = pages.whereType<int>().toList()..sort();
+
+    final result = <int?>[];
+    for (var i = 0; i < sorted.length; i++) {
+      if (i > 0 && sorted[i] != sorted[i - 1] + 1) result.add(null);
+      result.add(sorted[i]);
+    }
+    return result;
   }
 
   Widget _filters(ThemeData theme) {
@@ -201,7 +338,7 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
                   tooltip: 'Sana filtrini tozalash',
                   onPressed: () {
                     setState(() => _range = null);
-                    _load();
+                    _reload();
                   },
                   icon: const Icon(Icons.close_rounded, size: 18),
                 ),
@@ -217,7 +354,10 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
               ],
               const Spacer(),
               Text(
-                '${_rows.length} ta yozuv',
+                _total == 0
+                    ? '0 ta yozuv'
+                    : '${_page * _pageSize + 1}–'
+                          '${_page * _pageSize + _rows.length} / $_total ta yozuv',
                 style: TextStyle(color: theme.hintColor, fontSize: 13),
               ),
             ],
@@ -253,7 +393,7 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
       showCheckmark: false,
       onSelected: (_) {
         setState(() => _source = value);
-        _load();
+        _reload();
       },
     );
   }
@@ -268,7 +408,8 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
         const Divider(height: 1),
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
             itemCount: _rows.length,
             separatorBuilder: (_, _) => Divider(
               height: 1,
@@ -347,7 +488,7 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
             flex: 2,
             child: Text(
               // ADJUST manfiy ham bo'lishi mumkin — ishorasi bilan.
-              '${isIncrease ? '+' : '−'}${_fmt(qty.abs())} $unit',
+              '${isIncrease ? '+' : '−'}${QtyFormatter.format(qty.abs())} $unit',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
@@ -484,7 +625,4 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
         return Icons.circle_outlined;
     }
   }
-
-  static String _fmt(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 }

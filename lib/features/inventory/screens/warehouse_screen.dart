@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/utils/price_formatter.dart';
+import '../../../core/utils/qty_formatter.dart';
 import '../../../models/inventory_models.dart';
 import '../../../models/product.dart';
 import '../../../providers/inventory_provider.dart';
@@ -31,32 +32,44 @@ class _WarehouseScreenState extends State<WarehouseScreen>
   late final TabController _tabController;
   final _searchController = TextEditingController();
 
+  /// Joriy tab (0 — mahsulotlar, 1 — xomashyolar). Swipe bilan ham
+  /// o'zgargani uchun alohida saqlanadi: toolbar va amal tugmasi shunga
+  /// qarab quriladi.
+  int _tabIndex = 0;
+
+  /// Karta/jadval ko'rinishi — ekran yopilib qayta ochilsa saqlanadi, lekin
+  /// dastur qayta ishga tushganda default holatga qaytadi (§2). Shu sabab
+  /// diskka yozilmaydi: `static` maydon faqat joriy sessiyada yashaydi.
+  static bool _gridViewPref = true;
+
   List<Product> _products = [];
   List<_IngredientRow> _ingredients = [];
 
   /// Retsept tannarxi (food-cost uchun): productId → 1 dona tannarxi.
   Map<int, double> _recipeCosts = {};
   bool _loading = true;
-  bool _gridView = true;
   String _query = '';
 
-  /// Mahsulot tab filtri: null = hammasi, 'prepared', 'resale'.
-  String? _typeFilter;
+  /// Mahsulot qoldiq filtri (§3).
+  _StockFilter _stockFilter = _StockFilter.all;
+
+  bool get _gridView => _gridViewPref;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this)
       ..addListener(() {
-        // Tab almashganda qidiruv va filtr tozalanadi — ikkala ro'yxat
-        // turlicha, eski so'rov chalkashtiradi.
-        if (_tabController.indexIsChanging) {
-          _searchController.clear();
-          setState(() {
-            _query = '';
-            _typeFilter = null;
-          });
-        }
+        // Swipe'da `indexIsChanging` false bo'ladi — shuning uchun indeksning
+        // o'zini kuzatamiz. Tab almashganda qidiruv va filtr tozalanadi:
+        // ikkala ro'yxat turlicha, eski so'rov chalkashtiradi.
+        if (_tabController.index == _tabIndex) return;
+        _searchController.clear();
+        setState(() {
+          _tabIndex = _tabController.index;
+          _query = '';
+          _stockFilter = _StockFilter.all;
+        });
       });
     _load();
   }
@@ -109,7 +122,15 @@ class _WarehouseScreenState extends State<WarehouseScreen>
   List<Product> get _filteredProducts {
     final q = _query.toLowerCase();
     return _products.where((p) {
-      if (_typeFilter != null && p.productType != _typeFilter) return false;
+      final inStock = (p.quantity ?? 0) > 0;
+      switch (_stockFilter) {
+        case _StockFilter.all:
+          break;
+        case _StockFilter.inStock:
+          if (!inStock) return false;
+        case _StockFilter.outOfStock:
+          if (inStock) return false;
+      }
       if (q.isEmpty) return true;
       return p.name.toLowerCase().contains(q) ||
           p.category.toLowerCase().contains(q);
@@ -153,23 +174,22 @@ class _WarehouseScreenState extends State<WarehouseScreen>
     return p.id == null ? null : _recipeCosts[p.id];
   }
 
-  ButtonStyle get _primaryButtonStyle => ElevatedButton.styleFrom(
-    backgroundColor: Colors.black,
-    foregroundColor: Colors.white,
-    elevation: 0,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-  );
-
-  /// Yangi xomashyo yaratish. Rasm va tannarx keyin detail ekranida
-  /// to'ldiriladi — bu yerda faqat zarur maydonlar so'raladi.
+  /// Yangi xomashyo yaratish. Boshlang'ich miqdor kiritilsa u **kirim
+  /// harakati** sifatida yoziladi (§6) — shunda tarix uzilmaydi. Rasm va
+  /// tannarx keyin detail ekranida to'ldiriladi.
   Future<void> _addIngredient() async {
-    final created = await showDialog<Ingredient>(
+    final result = await showDialog<_NewIngredientResult>(
       context: context,
       builder: (_) => const _NewIngredientDialog(),
     );
-    if (created == null || !mounted) return;
+    if (result == null || !mounted) return;
+    final created = result.ingredient;
     try {
-      await context.read<InventoryProvider>().addIngredient(created);
+      final provider = context.read<InventoryProvider>();
+      final id = await provider.addIngredient(created);
+      if (result.initialQty > 0) {
+        await provider.stockIn(ingredientId: id, qty: result.initialQty);
+      }
       await _load();
       if (mounted) _snack('${created.name} qo\'shildi');
     } catch (e) {
@@ -201,17 +221,10 @@ class _WarehouseScreenState extends State<WarehouseScreen>
         title: const Text('Ombor'),
         backgroundColor: theme.colorScheme.surface,
         elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.fastfood_outlined), text: 'Mahsulotlar'),
-            Tab(icon: Icon(Icons.egg_outlined), text: 'Xomashyolar'),
-          ],
-        ),
         actions: [
           IconButton(
             tooltip: _gridView ? 'Jadval ko\'rinishi' : 'Karta ko\'rinishi',
-            onPressed: () => setState(() => _gridView = !_gridView),
+            onPressed: () => setState(() => _gridViewPref = !_gridViewPref),
             icon: Icon(
               _gridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
             ),
@@ -221,36 +234,18 @@ class _WarehouseScreenState extends State<WarehouseScreen>
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            // Amal tabga bog'liq: mahsulotlarda pishirish, xomashyolarda
-            // yangi xomashyo qo'shish.
-            child: _tabController.index == 0
-                ? ElevatedButton.icon(
-                    onPressed: () => _openProduce(),
-                    icon: const Icon(
-                      Icons.local_fire_department_rounded,
-                      size: 18,
-                    ),
-                    label: const Text('Pishirish'),
-                    style: _primaryButtonStyle,
-                  )
-                : ElevatedButton.icon(
-                    onPressed: _addIngredient,
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Xomashyo qo\'shish'),
-                    style: _primaryButtonStyle,
-                  ),
-          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
+          _tabSwitcher(theme),
           _toolbar(theme),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : TabBarView(
+                    // Sensorli ekranda swipe bilan ham o'tadi.
                     controller: _tabController,
                     children: [_productsTab(theme), _ingredientsTab(theme)],
                   ),
@@ -260,8 +255,117 @@ class _WarehouseScreenState extends State<WarehouseScreen>
     );
   }
 
+  /// Mahsulotlar / Xomashyolar almashtirgichi — TabBar emas, bosiladigan
+  /// segment knopkalari. Swipe TabBarView orqali baribir ishlaydi.
+  ///
+  /// Amal tugmasi (§1, §6) shu qatorning **o'ng tomonida**: mahsulotlar
+  /// tabida "Pishirish", xomashyolar tabida "Xomashyo qo'shish".
+  Widget _tabSwitcher(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _switcherButton(
+                  theme,
+                  0,
+                  Icons.fastfood_outlined,
+                  'Mahsulotlar',
+                ),
+                const SizedBox(width: 4),
+                _switcherButton(theme, 1, Icons.egg_outlined, 'Xomashyolar'),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          _tabAction(),
+        ],
+      ),
+    );
+  }
+
+  /// Tabga bog'liq asosiy amal tugmasi.
+  Widget _tabAction() {
+    final isProductsTab = _tabIndex == 0;
+    return ElevatedButton.icon(
+      onPressed: _loading
+          ? null
+          : isProductsTab
+          ? () => _openProduce()
+          : _addIngredient,
+      icon: Icon(
+        isProductsTab ? Icons.local_fire_department_rounded : Icons.add_rounded,
+        size: 20,
+      ),
+      label: Text(
+        isProductsTab ? 'Pishirish' : 'Xomashyo qo\'shish',
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isProductsTab
+            ? Colors.orange.shade700
+            : Colors.teal.shade700,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  Widget _switcherButton(
+    ThemeData theme,
+    int index,
+    IconData icon,
+    String label,
+  ) {
+    final selected = _tabIndex == index;
+    return Material(
+      color: selected ? theme.colorScheme.surface : Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      elevation: selected ? 1 : 0,
+      child: InkWell(
+        onTap: selected ? null : () => _tabController.animateTo(index),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: selected
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _toolbar(ThemeData theme) {
-    final isProductsTab = _tabController.index == 0;
+    final isProductsTab = _tabIndex == 0;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
       child: Row(
@@ -287,23 +391,23 @@ class _WarehouseScreenState extends State<WarehouseScreen>
           ),
           if (isProductsTab) ...[
             const SizedBox(width: 16),
-            _typeChip('Hammasi', null),
+            _stockChip('Hammasi', _StockFilter.all),
             const SizedBox(width: 8),
-            _typeChip('Tayyorlanadi', 'prepared'),
+            _stockChip('Mavjud', _StockFilter.inStock),
             const SizedBox(width: 8),
-            _typeChip('Sotib olinadi', 'resale'),
+            _stockChip('Mavjud emas', _StockFilter.outOfStock),
           ],
         ],
       ),
     );
   }
 
-  Widget _typeChip(String label, String? value) {
-    final selected = _typeFilter == value;
+  /// Qoldiq bo'yicha filtr (§3).
+  Widget _stockChip(String label, _StockFilter value) {
     return ChoiceChip(
       label: Text(label),
-      selected: selected,
-      onSelected: (_) => setState(() => _typeFilter = value),
+      selected: _stockFilter == value,
+      onSelected: (_) => setState(() => _stockFilter = value),
       showCheckmark: false,
     );
   }
@@ -316,7 +420,7 @@ class _WarehouseScreenState extends State<WarehouseScreen>
       return _empty(
         theme,
         Icons.fastfood_outlined,
-        _query.isEmpty && _typeFilter == null
+        _query.isEmpty && _stockFilter == _StockFilter.all
             ? 'Mahsulotlar mavjud emas'
             : 'Hech narsa topilmadi',
       );
@@ -409,11 +513,11 @@ class _WarehouseScreenState extends State<WarehouseScreen>
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Qoldiq: ${_fmt(qty)} ${p.unit ?? 'dona'}',
+                          'Qoldiq: ${QtyFormatter.format(qty)} ${p.unit ?? 'dona'}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: qty <= 0 ? Colors.red.shade700 : null,
+                            color: _stockColor(qty),
                           ),
                         ),
                       ],
@@ -490,10 +594,10 @@ class _WarehouseScreenState extends State<WarehouseScreen>
               ),
               Expanded(
                 child: Text(
-                  '${_fmt(qty)} ${p.unit ?? 'dona'}',
+                  '${QtyFormatter.format(qty)} ${p.unit ?? 'dona'}',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: qty <= 0 ? Colors.red.shade700 : null,
+                    color: _stockColor(qty),
                   ),
                 ),
               ),
@@ -628,7 +732,7 @@ class _WarehouseScreenState extends State<WarehouseScreen>
               ),
               const Spacer(),
               Text(
-                '${_fmt(row.onHand)} ${ing.baseUnit}',
+                '${QtyFormatter.format(row.onHand)} ${ing.baseUnit}',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -637,7 +741,7 @@ class _WarehouseScreenState extends State<WarehouseScreen>
               ),
               const SizedBox(height: 2),
               Text(
-                'Min: ${_fmt(ing.minStock)} ${ing.baseUnit}'
+                'Min: ${QtyFormatter.format(ing.minStock)} ${ing.baseUnit}'
                 '${ing.avgCost > 0 ? ' · ${PriceFormatter.format(ing.avgCost)}/${ing.baseUnit}' : ''}',
                 style: TextStyle(fontSize: 11, color: theme.hintColor),
                 overflow: TextOverflow.ellipsis,
@@ -685,7 +789,7 @@ class _WarehouseScreenState extends State<WarehouseScreen>
               ),
               Expanded(
                 child: Text(
-                  '${_fmt(row.onHand)} ${ing.baseUnit}',
+                  '${QtyFormatter.format(row.onHand)} ${ing.baseUnit}',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: row.isLow ? Colors.red.shade700 : null,
@@ -694,7 +798,7 @@ class _WarehouseScreenState extends State<WarehouseScreen>
               ),
               Expanded(
                 child: Text(
-                  'Min: ${_fmt(ing.minStock)}',
+                  'Min: ${QtyFormatter.format(ing.minStock)}',
                   style: TextStyle(fontSize: 12, color: theme.hintColor),
                 ),
               ),
@@ -745,9 +849,15 @@ class _WarehouseScreenState extends State<WarehouseScreen>
     );
   }
 
-  static String _fmt(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+  /// Mahsulot qoldig'i rangi (§5): bor bo'lsa yashil, tugagan (yoki manfiy)
+  /// bo'lsa qizil. Karta va jadval ko'rinishida bir xil.
+  static Color _stockColor(double qty) =>
+      qty > 0 ? Colors.green.shade700 : Colors.red.shade700;
+
 }
+
+/// Mahsulotlar tabidagi qoldiq filtri (§3).
+enum _StockFilter { all, inStock, outOfStock }
 
 /// Xomashyo + uning qoldig'i (`getIngredientsWithStock` natijasi).
 class _IngredientRow {
@@ -767,7 +877,17 @@ class _IngredientRow {
   bool get isLow => ingredient.minStock > 0 && onHand <= ingredient.minStock;
 }
 
-/// Yangi xomashyo qo'shish dialogi — nom, o'lchov birligi, min. miqdor.
+/// Yangi xomashyo dialogining natijasi: xomashyoning o'zi va **boshlang'ich
+/// qoldiq** (§6). Qoldiq 0 dan katta bo'lsa kirim harakati sifatida yoziladi.
+class _NewIngredientResult {
+  final Ingredient ingredient;
+  final double initialQty;
+
+  _NewIngredientResult(this.ingredient, this.initialQty);
+}
+
+/// Yangi xomashyo qo'shish dialogi — nom, birlik (knopkalar bilan), miqdor,
+/// min. miqdor (§6).
 class _NewIngredientDialog extends StatefulWidget {
   const _NewIngredientDialog();
 
@@ -776,43 +896,62 @@ class _NewIngredientDialog extends StatefulWidget {
 }
 
 class _NewIngredientDialogState extends State<_NewIngredientDialog> {
+  /// Tayyor birliklar — select emas, knopka ko'rinishida tanlanadi (§6).
+  /// Ro'yxatda yo'q birlik uchun "Boshqa" tanlanadi va matn kiritiladi.
+  static const _units = ['g', 'kg', 'ml', 'l', 'dona'];
+
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _unitController = TextEditingController(text: 'g');
+  final _qtyController = TextEditingController(text: '0');
   final _minController = TextEditingController(text: '0');
+  final _customUnitController = TextEditingController();
+
+  String _unit = 'g';
+  bool _customUnit = false;
 
   @override
   void dispose() {
     _nameController.dispose();
-    _unitController.dispose();
+    _qtyController.dispose();
     _minController.dispose();
+    _customUnitController.dispose();
     super.dispose();
   }
 
+  String get _effectiveUnit =>
+      _customUnit ? _customUnitController.text.trim() : _unit;
+
+  static double _parse(String raw) =>
+      double.tryParse(raw.trim().replaceAll(',', '.')) ?? 0;
+
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+    if (_effectiveUnit.isEmpty) return;
     Navigator.of(context).pop(
-      Ingredient(
-        name: _nameController.text.trim(),
-        baseUnit: _unitController.text.trim(),
-        minStock:
-            double.tryParse(_minController.text.trim().replaceAll(',', '.')) ??
-            0,
+      _NewIngredientResult(
+        Ingredient(
+          name: _nameController.text.trim(),
+          baseUnit: _effectiveUnit,
+          minStock: _parse(_minController.text),
+        ),
+        _parse(_qtyController.text),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text('Yangi xomashyo'),
       content: SizedBox(
-        width: 400,
+        width: 440,
         child: Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextFormField(
                 controller: _nameController,
@@ -829,22 +968,59 @@ class _NewIngredientDialogState extends State<_NewIngredientDialog> {
                     (v == null || v.trim().isEmpty) ? 'Nom kiriting' : null,
                 onFieldSubmitted: (_) => _submit(),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
+              Text(
+                'O\'lchov birligi',
+                style: TextStyle(fontSize: 12, color: theme.hintColor),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final u in _units) _unitButton(u, u),
+                  _unitButton('Boshqa', null),
+                ],
+              ),
+              if (_customUnit) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _customUnitController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Birlik nomi',
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Birlik kiriting'
+                      : null,
+                ),
+              ],
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
                     child: TextFormField(
-                      controller: _unitController,
+                      controller: _qtyController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                      ],
                       decoration: InputDecoration(
-                        labelText: 'Birlik (g, ml, dona)',
+                        labelText: 'Miqdori',
+                        suffixText: _effectiveUnit.isEmpty
+                            ? null
+                            : _effectiveUnit,
                         isDense: true,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Birlik kiriting'
-                          : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -868,11 +1044,11 @@ class _NewIngredientDialogState extends State<_NewIngredientDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Rasm, tannarx va boshlang\'ich qoldiq keyin — xomashyo '
-                'sahifasida yoki "Kirim" orqali kiritiladi.',
-                style: TextStyle(fontSize: 12),
+              const SizedBox(height: 10),
+              Text(
+                'Miqdor kiritilsa boshlang\'ich kirim sifatida yoziladi. '
+                'Rasm va tannarx keyin xomashyo sahifasida to\'ldiriladi.',
+                style: TextStyle(fontSize: 12, color: theme.hintColor),
               ),
             ],
           ),
@@ -897,6 +1073,20 @@ class _NewIngredientDialogState extends State<_NewIngredientDialog> {
           child: const Text('Qo\'shish'),
         ),
       ],
+    );
+  }
+
+  /// Birlik knopkasi. [value] `null` bo'lsa — "Boshqa" (qo'lda kiritish).
+  Widget _unitButton(String label, String? value) {
+    final selected = value == null ? _customUnit : (!_customUnit && _unit == value);
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      onSelected: (_) => setState(() {
+        _customUnit = value == null;
+        if (value != null) _unit = value;
+      }),
     );
   }
 }

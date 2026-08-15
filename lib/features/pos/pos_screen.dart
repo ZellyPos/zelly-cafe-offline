@@ -32,6 +32,10 @@ enum ProductSortMode {
   priceLowToHigh,
   priceHighToLow,
   alphabetical,
+
+  /// Qoldig'i bor taomlar yuqorida, tugaganlari pastda (§10). Guruh ichida
+  /// foydalanuvchining o'z tartibi (`sortOrder`) saqlanadi.
+  availableFirst,
 }
 
 class PosScreen extends StatefulWidget {
@@ -1287,6 +1291,8 @@ class _PosScreenState extends State<PosScreen> {
                   ? "Qimmat"
                   : _currentSort == ProductSortMode.priceLowToHigh
                   ? "Arzon"
+                  : _currentSort == ProductSortMode.availableFirst
+                  ? "Bor taomlar"
                   : "Alfabit",
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
@@ -1298,6 +1304,10 @@ class _PosScreenState extends State<PosScreen> {
         const PopupMenuItem<ProductSortMode>(
           value: ProductSortMode.custom,
           child: Text("Sizning tartibingiz"),
+        ),
+        const PopupMenuItem<ProductSortMode>(
+          value: ProductSortMode.availableFirst,
+          child: Text("Bor taomlar yuqorida"),
         ),
         const PopupMenuItem<ProductSortMode>(
           value: ProductSortMode.popularity,

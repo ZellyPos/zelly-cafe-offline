@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/errors/insufficient_stock.dart';
+import '../../../core/utils/qty_formatter.dart';
 import '../../../models/inventory_models.dart';
 import '../../../models/product.dart';
 import '../../../providers/inventory_provider.dart';
@@ -147,6 +149,8 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
     final items = {for (final i in _visibleItems) i.key: i};
     final batch = <StockBatchLine>[];
     final invalid = <String>[];
+    final shortages =
+        <({String name, double need, double onHand, String unit})>[];
 
     for (final entry in _lines.entries) {
       final item = items[entry.key];
@@ -154,6 +158,17 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
       final qty = entry.value.qty;
       if (qty == null || qty <= 0) {
         invalid.add(item.name);
+        continue;
+      }
+      // Chiqimda qoldiq manfiyga tushmasin (§14). Soni yuritilmaydigan
+      // mahsulotga (`quantity IS NULL`) cheklov qo'llanmaydi.
+      if (!_isInbound && item.tracked && qty > item.onHand + 1e-9) {
+        shortages.add((
+          name: item.name,
+          need: qty,
+          onHand: item.onHand,
+          unit: item.unit,
+        ));
         continue;
       }
       batch.add(
@@ -171,6 +186,10 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
 
     if (invalid.isNotEmpty) {
       _snack('Miqdor kiritilmagan: ${invalid.join(', ')}', isError: true);
+      return;
+    }
+    if (shortages.isNotEmpty) {
+      _showShortages(InsufficientStockException(shortages));
       return;
     }
     if (batch.isEmpty) {
@@ -194,11 +213,64 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
             ? '${batch.length} ta qator kirim qilindi'
             : '${batch.length} ta qator chiqim qilindi',
       );
+    } on InsufficientStockException catch (e) {
+      // Ekran ochilgandan keyin boshqa joyda qoldiq kamaygan bo'lishi mumkin —
+      // tranzaksiya bekor bo'ldi, hech narsa yozilmadi.
+      if (!mounted) return;
+      setState(() => _saving = false);
+      await _load();
+      if (!mounted) return;
+      _showShortages(e);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       _snack('Saqlashda xatolik: $e', isError: true);
     }
+  }
+
+  /// Chiqimda qoldiq yetmagan qatorlarni ko'rsatadi. Tanlov saqlanib qoladi —
+  /// miqdorni tuzatib qayta urinish mumkin.
+  void _showShortages(InsufficientStockException e) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        icon: Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
+        title: const Text('Qoldiq yetarli emas'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Quyidagilarda chiqim miqdori qoldiqdan ko\'p:'),
+              const SizedBox(height: 12),
+              for (final s in e.shortages)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    '${s.name} — chiqim ${QtyFormatter.withUnit(s.need, s.unit)}, '
+                    'omborda ${QtyFormatter.withUnit(s.onHand, s.unit)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Text(
+                'Hech narsa yozilmadi. Miqdorni kamaytiring yoki avval kirim '
+                'qiling.',
+                style: TextStyle(fontSize: 12, color: Theme.of(ctx).hintColor),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Tushunarli'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ─── UI ───────────────────────────────────────────────────────────────────
@@ -210,41 +282,12 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
+      // Sarlavha yo'q: "Kirim / Chiqim" so'zi tugmalarning o'zida turibdi
+      // (§14) — ustidagi takroriy yozuv olib tashlandi.
       appBar: AppBar(
-        title: const Text('Kirim / Chiqim'),
         backgroundColor: theme.colorScheme.surface,
         elevation: 0,
-        actions: [
-          TextButton.icon(
-            onPressed: _saving
-                ? null
-                : () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const StockHistoryNewScreen(),
-                    ),
-                  ),
-            icon: const Icon(Icons.history_rounded, size: 18),
-            label: const Text('Tarix'),
-          ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: _saving
-                ? null
-                : () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const StocktakingScreen(),
-                      ),
-                    );
-                    // Inventarizatsiyadan keyin qoldiqlar o'zgargan bo'lishi
-                    // mumkin.
-                    await _load();
-                  },
-            icon: const Icon(Icons.fact_check_outlined, size: 18),
-            label: const Text('Inventarizatsiya'),
-          ),
-          const SizedBox(width: 16),
-        ],
+        toolbarHeight: 48,
       ),
       body: Column(
         children: [
@@ -294,6 +337,29 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
             direction: StockDirection.outbound,
             color: Colors.red,
           ),
+          const SizedBox(width: 16),
+          // Tarix va Inventarizatsiya — kirim/chiqim tugmalari yonida (§14).
+          _secondaryButton(
+            theme,
+            label: 'Tarix',
+            icon: Icons.history_rounded,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const StockHistoryNewScreen()),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _secondaryButton(
+            theme,
+            label: 'Inventarizatsiya',
+            icon: Icons.fact_check_outlined,
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StocktakingScreen()),
+              );
+              // Inventarizatsiyadan keyin qoldiqlar o'zgargan bo'lishi mumkin.
+              await _load();
+            },
+          ),
           const SizedBox(width: 24),
           Expanded(
             child: TextField(
@@ -336,6 +402,27 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
         foregroundColor: selected ? Colors.white : theme.hintColor,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  /// Yordamchi tugma (Tarix, Inventarizatsiya) — yo'nalish tugmalari bilan
+  /// bir qatorda tursin, lekin ulardan ajralib ko'rinsin.
+  Widget _secondaryButton(
+    ThemeData theme, {
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return OutlinedButton.icon(
+      onPressed: _saving ? null : onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: theme.colorScheme.onSurface,
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
@@ -407,8 +494,14 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
                   ),
                   Expanded(
                     child: Text(
-                      'Qoldiq: ${_fmt(item.onHand)} ${item.unit}',
-                      style: const TextStyle(fontSize: 13),
+                      item.tracked
+                          ? 'Qoldiq: '
+                                '${QtyFormatter.withUnit(item.onHand, item.unit)}'
+                          : 'Qoldiq yuritilmaydi',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: item.tracked ? null : theme.hintColor,
+                      ),
                       textAlign: TextAlign.right,
                     ),
                   ),
@@ -428,6 +521,13 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
                       label: 'Miqdor (${item.unit})',
                       numeric: true,
                       autofocus: true,
+                      // Chiqimda ko'pi bilan qancha chiqarish mumkinligi
+                      // darhol ko'rinsin — saqlashgacha kutilmaydi (§14).
+                      helperText: _isInbound || !item.tracked
+                          ? null
+                          : 'Ko\'pi bilan ${QtyFormatter.format(item.onHand)}',
+                      errorText: _overdraftText(item, line),
+                      onChanged: _isInbound ? null : () => setState(() {}),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -463,16 +563,29 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
     );
   }
 
+  /// Chiqim miqdori qoldiqdan oshib ketgan bo'lsa xato matni, aks holda
+  /// `null`.
+  String? _overdraftText(_FlowItem item, _FlowLine line) {
+    if (_isInbound || !item.tracked) return null;
+    final qty = line.qty;
+    if (qty == null || qty <= item.onHand + 1e-9) return null;
+    return 'Omborda ${QtyFormatter.format(item.onHand)} ${item.unit} bor';
+  }
+
   Widget _input({
     required TextEditingController controller,
     required String label,
     bool numeric = false,
     bool autofocus = false,
+    String? helperText,
+    String? errorText,
+    VoidCallback? onChanged,
   }) {
     return TextField(
       controller: controller,
       enabled: !_saving,
       autofocus: autofocus,
+      onChanged: onChanged == null ? null : (_) => onChanged(),
       keyboardType: numeric
           ? const TextInputType.numberWithOptions(decimal: true)
           : TextInputType.text,
@@ -481,6 +594,8 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
           : null,
       decoration: InputDecoration(
         labelText: label,
+        helperText: helperText,
+        errorText: errorText,
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
@@ -536,8 +651,6 @@ class _StockFlowScreenState extends State<StockFlowScreen> {
     );
   }
 
-  static String _fmt(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 }
 
 /// Ro'yxatdagi bitta birlik — xomashyo yoki mahsulot, bir xil ko'rinishda.
@@ -550,6 +663,10 @@ class _FlowItem {
   final double avgCost;
   final String? imagePath;
 
+  /// Soni yuritiladimi. Mahsulotda `quantity IS NULL` bo'lsa — yuritilmaydi,
+  /// unga chiqim cheklovi qo'llanmaydi. Xomashyoda har doim `true`.
+  final bool tracked;
+
   _FlowItem({
     required this.kind,
     required this.id,
@@ -558,6 +675,7 @@ class _FlowItem {
     required this.onHand,
     required this.avgCost,
     this.imagePath,
+    this.tracked = true,
   });
 
   /// Xomashyo va mahsulot id'lari to'qnashmasligi uchun turi bilan birga.
@@ -585,6 +703,7 @@ class _FlowItem {
       onHand: p.quantity ?? 0,
       avgCost: p.avgCost,
       imagePath: p.imagePath,
+      tracked: p.quantity != null,
     );
   }
 }

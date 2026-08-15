@@ -30,9 +30,12 @@ class InventoryProvider extends ChangeNotifier {
     return await _repo.getIngredientStock(ingredientId);
   }
 
-  Future<void> addIngredient(Ingredient ingredient) async {
-    await _repo.insertIngredient(ingredient);
+  /// Yangi xomashyo qo'shadi va uning `id`sini qaytaradi (boshlang'ich kirim
+  /// yozish uchun kerak).
+  Future<int> addIngredient(Ingredient ingredient) async {
+    final id = await _repo.insertIngredient(ingredient);
     await loadIngredients();
+    return id;
   }
 
   Future<void> updateIngredient(Ingredient ingredient) async {
@@ -199,6 +202,12 @@ class InventoryProvider extends ChangeNotifier {
   Future<List<Map<String, dynamic>>> getProductMovements({int? productId}) =>
       _repo.getProductMovements(productId: productId);
 
+  /// Mahsulot turini o'zgartirish ('prepared' | 'resale').
+  Future<void> setProductType(int productId, String type) async {
+    await _repo.setProductType(productId, type);
+    notifyListeners();
+  }
+
   /// Retsept tannarxi (food-cost uchun). Retsepti yo'q bo'lsa `null`.
   Future<double?> recipeCost(int productId) => _repo.recipeCost(productId);
 
@@ -214,6 +223,7 @@ class InventoryProvider extends ChangeNotifier {
     int? itemId,
     String? source,
     int limit = 200,
+    int offset = 0,
   }) => _repo.getHistory(
     from: from,
     to: to,
@@ -221,5 +231,21 @@ class InventoryProvider extends ChangeNotifier {
     itemId: itemId,
     source: source,
     limit: limit,
+    offset: offset,
+  );
+
+  /// Shu filtrlardagi yozuvlar soni — sahifalash uchun.
+  Future<int> getHistoryCount({
+    DateTime? from,
+    DateTime? to,
+    List<String>? types,
+    int? itemId,
+    String? source,
+  }) => _repo.getHistoryCount(
+    from: from,
+    to: to,
+    types: types,
+    itemId: itemId,
+    source: source,
   );
 }

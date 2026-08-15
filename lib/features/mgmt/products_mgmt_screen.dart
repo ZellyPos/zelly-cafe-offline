@@ -12,6 +12,8 @@ import '../../core/app_strings.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../providers/connectivity_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/app_settings_provider.dart';
+import '../../repositories/inventory_repository.dart';
 
 class ProductsMgmtScreen extends StatefulWidget {
   const ProductsMgmtScreen({super.key});
@@ -526,6 +528,12 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
         : null;
     bool noServiceCharge = product?.noServiceCharge ?? false;
     String? selectedUnit = product?.unit ?? 'portion';
+    // Ombor turi: `prepared` pishiriladi (retseptli), `resale` esa kirim
+    // qilinadi. Ombor detalida tahrirlanmaydi — shu yerda turadi.
+    String productType = product?.productType ?? 'prepared';
+    final bool inventoryOn = context
+        .read<AppSettingsProvider>()
+        .enableInventory;
 
     showDialog(
       context: context,
@@ -757,6 +765,42 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                             ),
                             keyboardType: TextInputType.number,
                           ),
+                          if (inventoryOn) ...[
+                            const SizedBox(height: 16),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Ombor turi',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: 'prepared',
+                                  label: Text('Tayyorlanadi'),
+                                  icon: Icon(
+                                    Icons.local_fire_department_rounded,
+                                    size: 16,
+                                  ),
+                                ),
+                                ButtonSegment(
+                                  value: 'resale',
+                                  label: Text('Sotib olinadi'),
+                                  icon: Icon(
+                                    Icons.add_shopping_cart_rounded,
+                                    size: 16,
+                                  ),
+                                ),
+                              ],
+                              selected: {productType},
+                              showSelectedIcon: false,
+                              onSelectionChanged: (s) => setDialogState(
+                                () => productType = s.first,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           // SET Taom Toggle
                           SwitchListTile(
@@ -974,7 +1018,16 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     allowNegativeStock: product?.allowNegativeStock ?? false,
                     noServiceCharge: noServiceCharge,
                     unit: selectedUnit,
+                    // Ombor maydonlari saqlanib qolishi shart — aks holda
+                    // tahrirlashda `resale` va tannarx nolga tushib ketardi.
+                    productType: productType,
+                    avgCost: product?.avgCost ?? 0,
                   );
+
+                  final bool switchedToResale =
+                      product != null &&
+                      product.productType != 'resale' &&
+                      productType == 'resale';
 
                   if (product == null) {
                     if (context.mounted) {
@@ -990,6 +1043,13 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                         connectivity: context.read<ConnectivityProvider>(),
                       );
                     }
+                  }
+                  // Sotib olinadigan mahsulotda retsept ma'nosiz — o'chadi.
+                  if (switchedToResale && product.id != null) {
+                    await InventoryRepository().setProductType(
+                      product.id!,
+                      'resale',
+                    );
                   }
                   if (context.mounted) {
                     Navigator.pop(context);

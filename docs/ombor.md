@@ -1,15 +1,18 @@
-Omborxona bosh sahifasi — Oshxona uchun erp tizimimizning omborxona sahifasi.
-1. Omborxona sahifasida ikkita bo'lim mavjud bo'ladi: Mahsulotlar va xomashyolar bo'limlari.
+> **Holat:** 9, 10, 12, 13, 14, 15 — bajarildi (2026-08-15, batafsil:
+> [`ombor_progress.md`](ombor_progress.md)). **11 — tashlab ketildi**
+> (foydalanuvchi qarori): ombor turi tanlovi Mahsulotlar sahifasida qoladi,
+> chunki uni olib tashlansa turni o'zgartiradigan joy qolmaydi.
 
-2. Mahsulotlar bo'limi — Bu bo'limda tayyor mahsulotlar(ovqatlar) turadi. Mahsulotlar bo'limi(default tanlangan bo'ladi)da ovqatlar card yoki jadval korinishida bo'ladi, Bo'limning yuqori qismida qidiruv, filter, jadval yoki card korinishiga o'tkazish knopkasi va pishirish knopkasi bo'lishi kerak. Har bir mahsulotning nomi, kategoriyasi, narxi va soni korinib turishi kerak va bosilganda detail sahifasi ochilishi kerak
+9. ✅ Buyurtma detail sahifasidagi taom tugagan bo'lsa o'sha card qizil rangda bo'lib qolishi kerak
 
-3. Pishirish knopkasi — uni bosish orqali ovqatlar tayyorlangani soni kiritiladi ya'ni masalan bugun 100 ta somsa tayyorlangani yozilsa mahsulotlardan somsaning miqdori 100 taga oshadi. Pishirish knopkasi bosilganda modal oyna ochilishi kerak, unda tayyor mahsulotlar ro'yxati va qidiruv chiqishi kerak. Ro'yxatdan bir vaqtda bir nechta mahsulotni tanlash mumkin bo'lishi va tanlangan mahsulotlarni soni o'sha qatorida kiritilib ketishi kerak. modalning pastki qismida saqlash knopkasi bo'lishi kerak. Modalning yuqori qismida iks(x) bo'lishi kerak modalni yopish uchun va modalning tashqi qismini bossa ham modal yopilishi kerak.
-4. Homashyolar bo'limi — bu bo'limda ovqatlar tayyorlashda sarflanadigan homashyolar ro'yxati turadi huddi mahsulotlarga o'xshab qidiruv va hokazo xususiyatlar bunda ham bo'ladi faqat pishirish knopkasi xomashyolarda bo'lmadi sababi xomashyolar pishirilmaydi tayyor mahsulotlar ya'ni taomlar pishiriladi.
-5. Mahsulotlar detail sahifasi — har bir mahsulotning detail sahifasiida unga sarflanadigan xomashyolar ya'ni ingradientlar ro'yxati bo'lishi kera undan tashqari mahsulotning ma'lumotlari ham bo'lishi kerak. Ingradientar ro'yxatida nomi, sarflanadigan miqdori, minimal miqdori, omborxonadagi miqdori korinib turishi kerak.  Hamda bu ro'yxatni tahrirlash imkoniyati bo'lishi kerak, yangi ingradient qo'shish, o'chirish va miqdorlarini o'zgartirish shu yerdan tahrirlanishi kerak. Mahsulotning o'zini ma'lumotlarini bu joydan tahrirlab bo'lmasligi kerak faqat unga sarflanadigan ingradientlarni tahrirlash mumkin bo'lishi kerak
-6. Xomashyolar(ingradientlar) detail sahifasida xomashyoning ma'lumotlari bo'lishi kerak, uni tahrirlash imkoniyati ham bo'lshi kerak. Xomshyoning Rasmi, nomi, omborxonadagi miqdori, kam miqdori kabi ma'lumotlari bo'lishi kerak.
-7. kirim/chiqim sahifasi — xomashyolarni miqdorini qo'shish va kamaytirish uchun. Bu alohida sahifa bo'ladi unga sidebar orqali kiriladi sidebarda Omborxona sahifasining ostida joylashadi. Sahifada qidiruv, kirim yoki chiqim tanlash qismi(select option korinishida emas balki knopkalar korinishida bo'ladi), xomashyolarning birdaniga bir-nechtasini tanlash imkoniyati bo'lishi kerak va kirim/chiqim tarixini korish uchun knopka bo'lishi kerak. Undan tashqari xomashyo kimdan olingani haqidagi ma'lumotni yozish uchun joy ham bo'lishi kerak. Keyin saqlash knopkasi bosilganda xomashyoning miqdori o'zgarishi kerak. Undan tashqari inventrizatsiya sahifasini ochadigan knopka ham bo'lishi kerak.
+10. ✅ Buyurtma detail sahifasida taomlarni tartiblashda bor taomlarni yuqoriga chiqarib beruvchi tartib ham bo'lishi kerak
 
-8. kirim/chiqim Tarixi sahifasi — unda kirim chiqim tarixlari yoziladi va inventrizatsiya tarixi yoziladi. barcha ma'lumotlar qulay shaklda yozilishi shart
+11. ⏭️ Mahsulotlar sahifasidagi mahsulot detailidagi ombor turini tanlashni olib tashlash kerak — *tashlab ketildi*
 
+12. ✅ Ombor sahifasida yangi xomashyo qo'shish detalilda xomashyoning birliklar g dan boshqasi tanlanib xomashyo qo'shilganda xatolik bermoqda
 
-9. Inventrizatsiya sahifasi — bu sahifa  tayyor mahsulotlarning yoki xomashyolarning qoldiqlari nolga tushirish uchun ishlatiladi
+13. ✅ Omborxonada xomashyolar sahifasida har bir xomashyoning miqdori formatlanib korinishi kerak ya'ni nollar ajralib turishi o'qish oson bo'lishi kerak
+
+14. ✅ Omborxonaning kirim/chiqim sahifasida chiqim knopkasi bosilganda  mahsulot noldan tushib ketmasligi kerak. Tarix va invertizatsiya  knopkalari kirim/chiqim knopkalarini yonida joylashsin, kirim/chiqim degan yuqoridagi so'zni ham olib tashla
+
+15. ✅ Ombordagi harakatlar tarixi sahifasini sahifalab qo'y birdaniga ko'p ma'lumotlar kelsa qiynalib qoladi.

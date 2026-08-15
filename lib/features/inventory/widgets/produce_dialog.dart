@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/services/inventory_service.dart';
+import '../../../core/utils/qty_formatter.dart';
 import '../../../models/product.dart';
 import '../../../providers/inventory_provider.dart';
 
@@ -37,6 +38,10 @@ class _ProduceDialogState extends State<ProduceDialog> {
   final _searchController = TextEditingController();
   final _controllers = <int, TextEditingController>{};
 
+  /// Har mahsulotning son maydoni uchun focus — tanlanganda darhol shu
+  /// maydonga focus tushadi (§4).
+  final _focusNodes = <int, FocusNode>{};
+
   List<Product> _all = [];
   final _selected = <int>{};
   bool _loading = true;
@@ -55,6 +60,9 @@ class _ProduceDialogState extends State<ProduceDialog> {
     for (final c in _controllers.values) {
       c.dispose();
     }
+    for (final f in _focusNodes.values) {
+      f.dispose();
+    }
     super.dispose();
   }
 
@@ -65,10 +73,19 @@ class _ProduceDialogState extends State<ProduceDialog> {
       _all = rows.map((m) => Product.fromMap(m)).toList();
       _loading = false;
       final initialId = widget.initialProduct?.id;
-      if (initialId != null && _all.any((p) => p.id == initialId)) {
+      final at = _all.indexWhere((p) => p.id == initialId);
+      if (initialId != null && at >= 0) {
         _selected.add(initialId);
+        // Tanlangan mahsulot scrollsiz ko'rinib tursin — ro'yxat boshiga
+        // ko'chiriladi (tartib bir marta o'zgaradi, toggle'da sakramaydi).
+        _all.insert(0, _all.removeAt(at));
       }
     });
+    // Kartadagi "Pishirish" dan kelganda ham son maydoni darhol tayyor (§4).
+    final preselected = widget.initialProduct?.id;
+    if (preselected != null && _selected.contains(preselected)) {
+      _focusQty(preselected);
+    }
   }
 
   List<Product> get _filtered {
@@ -90,6 +107,25 @@ class _ProduceDialogState extends State<ProduceDialog> {
     );
   }
 
+  FocusNode _focusFor(int productId) =>
+      _focusNodes.putIfAbsent(productId, () => FocusNode());
+
+  /// Son maydoniga focus beradi va matnni belgilaydi — kassir darhol
+  /// sonni yozib ketishi mumkin, "1" ni o'chirish kerak emas (§4).
+  void _focusQty(int productId) {
+    final controller = _controllerFor(productId);
+    final node = _focusFor(productId);
+    // Maydon aynan shu setState natijasida quriladi — keyingi kadrda focus.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_selected.contains(productId)) return;
+      node.requestFocus();
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
+    });
+  }
+
   void _toggle(Product p) {
     final id = p.id;
     if (id == null) return;
@@ -101,6 +137,7 @@ class _ProduceDialogState extends State<ProduceDialog> {
         _controllerFor(id);
       }
     });
+    if (_selected.contains(id)) _focusQty(id);
   }
 
   /// Tanlangan qatorlardan `(productId, count)` ro'yxatini yig'adi.
@@ -200,7 +237,7 @@ class _ProduceDialogState extends State<ProduceDialog> {
                               ),
                             ),
                             Text(
-                              'kerak ${_fmt(s.need)} · bor ${_fmt(s.onHand)} '
+                              'kerak ${QtyFormatter.format(s.need)} · bor ${QtyFormatter.format(s.onHand)} '
                               '${s.unit}',
                               style: TextStyle(
                                 fontSize: 12,
@@ -228,8 +265,6 @@ class _ProduceDialogState extends State<ProduceDialog> {
     );
   }
 
-  static String _fmt(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
   @override
   Widget build(BuildContext context) {
@@ -388,7 +423,7 @@ class _ProduceDialogState extends State<ProduceDialog> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Omborda: ${_fmt(p.quantity ?? 0)} ${p.unit ?? 'dona'}',
+                    'Omborda: ${QtyFormatter.format(p.quantity ?? 0)} ${p.unit ?? 'dona'}',
                     style: TextStyle(fontSize: 12, color: theme.hintColor),
                   ),
                 ],
@@ -400,6 +435,7 @@ class _ProduceDialogState extends State<ProduceDialog> {
               child: isSelected
                   ? TextField(
                       controller: _controllerFor(id),
+                      focusNode: _focusFor(id),
                       enabled: !_saving,
                       textAlign: TextAlign.center,
                       keyboardType: const TextInputType.numberWithOptions(

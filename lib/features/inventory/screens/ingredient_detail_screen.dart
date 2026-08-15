@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/utils/price_formatter.dart';
+import '../../../core/utils/qty_formatter.dart';
 import '../../../models/inventory_models.dart';
 import '../../../providers/inventory_provider.dart';
 import '../widgets/inventory_image.dart';
@@ -47,11 +48,11 @@ class _IngredientDetailScreenState extends State<IngredientDetailScreen> {
     final ing = widget.ingredient;
     _nameController = TextEditingController(text: ing.name);
     _unitController = TextEditingController(text: ing.baseUnit);
-    _minStockController = TextEditingController(text: _fmt(ing.minStock));
+    _minStockController = TextEditingController(text: QtyFormatter.format(ing.minStock));
     _avgCostController = TextEditingController(
-      text: ing.avgCost > 0 ? _fmt(ing.avgCost) : '',
+      text: ing.avgCost > 0 ? QtyFormatter.format(ing.avgCost) : '',
     );
-    _onHandController = TextEditingController(text: _fmt(widget.onHand));
+    _onHandController = TextEditingController(text: QtyFormatter.format(widget.onHand));
     _imagePath = ing.imagePath;
   }
 
@@ -161,8 +162,6 @@ class _IngredientDetailScreenState extends State<IngredientDetailScreen> {
   static double? _parse(String v) =>
       double.tryParse(v.trim().replaceAll(',', '.'));
 
-  static String _fmt(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
   @override
   Widget build(BuildContext context) {

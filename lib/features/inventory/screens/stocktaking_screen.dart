@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/utils/qty_formatter.dart';
 import '../../../models/inventory_models.dart';
 import '../../../models/product.dart';
 import '../../../providers/inventory_provider.dart';
@@ -362,7 +363,7 @@ class _StocktakingScreenState extends State<StocktakingScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              '${_fmt(item.system)} ${item.unit}',
+              '${QtyFormatter.format(item.system)} ${item.unit}',
               style: const TextStyle(fontSize: 13),
             ),
           ),
@@ -406,7 +407,7 @@ class _StocktakingScreenState extends State<StocktakingScreen> {
                 : Text(
                     diff == 0
                         ? 'to\'g\'ri'
-                        : '${diff > 0 ? '+' : '−'}${_fmt(diff.abs())} '
+                        : '${diff > 0 ? '+' : '−'}${QtyFormatter.format(diff.abs())} '
                               '${item.unit}',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
@@ -478,8 +479,6 @@ class _StocktakingScreenState extends State<StocktakingScreen> {
     );
   }
 
-  static String _fmt(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 }
 
 /// Sanaladigan bitta birlik.

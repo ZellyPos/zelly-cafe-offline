@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../core/database_helper.dart';
+import '../core/errors/insufficient_stock.dart';
 import '../models/inventory_models.dart';
 
 /// Ombor birligi turi: xomashyo yoki tayyor mahsulot.
@@ -324,6 +325,10 @@ class InventoryRepository {
     final db = await _dbHelper.database;
     final now = DateTime.now().toIso8601String();
     await db.transaction((txn) async {
+      // Yozishdan **oldin** butun to'plam tekshiriladi: chiqim qoldiqni
+      // manfiyga tushirmasin. Bir birlik bir necha qatorda uchrasa miqdorlar
+      // jamlanadi. Yetmasa — barcha yetishmovchiliklar bitta xabarda.
+      await _assertOutboundAvailable(txn, lines);
       for (final line in lines) {
         final isIn = line.direction == StockDirection.inbound;
         if (line.kind == StockItemKind.ingredient) {
@@ -371,6 +376,76 @@ class InventoryRepository {
         }
       }
     });
+  }
+
+  /// To'plamdagi barcha chiqim qatorlarini qoldiqqa solishtiradi.
+  ///
+  /// Yetmasa [InsufficientStockException] tashlanadi — tranzaksiya rollback
+  /// bo'ladi, ya'ni **qisman yozilish yo'q**.
+  Future<void> _assertOutboundAvailable(
+    Transaction txn,
+    List<StockBatchLine> lines,
+  ) async {
+    final needed = <String, double>{};
+    for (final line in lines) {
+      if (line.direction != StockDirection.outbound) continue;
+      final key = '${line.kind.name}:${line.itemId}';
+      needed[key] = (needed[key] ?? 0) + line.qty;
+    }
+    if (needed.isEmpty) return;
+
+    final shortages =
+        <({String name, double need, double onHand, String unit})>[];
+
+    for (final entry in needed.entries) {
+      final parts = entry.key.split(':');
+      final itemId = int.parse(parts[1]);
+      final need = entry.value;
+
+      if (parts[0] == StockItemKind.ingredient.name) {
+        final rows = await txn.rawQuery(
+          '''
+          SELECT i.name, i.base_unit, COALESCE(s.on_hand, 0) AS on_hand
+          FROM ingredients i
+          LEFT JOIN ingredient_stock s ON s.ingredient_id = i.id
+          WHERE i.id = ?
+        ''',
+          [itemId],
+        );
+        if (rows.isEmpty) continue;
+        final onHand = (rows.first['on_hand'] as num).toDouble();
+        if (need > onHand + 1e-9) {
+          shortages.add((
+            name: rows.first['name'] as String,
+            need: need,
+            onHand: onHand,
+            unit: rows.first['base_unit'] as String? ?? '',
+          ));
+        }
+      } else {
+        final rows = await txn.query(
+          'products',
+          columns: ['name', 'quantity', 'unit'],
+          where: 'id = ?',
+          whereArgs: [itemId],
+        );
+        if (rows.isEmpty) continue;
+        // `quantity IS NULL` — soni yuritilmaydi, cheklov qo'llanmaydi.
+        final rawQty = rows.first['quantity'] as num?;
+        if (rawQty == null) continue;
+        final onHand = rawQty.toDouble();
+        if (need > onHand + 1e-9) {
+          shortages.add((
+            name: rows.first['name'] as String? ?? 'Mahsulot #$itemId',
+            need: need,
+            onHand: onHand,
+            unit: rows.first['unit'] as String? ?? 'dona',
+          ));
+        }
+      }
+    }
+
+    if (shortages.isNotEmpty) throw InsufficientStockException(shortages);
   }
 
   // --- Kirim/chiqim primitivlari (tranzaksiya ichida ishlaydi) ---
@@ -444,7 +519,36 @@ class InventoryRepository {
     String reason = 'waste',
     String? note,
     int? userId,
+    bool allowNegative = false,
   }) async {
+    if (!allowNegative) {
+      final rows = await txn.rawQuery(
+        '''
+        SELECT i.name, i.base_unit, COALESCE(s.on_hand, 0) AS on_hand
+        FROM ingredients i
+        LEFT JOIN ingredient_stock s ON s.ingredient_id = i.id
+        WHERE i.id = ?
+      ''',
+        [ingredientId],
+      );
+      final onHand = rows.isEmpty
+          ? 0.0
+          : (rows.first['on_hand'] as num).toDouble();
+      // 1e-9 — suzuvchi nuqta xatosi tufayli teng miqdor "yetmadi" bo'lmasin.
+      if (qty > onHand + 1e-9) {
+        throw InsufficientStockException([
+          (
+            name: rows.isEmpty
+                ? 'Xomashyo #$ingredientId'
+                : rows.first['name'] as String,
+            need: qty,
+            onHand: onHand,
+            unit: rows.isEmpty ? '' : (rows.first['base_unit'] as String? ?? ''),
+          ),
+        ]);
+      }
+    }
+
     await txn.insert('stock_movements', {
       'ingredient_id': ingredientId,
       'type': 'OUT',
@@ -511,7 +615,32 @@ class InventoryRepository {
     required double qty,
     String? note,
     int? userId,
+    bool allowNegative = false,
   }) async {
+    if (!allowNegative) {
+      final rows = await txn.query(
+        'products',
+        columns: ['name', 'quantity', 'unit'],
+        where: 'id = ?',
+        whereArgs: [productId],
+      );
+      // `quantity IS NULL` — soni yuritilmaydigan mahsulot; unga cheklov yo'q.
+      final rawQty = rows.isEmpty ? null : rows.first['quantity'] as num?;
+      if (rawQty != null) {
+        final onHand = rawQty.toDouble();
+        if (qty > onHand + 1e-9) {
+          throw InsufficientStockException([
+            (
+              name: rows.first['name'] as String? ?? 'Mahsulot #$productId',
+              need: qty,
+              onHand: onHand,
+              unit: rows.first['unit'] as String? ?? 'dona',
+            ),
+          ]);
+        }
+      }
+    }
+
     await txn.rawUpdate(
       'UPDATE products SET quantity = COALESCE(quantity, 0) - ? WHERE id = ?',
       [qty, productId],
@@ -649,6 +778,7 @@ class InventoryRepository {
     int? itemId,
     String? source,
     int limit = 200,
+    int offset = 0,
   }) async {
     final db = await _dbHelper.database;
     final args = <Object?>[];
@@ -719,10 +849,107 @@ class InventoryRepository {
 
     if (parts.isEmpty) return [];
     args.add(limit);
+    args.add(offset);
     return db.rawQuery(
-      '${parts.join(' UNION ALL ')} ORDER BY created_at DESC LIMIT ?',
+      '${parts.join(' UNION ALL ')} ORDER BY created_at DESC LIMIT ? OFFSET ?',
       args,
     );
+  }
+
+  /// [getHistory] bilan bir xil filtrlardagi yozuvlar **soni** — sahifalash
+  /// uchun ("1–50 / 1240"). So'rov mantig'i takrorlanmasin uchun bir xil
+  /// filtrlarni quruvchi yordamchi ishlatiladi.
+  Future<int> getHistoryCount({
+    DateTime? from,
+    DateTime? to,
+    List<String>? types,
+    int? itemId,
+    String? source,
+  }) async {
+    final db = await _dbHelper.database;
+    final args = <Object?>[];
+
+    String dateFilter(String alias) {
+      var sql = '';
+      if (from != null) {
+        sql += ' AND $alias.created_at >= ?';
+        args.add(from.toIso8601String());
+      }
+      if (to != null) {
+        sql += ' AND $alias.created_at <= ?';
+        args.add(to.toIso8601String());
+      }
+      return sql;
+    }
+
+    String typeFilter(String alias) {
+      if (types == null || types.isEmpty) return '';
+      final ph = List.filled(types.length, '?').join(',');
+      args.addAll(types);
+      return ' AND $alias.type IN ($ph)';
+    }
+
+    final parts = <String>[];
+
+    if (source == null || source == 'ingredient') {
+      var w = '1=1';
+      if (itemId != null) {
+        w += ' AND sm.ingredient_id = ?';
+        args.add(itemId);
+      }
+      w += dateFilter('sm') + typeFilter('sm');
+      parts.add('''
+        SELECT COUNT(*) AS cnt FROM stock_movements sm
+        JOIN ingredients i ON sm.ingredient_id = i.id
+        WHERE $w
+      ''');
+    }
+
+    if (source == null || source == 'product') {
+      var w = '1=1';
+      if (itemId != null) {
+        w += ' AND pm.product_id = ?';
+        args.add(itemId);
+      }
+      w += dateFilter('pm') + typeFilter('pm');
+      parts.add('''
+        SELECT COUNT(*) AS cnt FROM product_movements pm
+        JOIN products p ON pm.product_id = p.id
+        WHERE $w
+      ''');
+    }
+
+    if (parts.isEmpty) return 0;
+    final rows = await db.rawQuery(
+      'SELECT SUM(cnt) AS total FROM (${parts.join(' UNION ALL ')})',
+      args,
+    );
+    return (rows.first['total'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Mahsulot turini o'zgartiradi: `'prepared'` (tayyorlanadi, retseptli) yoki
+  /// `'resale'` (sotib olinadi, kirim qilinadi).
+  ///
+  /// `resale` ga o'tkazilganda retsept **o'chiriladi** — sotib olinadigan
+  /// mahsulotda retsept ma'nosiz va pishirish ro'yxatiga tushib qolardi.
+  Future<void> setProductType(int productId, String type) async {
+    assert(type == 'prepared' || type == 'resale');
+    final db = await _dbHelper.database;
+    await db.transaction((txn) async {
+      await txn.update(
+        'products',
+        {'product_type': type},
+        where: 'id = ?',
+        whereArgs: [productId],
+      );
+      if (type == 'resale') {
+        await txn.delete(
+          'recipes',
+          where: 'product_id = ?',
+          whereArgs: [productId],
+        );
+      }
+    });
   }
 
   // --- Food-cost (§3) ---

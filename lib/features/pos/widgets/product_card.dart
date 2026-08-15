@@ -24,6 +24,9 @@ class ProductCardWidget extends StatelessWidget {
 
   static const _accent = Color(0xFF6366F1);
 
+  /// Tugagan taom rangi (§9) — karta butunlay qizil hoshiyali bo'ladi.
+  static const _outOfStock = Color(0xFFEF4444);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -46,17 +49,26 @@ class ProductCardWidget extends StatelessWidget {
             ? cart.getProductCartQuantity(product.id!)
             : 0.0;
         final inCart = qtyInCart > 0;
+        // Taom tugagan (§9): qoldig'i yuritiladi va savatdagisini hisobga
+        // olganda hech narsa qolmagan. Savatdagi belgidan ustun turadi —
+        // "tugagan" holat muhimroq.
+        final outOfStock =
+            product.quantity != null && (product.quantity! - qtyInCart) <= 0;
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            color: inCart
+            color: outOfStock
+                ? _outOfStock.withValues(alpha: 0.08)
+                : inCart
                 ? _accent.withValues(alpha: 0.07)
                 : theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(AppTheme.borderRadius),
             boxShadow: AppTheme.softShadow,
             border: Border.all(
-              color: inCart
+              color: outOfStock
+                  ? _outOfStock.withValues(alpha: 0.55)
+                  : inCart
                   ? _accent.withValues(alpha: 0.35)
                   : Colors.transparent,
               width: 1.5,
@@ -75,7 +87,14 @@ class ProductCardWidget extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildImage(context, categoryColor, inCart, qtyInCart, theme),
+                  _buildImage(
+                    context,
+                    categoryColor,
+                    inCart,
+                    qtyInCart,
+                    theme,
+                    outOfStock,
+                  ),
                   Padding(
                     padding: const EdgeInsets.all(12),
                     child: Column(
@@ -145,6 +164,7 @@ class ProductCardWidget extends StatelessWidget {
     bool inCart,
     double qtyInCart,
     ThemeData theme,
+    bool outOfStock,
   ) {
     return Expanded(
       child: Stack(
@@ -152,7 +172,9 @@ class ProductCardWidget extends StatelessWidget {
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: inCart
+              color: outOfStock
+                  ? _outOfStock.withValues(alpha: 0.06)
+                  : inCart
                   ? _accent.withValues(alpha: 0.05)
                   : const Color(0xFFF8FAFC),
               borderRadius: const BorderRadius.vertical(

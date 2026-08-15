@@ -420,6 +420,114 @@ void main() {
 
       expect(await productQty(w.burgerId), 7);
     });
+
+    test('chiqim qoldiqdan ko\'p bo\'lsa qoldiq manfiyga tushmaydi', () async {
+      final w = await setupWorld(breadQty: 10);
+
+      await expectLater(
+        invRepo.stockOut(ingredientId: w.breadId, qty: 15),
+        throwsA(isA<InsufficientStockException>()),
+      );
+      expect(await ingredientStock(w.breadId), 10);
+    });
+
+    test('mahsulot chiqimi qoldiqdan oshsa rad etiladi', () async {
+      final w = await setupWorld();
+
+      await expectLater(
+        invRepo.productWaste(productId: w.colaId, qty: 51),
+        throwsA(isA<InsufficientStockException>()),
+      );
+      expect(await productQty(w.colaId), 50);
+    });
+
+    test('to\'plamda bitta chiqim yetmasa hammasi bekor bo\'ladi', () async {
+      final w = await setupWorld(meatQty: 5000, breadQty: 10);
+
+      await expectLater(
+        invRepo.applyStockBatch([
+          StockBatchLine(
+            kind: StockItemKind.ingredient,
+            itemId: w.meatId,
+            direction: StockDirection.outbound,
+            qty: 1000,
+          ),
+          StockBatchLine(
+            kind: StockItemKind.ingredient,
+            itemId: w.breadId,
+            direction: StockDirection.outbound,
+            qty: 999,
+          ),
+        ]),
+        throwsA(isA<InsufficientStockException>()),
+      );
+
+      // Birinchi qator ham yozilmasligi kerak — bitta tranzaksiya.
+      expect(await ingredientStock(w.meatId), 5000);
+      expect(await ingredientStock(w.breadId), 10);
+    });
+
+    test('bitta birlik ikki qatorda bo\'lsa miqdorlar jamlanadi', () async {
+      final w = await setupWorld(breadQty: 10);
+
+      await expectLater(
+        invRepo.applyStockBatch([
+          StockBatchLine(
+            kind: StockItemKind.ingredient,
+            itemId: w.breadId,
+            direction: StockDirection.outbound,
+            qty: 6,
+          ),
+          StockBatchLine(
+            kind: StockItemKind.ingredient,
+            itemId: w.breadId,
+            direction: StockDirection.outbound,
+            qty: 6,
+          ),
+        ]),
+        throwsA(isA<InsufficientStockException>()),
+      );
+      expect(await ingredientStock(w.breadId), 10);
+    });
+
+    test('soni yuritilmaydigan mahsulotga chiqim cheklovi qo\'llanmaydi',
+        () async {
+      final untrackedId = await dbHelper.insert('products', {
+        'name': 'Choy',
+        'price': 3000,
+        'category': 'Drinks',
+        'product_type': 'resale',
+        'quantity': null,
+        'is_active': 1,
+      });
+
+      // `quantity IS NULL` — soni hisobga olinmaydi, xato tashlanmaydi.
+      await invRepo.productWaste(productId: untrackedId, qty: 5);
+
+      final db = await dbHelper.database;
+      final rows = await db.query(
+        'product_movements',
+        where: 'product_id = ? AND type = ?',
+        whereArgs: [untrackedId, 'WASTE'],
+      );
+      expect(rows.length, 1);
+    });
+
+    test('o\'lchov birligi g/ml/pcs bilan cheklanmaydi', () async {
+      // Eski sxemada `CHECK (base_unit IN ('g','ml','pcs'))` bor edi —
+      // 'kg' bilan xomashyo qo'shish xato berardi (v56 da olib tashlandi).
+      final id = await invRepo.insertIngredient(
+        Ingredient(name: 'Un', baseUnit: 'kg', minStock: 5),
+      );
+      final db = await dbHelper.database;
+      final rows = await db.query('ingredients', where: 'id = ?', whereArgs: [id]);
+      expect(rows.first['base_unit'], 'kg');
+
+      final id2 = await invRepo.insertIngredient(
+        Ingredient(name: 'Tuxum', baseUnit: 'dona'),
+      );
+      expect(id2, isPositive);
+    });
   });
 
   group('Inventarizatsiya', () {
@@ -458,6 +566,224 @@ void main() {
     });
   });
 
+  group('Buyurtmani tasdiqlash (§8)', () {
+    test('tasdiqlanganda tayyor son kamayadi', () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 10)]);
+
+      await invService.consumeOnConfirm('ORDER-C1', [
+        (productId: w.burgerId, qty: 3),
+        (productId: w.colaId, qty: 2),
+      ]);
+
+      expect(await productQty(w.burgerId), 7);
+      expect(await productQty(w.colaId), 48);
+
+      // Xomashyo tegilmaydi — u pishirishda chegirilgan.
+      expect(await ingredientStock(w.meatId), 5000 - 1500);
+    });
+
+    test('qoldiq yetmasa hech narsa yozilmaydi (rollback)', () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 2)]);
+
+      await expectLater(
+        invService.consumeOnConfirm('ORDER-C2', [
+          (productId: w.burgerId, qty: 5), // faqat 2 ta bor
+          (productId: w.colaId, qty: 1), // bu yetadi, lekin bekor bo'ladi
+        ]),
+        throwsA(isA<InsufficientStockException>()),
+      );
+
+      // Qisman yozilish bo'lmasligi shart — buyurtma tasdiqlanmaydi.
+      expect(await productQty(w.burgerId), 2);
+      expect(await productQty(w.colaId), 50);
+    });
+
+    test('yetishmovchilik tafsilotlari beriladi', () async {
+      final w = await setupWorld();
+
+      try {
+        await invService.consumeOnConfirm('ORDER-C3', [
+          (productId: w.burgerId, qty: 4),
+        ]);
+        fail('InsufficientStockException tashlanishi kerak edi');
+      } on InsufficientStockException catch (e) {
+        expect(e.shortages.length, 1);
+        expect(e.shortages.first.name, 'Burger');
+        expect(e.shortages.first.need, 4);
+        expect(e.shortages.first.onHand, 0);
+      }
+    });
+
+    test('manfiy delta qoldiqni qaytaradi', () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 10)]);
+      await invService.consumeOnConfirm('ORDER-C4', [
+        (productId: w.burgerId, qty: 4),
+      ]);
+      expect(await productQty(w.burgerId), 6);
+
+      // Buyurtmada son 4 dan 1 ga kamaytirildi → 3 ta qaytadi.
+      await invService.consumeOnConfirm('ORDER-C4', [
+        (productId: w.burgerId, qty: -3),
+      ]);
+      expect(await productQty(w.burgerId), 9);
+    });
+
+    test('to\'lov tasdiqlangan qismni IKKINCHI marta chegirmaydi', () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 10)]);
+
+      // Tasdiqlash: 2 ta, keyin qo'shimcha 1 ta (jami 3).
+      await invService.consumeOnConfirm('ORDER-C5', [
+        (productId: w.burgerId, qty: 2),
+      ]);
+      await invService.consumeOnConfirm('ORDER-C5', [
+        (productId: w.burgerId, qty: 1),
+      ]);
+      expect(await productQty(w.burgerId), 7);
+
+      // To'lovda buyurtmaning to'liq soni (3) keladi — qo'shimcha
+      // chegirish bo'lmasligi kerak.
+      await invService.processOrderPaid(
+        Order(
+          id: 'ORDER-C5',
+          total: 75000,
+          paymentType: 'Cash',
+          createdAt: DateTime.now(),
+          items: [
+            OrderItem(
+              orderId: 'ORDER-C5',
+              productId: w.burgerId,
+              qty: 3,
+              price: 25000,
+            ),
+          ],
+        ),
+      );
+
+      expect(await productQty(w.burgerId), 7);
+    });
+
+    test('tasdiqlanmagan qism to\'lovda chegiriladi', () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 10)]);
+
+      // Faqat 1 ta tasdiqlangan, to'lovda 3 ta.
+      await invService.consumeOnConfirm('ORDER-C6', [
+        (productId: w.burgerId, qty: 1),
+      ]);
+      await invService.processOrderPaid(
+        Order(
+          id: 'ORDER-C6',
+          total: 75000,
+          paymentType: 'Cash',
+          createdAt: DateTime.now(),
+          items: [
+            OrderItem(
+              orderId: 'ORDER-C6',
+              productId: w.burgerId,
+              qty: 3,
+              price: 25000,
+            ),
+          ],
+        ),
+      );
+
+      // 1 (tasdiqlash) + 2 (qolgani) = 3
+      expect(await productQty(w.burgerId), 7);
+    });
+
+    test('son yuritilmaydigan mahsulot (quantity NULL) bloklamaydi', () async {
+      await setupWorld();
+      // quantity berilmagan — bu mahsulotning soni yuritilmaydi.
+      final teaId = await dbHelper.insert('products', {
+        'name': 'Choy',
+        'price': 3000,
+        'category': 'Drinks',
+        'is_active': 1,
+      });
+
+      // Xato tashlanmasligi va quantity NULL qolishi kerak.
+      await invService.consumeOnConfirm('ORDER-C8', [
+        (productId: teaId, qty: 5),
+      ]);
+
+      final db = await dbHelper.database;
+      final rows = await db.query('products', where: 'id = ?', whereArgs: [teaId]);
+      expect(rows.first['quantity'], isNull);
+    });
+
+    test('to\'plam (set) tarkibidagi mahsulotlar chegiriladi', () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 10)]);
+
+      final setId = await dbHelper.insert('products', {
+        'name': 'Lanch to\'plami',
+        'price': 30000,
+        'category': 'Sets',
+        'is_set': 1,
+        'is_active': 1,
+      });
+      final db = await dbHelper.database;
+      await db.insert('product_bundles', {
+        'bundle_id': setId,
+        'product_id': w.burgerId,
+        'quantity': 1.0,
+      });
+      await db.insert('product_bundles', {
+        'bundle_id': setId,
+        'product_id': w.colaId,
+        'quantity': 2.0,
+      });
+
+      await invService.consumeOnConfirm('ORDER-C7', [
+        (productId: setId, qty: 2),
+      ]);
+
+      expect(await productQty(w.burgerId), 8); // 10 - 2×1
+      expect(await productQty(w.colaId), 46); // 50 - 2×2
+    });
+  });
+
+  group('Mahsulot turi', () {
+    test('resale ga o\'tkazilganda retsept o\'chadi', () async {
+      final w = await setupWorld();
+      expect(await invRepo.getRecipeForProduct(w.burgerId), isNotNull);
+
+      await invRepo.setProductType(w.burgerId, 'resale');
+
+      final db = await dbHelper.database;
+      final rows = await db.query(
+        'products',
+        columns: ['product_type'],
+        where: 'id = ?',
+        whereArgs: [w.burgerId],
+      );
+      expect(rows.first['product_type'], 'resale');
+      // Retseptsiz qolishi shart — aks holda pishirish ro'yxatida turardi.
+      expect(await invRepo.getRecipeForProduct(w.burgerId), isNull);
+
+      // Endi resale ro'yxatiga tushadi, prepared dan chiqadi
+      final resale = await invRepo.getResaleProducts();
+      expect(resale.any((m) => m['id'] == w.burgerId), isTrue);
+      final prepared = await invRepo.getPreparedProducts();
+      expect(prepared.any((m) => m['id'] == w.burgerId), isFalse);
+    });
+
+    test('prepared ga qaytarilganda retsept o\'chirilmaydi', () async {
+      final w = await setupWorld();
+
+      await invRepo.setProductType(w.colaId, 'prepared');
+
+      final prepared = await invRepo.getPreparedProducts();
+      expect(prepared.any((m) => m['id'] == w.colaId), isTrue);
+      // Burgerning retsepti tegilmagan bo'lishi kerak
+      expect(await invRepo.getRecipeForProduct(w.burgerId), isNotNull);
+    });
+  });
+
   group('Tarix va food-cost', () {
     test('getHistory xomashyo va mahsulot harakatlarini birlashtiradi', () async {
       final w = await setupWorld();
@@ -483,6 +809,39 @@ void main() {
         itemId: w.meatId,
       );
       expect(meatOnly.every((r) => r['item_name'] == 'Go\'sht'), isTrue);
+    });
+
+    test('getHistory sahifalaydi, getHistoryCount jamini beradi', () async {
+      final w = await setupWorld();
+      // setupWorld o'zi ham kirim yozadi — shuning uchun jamini o'lchab olamiz.
+      final before = await invRepo.getHistoryCount();
+      for (var i = 0; i < 12; i++) {
+        await invRepo.stockIn(ingredientId: w.meatId, qty: 10, cost: 80);
+      }
+
+      final total = await invRepo.getHistoryCount();
+      expect(total, before + 12);
+
+      final page1 = await invRepo.getHistory(limit: 5, offset: 0);
+      final page2 = await invRepo.getHistory(limit: 5, offset: 5);
+      expect(page1.length, 5);
+      expect(page2.length, 5);
+      // Sahifalar bir-birini takrorlamaydi.
+      final ids1 = page1.map((r) => '${r['source']}:${r['id']}').toSet();
+      final ids2 = page2.map((r) => '${r['source']}:${r['id']}').toSet();
+      expect(ids1.intersection(ids2), isEmpty);
+
+      // Oxirgi sahifa qisqaroq.
+      final last = await invRepo.getHistory(
+        limit: 5,
+        offset: (total ~/ 5) * 5,
+      );
+      expect(last.length, total % 5);
+
+      // Filtr `count` ga ham qo'llanadi.
+      final inCount = await invRepo.getHistoryCount(types: ['IN']);
+      final inRows = await invRepo.getHistory(types: ['IN'], limit: 1000);
+      expect(inCount, inRows.length);
     });
 
     test('recipeCost = Σ(qty × avg_cost) / yield_qty', () async {

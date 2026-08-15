@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 55,
+      version: 56,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -1309,6 +1309,50 @@ class DatabaseHelper {
         print('Error upgrading database to v55 (ombor): $e');
       }
     }
+
+    if (oldVersion < 56) {
+      try {
+        // `ingredients.base_unit` dagi CHECK (base_unit IN ('g','ml','pcs'))
+        // cheklovini olib tashlaymiz: UI 'kg', 'l', 'dona' va ixtiyoriy
+        // birlikni taklif qiladi, lekin ular CHECK ga tushmay xatolik berardi.
+        //
+        // SQLite'da cheklovni ALTER bilan olib bo'lmaydi — jadval qayta
+        // quriladi. Foreign key majburlash yoqilmagan (`PRAGMA foreign_keys`
+        // hech qayerda ON qilinmagan), shuning uchun DROP+RENAME xavfsiz.
+        final schema = await db.rawQuery(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='ingredients'",
+        );
+        final createSql = schema.isEmpty
+            ? null
+            : schema.first['sql'] as String?;
+
+        // Faqat haqiqatan CHECK bo'lsa qayta quramiz (idempotent).
+        if (createSql != null && createSql.toUpperCase().contains('CHECK')) {
+          await db.execute('''
+            CREATE TABLE ingredients_v56 (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              name TEXT NOT NULL,
+              base_unit TEXT NOT NULL,
+              min_stock REAL DEFAULT 0,
+              is_active INTEGER NOT NULL DEFAULT 1,
+              image_path TEXT,
+              avg_cost REAL DEFAULT 0
+            )
+          ''');
+          await db.execute('''
+            INSERT INTO ingredients_v56
+              (id, name, base_unit, min_stock, is_active, image_path, avg_cost)
+            SELECT id, name, base_unit, COALESCE(min_stock, 0),
+                   COALESCE(is_active, 1), image_path, COALESCE(avg_cost, 0)
+            FROM ingredients
+          ''');
+          await db.execute('DROP TABLE ingredients');
+          await db.execute('ALTER TABLE ingredients_v56 RENAME TO ingredients');
+        }
+      } catch (e) {
+        print('Error upgrading database to v56 (base_unit CHECK): $e');
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -1584,7 +1628,10 @@ CREATE TABLE IF NOT EXISTS users (
       CREATE TABLE IF NOT EXISTS ingredients (
         id $idType,
         name $textType,
-        base_unit TEXT NOT NULL CHECK (base_unit IN ('g', 'ml', 'pcs')),
+        -- Birlik erkin matn: g/kg/ml/l/dona va foydalanuvchi kiritgan har
+        -- qanday birlik. Eski CHECK cheklovi ('g','ml','pcs') v56 da olib
+        -- tashlandi — u yangi xomashyo qo'shishda xatolik berardi.
+        base_unit TEXT NOT NULL,
         min_stock REAL DEFAULT 0,
         is_active $integerType DEFAULT 1,
         image_path TEXT,

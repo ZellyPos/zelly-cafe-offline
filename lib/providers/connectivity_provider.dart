@@ -363,6 +363,18 @@ class ConnectivityProvider extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 8));
       if (response.statusCode == 200) return null;
+      // 409 — serverda tayyor mahsulot qoldig'i yetmadi (§8). Chaqiruvchi
+      // buni oddiy printer xatosidan ajratishi kerak, shu sabab prefiks.
+      if (response.statusCode == 409) {
+        String message = 'Mahsulot qoldig\'i yetarli emas';
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map && data['error'] is String) {
+            message = data['error'] as String;
+          }
+        } catch (_) {}
+        return 'STOCK:$message';
+      }
       return 'Server chop etishda xatolik: ${response.statusCode}';
     } catch (e) {
       debugPrint('requestPrint error: $e');

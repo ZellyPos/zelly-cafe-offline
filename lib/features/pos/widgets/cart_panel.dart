@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/connectivity_provider.dart';
 import '../../../providers/app_settings_provider.dart';
+import '../../../providers/product_provider.dart';
 import '../../../core/app_strings.dart';
 import '../../../core/utils/price_formatter.dart';
+import '../../../core/utils/qty_formatter.dart';
 import '../../../models/table.dart';
 import 'quantity_dialog.dart';
 import 'discount_dialog.dart';
@@ -199,6 +201,12 @@ class CartPanelWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final isCancelled = item.quantity == 0;
     final hasDiscount = item.discountAmount > 0;
+    // §8 — omborda qancha qolgani buyurtma detalida ko'rinib turadi.
+    // Qoldiq tasdiqlashda kamayadi, shuning uchun jonli qiymat
+    // ProductProvider'dan olinadi (savatdagi nusxa eskirgan bo'lishi mumkin).
+    final double? onHand = context.watch<AppSettingsProvider>().enableInventory
+        ? _liveStock(context, item)
+        : null;
 
     return GestureDetector(
       onLongPress: () => _showItemContextMenu(context, item, cartProvider),
@@ -294,6 +302,21 @@ class CartPanelWidget extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                  // Omborda qolgan son (§8)
+                  if (onHand != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Omborda: ${QtyFormatter.format(onHand)} '
+                      '${item.product.unit ?? 'dona'}',
+                      style: TextStyle(
+                        color: onHand > 0
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFFEF4444),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                   // Chegirma satri
                   if (hasDiscount) ...[
                     const SizedBox(height: 2),
@@ -388,6 +411,16 @@ class CartPanelWidget extends StatelessWidget {
       ),
     ),  // InkWell
     );  // GestureDetector
+  }
+
+  /// Mahsulotning omborda qolgan soni — ro'yxatdagi jonli qiymat, topilmasa
+  /// savatdagi nusxa. `null` — bu mahsulot ombor hisobida yuritilmaydi.
+  double? _liveStock(BuildContext context, CartItem item) {
+    final products = context.watch<ProductProvider>().products;
+    for (final p in products) {
+      if (p.id == item.product.id) return p.quantity;
+    }
+    return item.product.quantity;
   }
 
   // Item long press — chegirma menyu

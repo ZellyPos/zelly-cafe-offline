@@ -400,6 +400,36 @@ kodda amalga oshirildi:
 
 ---
 
+## 🐞 Keyin topilgan kamchilik — mahsulot turini o'zgartirish (2026-08-09)
+
+**Muammo:** `product_type` ni o'zgartiradigan UI **umuman yo'q edi**.
+Migratsiyadan keyin barcha mahsulot `prepared` bo'lib qoladi, ya'ni:
+- `getResaleProducts()` bo'sh qaytardi → Kirim sahifasida mahsulot ko'rinmasdi
+- har mahsulotda "Kirim" o'rniga "Pishirish" chiqardi
+
+Spec §4.3 "mahsulot ma'lumotlari faqat ko'rish" deydi, shu sabab tur
+almashtirgichi ham qo'yilmagan edi. Lekin `product_type` — sof **ombor**
+atributi (POS menyusiga aloqasi yo'q), shuning uchun ombor detaliga qo'yildi.
+
+**Yechim:**
+- `InventoryRepository.setProductType(productId, type)` — tur o'zgartiradi va
+  `resale` ga o'tishda **retseptni o'chiradi** (sotib olinadigan mahsulotda
+  retsept ma'nosiz va pishirish ro'yxatida qolib ketardi).
+- Mahsulot detalida `SegmentedButton`: *Tayyorlanadi / Sotib olinadi*.
+  Retsept mavjud bo'lsa o'chirilishi haqida tasdiq so'raladi.
+- 2 ta test qo'shildi → jami **22 ta test**, hammasi o'tdi.
+
+---
+
+## 📘 Foydalanuvchi qo'llanmasi (2026-08-09)
+
+`docs/ombor_qollanma.md` — oshxona/kassa xodimi uchun amaliy qo'llanma:
+ikki xil mahsulot farqi, sozlash ketma-ketligi (xomashyo → kirim → retsept →
+pishirish), kundalik tartib, inventarizatsiya, tarix, food-cost va ko'p
+uchraydigan savollar.
+
+---
+
 ## ✅ Runtime tekshiruvi (2026-08-09)
 
 **1. Ilova haqiqiy bazada ishga tushirildi** (`flutter run -d windows`):
@@ -440,6 +470,163 @@ Yiqilganlarning **hech biri ombor bilan bog'liq emas**:
 > Eslatma: Windows'da testlar loyiha ildizidagi `sqlite3.dll` ga bog'liq
 > (kuzatuvsiz fayl, `.gitignore` da ham yo'q). U bo'lmasa barcha DB testlari
 > "Failed to load dynamic library" bilan yiqiladi.
+
+---
+
+## ✅ `docs/ombor.md` 8 ta tuzatish — TUGADI (2026-08-12)
+
+Modul ishga tushirilgandan keyin foydalanish jarayonida yig'ilgan ro'yxat.
+
+| # | Talab | Bajarildi |
+|---|-------|-----------|
+| 1 | "Pishirish" tugmasi tab knopkalarining o'ng tomonida | FAB olib tashlandi, tugma `_tabSwitcher` qatoriga ko'chdi (`warehouse_screen.dart`) |
+| 2 | Karta/jadval tanlovi saqlanadi, dastur yopilsa tiklanadi | `static bool _gridViewPref` — sessiya davomida yashaydi, diskka **yozilmaydi** |
+| 3 | Filtr: hammasi / mavjud / mavjud emas | `_StockFilter` enum, `prepared/resale` filtri o'rniga |
+| 4 | Pishirish modalida son maydoniga avto-focus | `FocusNode` + `addPostFrameCallback`; matn belgilanadi, "1" ni o'chirish kerak emas |
+| 5 | Qoldiq > 0 yashil, 0 bo'lsa qizil | `_stockColor()` — karta va jadval ko'rinishida bir xil |
+| 6 | Yangi xomashyoda miqdor + knopkali birlik | `g/kg/ml/l/dona` + "Boshqa"; miqdor **kirim harakati** sifatida yoziladi (tarix uzilmaydi) |
+| 7 | Detaldan tur almashtirgichi olib tashlandi | `product_detail_screen` da faqat ko'rish; tahrir **Mahsulotlar** bo'limiga ko'chdi |
+| 8 | Qoldiq tasdiqlanganda chegiriladi | Quyida |
+
+**7 — tur almashtirgichi qayerga ketdi:** ombor detalidan olib tashlansa
+`product_type` ni o'zgartirish umuman imkonsiz bo'lardi (barcha mahsulot
+`prepared` bo'lib qolib, "Kirim" sahifasida hech narsa ko'rinmasdi). Shu sabab
+`SegmentedButton` **Mahsulotlar → tahrirlash** dialogiga ko'chirildi (faqat
+ombor yoqilganda ko'rinadi).
+
+> 🐞 Yo'l-yo'lakay topilgan xato: `products_mgmt_screen` mahsulotni saqlaganda
+> `Product` ni `product_type`/`avg_cost` siz qurardi → **tahrirlashda har
+> qanday `resale` mahsulot `prepared` ga qaytib, tannarxi nolga tushardi.**
+> Endi ikkala maydon saqlanib qoladi.
+
+### 8 — Tayyor mahsulot qoldig'i buyurtma tasdiqlanganda chegiriladi
+
+Eng katta o'zgarish: chegirish nuqtasi **to'lovdan tasdiqlashga** ko'chdi.
+Oshxona taomni tasdiqlash paytida beradi, to'lov esa keyin bo'ladi.
+
+- Yangi metod `InventoryService.consumeOnConfirm(orderId, lines)`:
+  - `lines` — tasdiqlangan **delta** (`qty - printed_qty`), ya'ni faqat yangi
+    qo'shilgan son. **Manfiy delta** (buyurtmada son kamaytirilgan) qoldiqni
+    qaytaradi.
+  - To'plam (`is_set`) `product_bundles` bo'yicha ochiladi.
+  - Yozishdan **oldin** qoldiq tekshiriladi; yetmasa
+    `InsufficientStockException` → tranzaksiya rollback, **qisman yozilish
+    yo'q**, buyurtma tasdiqlanmaydi.
+  - Yozuvlar `product_movements` ga `note` `confirm:` prefiksi bilan tushadi.
+- `processOrderPaid` endi **faqat qolgan qismni** chegiradi: buyurtma bo'yicha
+  kerakli son minus tasdiqlashda allaqachon chegirilgani
+  (`_confirmDeductedByProduct`). Shunda ikki marta ayrilmaydi, lekin
+  tasdiqlashsiz oqimlar (to'g'ridan-to'g'ri to'lov) avvalgidek ishlaydi.
+- `cart_provider.confirmTableOrder` — chegirish **chop etishdan oldin**.
+  Qoldiq yetmasa dialog chiqadi va chek chop etilmaydi. Auto-confirm ham shu
+  yo'ldan o'tadi.
+- **Client rejimi:** client qurilmada baza yo'q, shuning uchun tekshiruv
+  serverning `/print_job` endpointida. Yetmasa **409** + xabar qaytadi,
+  `requestPrint` uni `STOCK:` prefiksi bilan beradi, client dialog ko'rsatib
+  tasdiqlashni bekor qiladi.
+- Buyurtma detalida (savat paneli) har qator ostida **"Omborda: N"** —
+  `ProductProvider` dan jonli qiymat (>0 yashil, 0 qizil). Tasdiqlangach
+  mahsulotlar qayta yuklanadi va son darhol yangilanadi.
+
+⭐ **Muhim chekka holat:** `products.quantity` **NULL** bo'lsa — bu "soni
+yuritilmaydi" degani (POS kartasida ham qoldiq ko'rsatilmaydi). Bunday
+mahsulotlar tekshirilmaydi ham, chegirilmaydi ham — aks holda ombor yoqilgan
+zahoti hisobga olinmagan har bir taom butun sotuvni to'xtatib qo'yardi.
+
+⚠️ **Ta'sir:** soni yuritiladigan mahsulot (qoldiq maydoni to'ldirilgan) endi
+oldin to'ldirilgan bo'lishi kerak (`prepared` → Pishirish, `resale` → Kirim).
+Qoldig'i 0 bo'lganini buyurtmaga qo'shib tasdiqlash mumkin emas.
+
+**Tekshiruv:** `flutter analyze lib` — **0 xato/ogohlantirish**.
+`test/inventory_test.dart` — §8 uchun **8 yangi test**, jami **30 test,
+hammasi o'tdi**. `flutter test` → 32 o'tdi, 5 yiqildi —
+oldingi sessiyadagi **aynan o'sha** ombor bilan bog'liq bo'lmagan yiqilishlar
+(`analytics_test` 3, `shift_test` 1, `widget_test` 1).
+`flutter build windows --debug` — **muvaffaqiyatli**.
+
+---
+
+## ✅ `docs/ombor.md` 9–15 tuzatishlar — TUGADI (2026-08-15)
+
+11-band foydalanuvchi qarori bilan **tashlab ketildi** (Mahsulotlar
+sahifasidagi "Ombor turi" tanlovi joyida qoladi — uni olib tashlansa
+`product_type` ni o'zgartiradigan joy umuman qolmasdi).
+
+| # | Talab | Bajarildi |
+|---|-------|-----------|
+| 9 | Tugagan taom kartasi qizil | `product_card.dart` — fon, hoshiya va rasm maydoni qizil |
+| 10 | "Bor taomlar yuqorida" tartibi | Yangi `ProductSortMode.availableFirst` |
+| 12 | `g` dan boshqa birlikda xatolik | **DB v55 → v56**: `base_unit` CHECK cheklovi olib tashlandi |
+| 13 | Miqdorlar formatlanib ko'rinsin | Yangi `QtyFormatter` — 7 ta nusxa `_fmt` o'rniga |
+| 14 | Chiqimda qoldiq manfiy bo'lmasin + tugmalar joyi + sarlavha | `stock_flow_screen` + repozitoriy nazorati |
+| 15 | Tarix sahifalansin | `getHistory(offset)` + `getHistoryCount()` + pager |
+
+### 12 — birlik cheklovi (eng jiddiy xato)
+
+`ingredients.base_unit` ustunida **v23 dan beri**
+`CHECK (base_unit IN ('g','ml','pcs'))` cheklovi turgan edi. UI esa
+`g/kg/ml/l/dona` + ixtiyoriy birlikni taklif qilardi — natijada `g`, `ml`
+dan boshqa har qanday birlik bilan xomashyo qo'shish **DB darajasida rad
+etilardi**.
+
+- SQLite'da CHECK ni `ALTER` bilan olib bo'lmaydi → **jadval qayta quriladi**
+  (`CREATE ... → INSERT SELECT → DROP → RENAME`). FK majburlash loyihada
+  yoqilmagan (`PRAGMA foreign_keys` hech qayerda ON qilinmagan), shu sabab
+  xavfsiz.
+- Migratsiya **idempotent**: `sqlite_master` dagi `sql` da CHECK bo'lsagina
+  ishlaydi.
+- `_createDB` (yangi o'rnatish) ham CHECK'siz.
+- 🧪 Yangi `test/db_migration_test.dart` — **haqiqiy v55 → v56 yo'li**
+  tekshiriladi: eski CHECK'li jadval quriladi, ma'lumot solinadi, `kg`
+  rad etilishi tasdiqlanadi, so'ng ilova ochilib migratsiyadan keyin
+  ma'lumot saqlanganini va `kg`/`dona` qabul qilinishini tekshiradi.
+
+### 13 — `QtyFormatter`
+
+Yangi `lib/core/utils/qty_formatter.dart`: minglar **bo'sh joy**, kasr
+**vergul** (`125 000`, `1 250,5`) — `PriceFormatter` bilan bir xil uslub.
+7 ta ekranda takrorlangan `_fmt` nusxalari o'chirildi va hammasi shu bitta
+manbaga o'tdi (xomashyo/mahsulot ro'yxatlari, kirim-chiqim, tarix,
+inventarizatsiya, detallar, pishirish modali, savat panelidagi "Omborda: N",
+yetishmovchilik xabarlari).
+
+### 14 — chiqimda qoldiq manfiyga tushmaydi
+
+- `InsufficientStockException` `core/errors/insufficient_stock.dart` ga
+  ko'chirildi (repozitoriy ham, servis ham foydalanadi — aylanma import
+  bo'lmasin). `inventory_service` uni `export` qiladi, eski importlar ishlaydi.
+- `applyStockBatch` **yozishdan oldin** butun to'plamni tekshiradi
+  (`_assertOutboundAvailable`): bir birlik bir necha qatorda bo'lsa miqdorlar
+  **jamlanadi**, yetmasa barcha yetishmovchiliklar bitta xabarda va
+  tranzaksiya rollback — **qisman yozilish yo'q**.
+- `_ingredientOut` / `_productOut` primitivlari ham tekshiradi, ya'ni
+  `stockOut()` va `productWaste()` ham himoyalangan (`allowNegative: true`
+  bilan chetlab o'tish mumkin).
+- ⭐ `products.quantity IS NULL` — "soni yuritilmaydi": cheklov qo'llanmaydi
+  (§8 dagi qoida bilan bir xil).
+- UI: chiqim miqdori maydonida **jonli** "Ko'pi bilan N" va oshib ketsa
+  qizil xato matni; saqlashda tafsilotli dialog.
+- Tugmalar: **Tarix** va **Inventarizatsiya** AppBar'dan **Kirim/Chiqim
+  tugmalari yoniga** ko'chdi; AppBar sarlavhasi ("Kirim / Chiqim") olib
+  tashlandi.
+
+### 15 — tarix sahifalanadi
+
+- `getHistory({limit, offset})` + yangi `getHistoryCount({...})` — bir xil
+  filtrlar bo'yicha jami son.
+- Sahifa hajmi **50**. Panel: `‹ 1 … 4 5 6 … 27 ›` (joriysining atrofidagi
+  1 ta sahifa + chekkalar), sarlavhada `51–100 / 1240 ta yozuv`.
+- Filtr o'zgarsa 1-sahifaga qaytadi; filtr toraysa joriy sahifa bo'sh qolmasin
+  deb oxirgi mavjud sahifaga tushadi; sahifa almashganda ro'yxat boshiga
+  scroll qiladi.
+
+**Tekshiruv:** `flutter analyze lib` — **0 xato** (qolgan ogohlantirishlar
+oldindan bor edi). `flutter test` → ombor **37 + migratsiya 1 = 38 test
+o'tdi**; yiqilgan 5 tasi o'sha eski, ombor bilan bog'liq bo'lmagan testlar
+(`analytics` 3, `shift` 1, `widget` 1). `flutter build windows --debug` —
+**muvaffaqiyatli**.
+
+---
 
 **Keyingi ish uchun tavsiya (ixtiyoriy):**
 - Ombor amallarini `AuditService` bilan bog'lash (kim nima qilgani —

@@ -1203,6 +1203,25 @@ class ApiServer {
         final Map<String, dynamic> payload =
             Map<String, dynamic>.from(jsonDecode(body) as Map);
         final order = Order.fromPrintPayload(payload);
+
+        // §8 — buyurtma tasdiqlanganda tayyor mahsulot qoldig'i chegiriladi.
+        // Client qurilmada baza yo'q, shuning uchun tekshiruv shu yerda.
+        // Qoldiq yetmasa chek chop etilmaydi va 409 qaytadi.
+        if (await _inventoryEnabled()) {
+          try {
+            await InventoryService.instance.consumeOnConfirm(
+              order.id,
+              order.items
+                  .map((i) => (productId: i.productId, qty: i.qty.toDouble()))
+                  .toList(),
+            );
+          } on InsufficientStockException catch (e) {
+            return Response(409,
+                body: jsonEncode({'error': e.message, 'insufficient': true}),
+                headers: {'Content-Type': 'application/json'});
+          }
+        }
+
         await PrintingService.printDividedOrder(order: order);
         return Response.ok(jsonEncode({'ok': true}),
             headers: {'Content-Type': 'application/json'});
@@ -1829,6 +1848,23 @@ class ApiServer {
             body: jsonEncode({'error': e.toString()}));
       }
     });
+  }
+
+  /// Ombor moduli yoqilganmi (`settings.enable_inventory`).
+  static Future<bool> _inventoryEnabled() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final rows = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: ['enable_inventory'],
+        limit: 1,
+      );
+      return rows.isNotEmpty && rows.first['value'] == 'true';
+    } catch (e) {
+      debugPrint('[inventory] settings read error: $e');
+      return false;
+    }
   }
 
   static String _mobileReportHtml() => r'''

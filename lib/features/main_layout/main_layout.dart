@@ -15,7 +15,10 @@ import '../../features/mgmt/waiters_mgmt_screen.dart';
 import '../../features/mgmt/cashiers_mgmt_screen.dart';
 import '../../features/mgmt/expenses_screen.dart';
 import '../../features/mgmt/customers_screen.dart';
-import '../../features/inventory/inventory_menu_screen.dart';
+import '../../features/inventory/screens/warehouse_screen.dart';
+import '../../features/inventory/screens/stock_flow_screen.dart';
+import '../../features/inventory/screens/stocktaking_screen.dart';
+import '../../features/inventory/screens/stock_history_new_screen.dart';
 import '../../features/settings/receipt_settings_screen.dart';
 import '../../features/settings/pin_settings_screen.dart';
 import '../../features/settings/brand_settings_screen.dart';
@@ -53,6 +56,7 @@ class MainLayoutState extends State<MainLayout> {
     'boshqaruv': true,
     'moliya': false,
     'hisobot': false,
+    'ombor': false,
     'sozlamalar': false,
   };
 
@@ -60,7 +64,8 @@ class MainLayoutState extends State<MainLayout> {
     'boshqaruv': [1, 2, 3, 4, 5, 13, 19, 20],
     'moliya': [17, 14, 15, 23],
     'hisobot': [6],
-    'sozlamalar': [7, 8, 9, 10, 11, 12, 16, 22],
+    'ombor': [16, 24, 25, 26],
+    'sozlamalar': [7, 8, 9, 10, 11, 12, 22],
   };
 
   @override
@@ -103,7 +108,7 @@ class MainLayoutState extends State<MainLayout> {
     const CashiersMgmtScreen(),
     const ExpensesScreen(),
     const CustomersScreen(),
-    const InventoryMenuScreen(),
+    const WarehouseScreen(),       // 16 — Ombor > Omborxona
     const ShiftHubScreen(),        // 17
     const DeliveryScreen(),        // 18
     const CouriersMgmtScreen(),    // 19
@@ -111,6 +116,9 @@ class MainLayoutState extends State<MainLayout> {
     const SaboyOrdersScreen(),       // 21
     const AboutScreen(),             // 22
     const WaiterPaymentsScreen(),    // 23
+    const StockFlowScreen(),         // 24 — Ombor > Kirim/chiqim
+    const StocktakingScreen(),       // 25 — Ombor > Inventarizatsiya
+    const StockHistoryNewScreen(),   // 26 — Ombor > Harakatlar
   ];
 
   void _logout() {
@@ -385,6 +393,17 @@ class MainLayoutState extends State<MainLayout> {
         ]),
         _divider(),
 
+        // ── Ombor ─────────────────────────────────────────────────
+        if (enableInventory) ...[
+          _group('ombor', 'Ombor', Icons.warehouse_outlined, [
+            _item(16, Icons.inventory_outlined, 'Omborxona'),
+            _item(24, Icons.swap_vert_circle_outlined, 'Kirim / Chiqim'),
+            _item(25, Icons.fact_check_outlined, 'Inventarizatsiya'),
+            _item(26, Icons.history_rounded, 'Harakatlar'),
+          ]),
+          _divider(),
+        ],
+
         // ── Sozlamalar ────────────────────────────────────────────
         _group('sozlamalar', 'Sozlamalar', Icons.tune_rounded, [
           _item(7, Icons.print_outlined, AppStrings.printerNav),
@@ -392,7 +411,6 @@ class MainLayoutState extends State<MainLayout> {
           _item(9, Icons.lock_outline_rounded, AppStrings.pinNav),
           _item(10, Icons.branding_watermark_outlined, AppStrings.brandNav),
           _item(11, Icons.settings_ethernet_outlined, AppStrings.connectionNav),
-          if (enableInventory) _item(16, Icons.warehouse_outlined, 'Ombor'),
           _item(22, Icons.info_outline_rounded, 'Ilova haqida'),
         ]),
       ];

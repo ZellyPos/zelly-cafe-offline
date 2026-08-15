@@ -104,6 +104,16 @@ class ProductGridWidget extends StatelessWidget {
           (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         );
         break;
+      case ProductSortMode.availableFirst:
+        // Qoldig'i bor taomlar yuqorida (§10). Guruh ichida foydalanuvchining
+        // o'z tartibi buzilmaydi.
+        list.sort((a, b) {
+          final aOut = _isOutOfStock(a) ? 1 : 0;
+          final bOut = _isOutOfStock(b) ? 1 : 0;
+          if (aOut != bOut) return aOut.compareTo(bOut);
+          return a.sortOrder.compareTo(b.sortOrder);
+        });
+        break;
       case ProductSortMode.custom:
         // Assume already sorted by sortOrder if provider provides them sorted
         // or we could sort here if needed
@@ -112,4 +122,9 @@ class ProductGridWidget extends StatelessWidget {
     }
     return list;
   }
+
+  /// Taom tugaganmi. `quantity == null` — soni yuritilmaydi, ya'ni har doim
+  /// bor hisoblanadi.
+  static bool _isOutOfStock(Product p) =>
+      p.quantity != null && p.quantity! <= 0;
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/utils/price_formatter.dart';
+import '../../../core/utils/qty_formatter.dart';
 import '../../../models/inventory_models.dart';
 import '../../../models/product.dart';
 import '../../../providers/inventory_provider.dart';
@@ -389,8 +390,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                     _stat(
                       'Qoldiq',
-                      '${_fmt(qty)} ${_product.unit ?? 'dona'}',
-                      color: qty <= 0 ? Colors.red.shade700 : null,
+                      '${QtyFormatter.format(qty)} ${_product.unit ?? 'dona'}',
+                      color: qty > 0
+                          ? Colors.green.shade700
+                          : Colors.red.shade700,
                     ),
                     _stat(
                       'Turi',
@@ -518,7 +521,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         SizedBox(
           width: 90,
           child: TextFormField(
-            initialValue: _fmt(_yieldQty),
+            initialValue: QtyFormatter.format(_yieldQty),
             enabled: !_saving,
             textAlign: TextAlign.center,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -706,7 +709,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              info == null ? '—' : '${_fmt(info.onHand)} $unit',
+              info == null ? '—' : '${QtyFormatter.format(info.onHand)} $unit',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 color: isLow ? Colors.red.shade700 : null,
@@ -716,7 +719,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           Expanded(
             flex: 2,
             child: Text(
-              info == null ? '—' : '${_fmt(info.ingredient.minStock)} $unit',
+              info == null ? '—' : '${QtyFormatter.format(info.ingredient.minStock)} $unit',
               style: TextStyle(fontSize: 13, color: theme.hintColor),
             ),
           ),
@@ -810,8 +813,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     super.dispose();
   }
 
-  static String _fmt(double v) =>
-      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 }
 
 /// Retseptning bitta qatori — o'zining matn kontrolleri bilan.

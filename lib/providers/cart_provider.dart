@@ -442,6 +442,49 @@ class CartProvider extends ChangeNotifier {
     );
   }
 
+  /// Client rejimida server qoldiq yetishmaganini shu prefiks bilan qaytaradi.
+  static const String stockErrorPrefix = 'STOCK:';
+  static const String _stockErrorPrefix = stockErrorPrefix;
+
+  /// Tayyor mahsulot qoldig'i yetmadi — buyurtma tasdiqlanmadi (§8).
+  void _showStockShortage(BuildContext context, String message) {
+    if (!context.mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: const Icon(
+          Icons.production_quantity_limits_rounded,
+          color: Colors.red,
+          size: 40,
+        ),
+        title: const Text('Mahsulot qoldig\'i yetarli emas'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message, style: const TextStyle(fontSize: 13)),
+              const SizedBox(height: 12),
+              const Text(
+                'Buyurtma tasdiqlanmadi. Avval omborda "Pishirish" (yoki '
+                'sotib olinadigan mahsulotga "Kirim") qiling.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Tushunarli'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> confirmTableOrder(
     BuildContext context, [
     ConnectivityProvider? connectivity,
@@ -559,11 +602,49 @@ class CartProvider extends ChangeNotifier {
       waiterName: waiterNameSafe,
     );
 
+    // ── §8: tayyor mahsulot qoldig'i TASDIQLANGANDA chegiriladi ──────────
+    // Oshxona taomni shu paytda beradi, shuning uchun to'lov kutilmaydi.
+    // Qoldiq yetmasa buyurtma tasdiqlanmaydi va chek chop etilmadi.
+    final bool isClientMode =
+        connectivity != null && connectivity.mode == ConnectivityMode.client;
+    bool inventoryOn = false;
+    if (context.mounted) {
+      try {
+        inventoryOn = context.read<AppSettingsProvider>().enableInventory;
+      } catch (_) {}
+    }
+    if (inventoryOn && !isClientMode) {
+      try {
+        await InventoryService.instance.consumeOnConfirm(
+          _activeOrderId!,
+          itemsToPrint
+              .map((i) => (productId: i.productId, qty: i.qty.toDouble()))
+              .toList(),
+        );
+      } on InsufficientStockException catch (e) {
+        if (context.mounted) _showStockShortage(context, e.message);
+        return;
+      } catch (e) {
+        AppLogger.e('ConfirmOrder', 'Ombor chegirishda xato', e);
+        if (context.mounted) _showError(context, 'Ombor xatosi: $e');
+        return;
+      }
+    }
+
     try {
       // Client mode → server prints on its own printers; otherwise print locally.
-      if (connectivity != null &&
-          connectivity.mode == ConnectivityMode.client) {
+      if (isClientMode) {
         final printErr = await connectivity.requestPrint(populatedOrder);
+        // Serverda qoldiq yetmadi — buyurtma tasdiqlanmadi (§8).
+        if (printErr != null && printErr.startsWith(_stockErrorPrefix)) {
+          if (context.mounted) {
+            _showStockShortage(
+              context,
+              printErr.substring(_stockErrorPrefix.length),
+            );
+          }
+          return;
+        }
         if (printErr != null && context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(printErr), backgroundColor: Colors.orange),
@@ -605,6 +686,14 @@ class CartProvider extends ChangeNotifier {
       }
 
       notifyListeners();
+
+      // Qoldiq o'zgardi — mahsulotlar ro'yxati va savat paneli yangi sonni
+      // ko'rsatishi kerak (§8).
+      if (inventoryOn && context.mounted) {
+        await context.read<ProductProvider>().loadProducts(
+          connectivity: connectivity,
+        );
+      }
 
       if (context.mounted && showNotification) {
         // No snackbar

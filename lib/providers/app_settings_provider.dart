@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../data/repositories/settings_repository.dart';
 import '../core/services/telegram_bot_service.dart';
+import '../core/services/daily_restart_service.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +20,8 @@ class AppSettingsProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.light;
   bool _autoConfirmOrder = false;
   bool _enableInventory = false;
+  bool _dailyRestartEnabled = true;
+  String _dailyRestartTime = DailyRestartService.defaultTime;
 
   String get loginPin => _loginPin;
   String? get brandImagePath => _brandImagePath;
@@ -28,6 +31,12 @@ class AppSettingsProvider extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   bool get autoConfirmOrder => _autoConfirmOrder;
   bool get enableInventory => _enableInventory;
+
+  /// Kunlik avtomatik qayta ishga tushirish (§16).
+  bool get dailyRestartEnabled => _dailyRestartEnabled;
+
+  /// `HH:mm` — kechasi qaysi vaqtda qayta ishga tushsin.
+  String get dailyRestartTime => _dailyRestartTime;
 
   Future<void> loadSettings() async {
     // Barcha sozlamalarni bitta query da olamiz
@@ -53,6 +62,12 @@ class AppSettingsProvider extends ChangeNotifier {
 
     _autoConfirmOrder = settings['auto_confirm_order'] == 'true';
     _enableInventory = settings['enable_inventory'] == 'true';
+
+    // Kalit yo'q bo'lsa yoqilgan deb qaraladi — servisdagi qoida bilan bir xil.
+    _dailyRestartEnabled =
+        settings[DailyRestartService.keyEnabled] != 'false';
+    _dailyRestartTime =
+        settings[DailyRestartService.keyTime] ?? DailyRestartService.defaultTime;
 
     _startBot();
     notifyListeners();
@@ -80,6 +95,19 @@ class AppSettingsProvider extends ChangeNotifier {
   Future<void> setEnableInventory(bool value) async {
     await _repo.setValue('enable_inventory', value.toString());
     _enableInventory = value;
+    notifyListeners();
+  }
+
+  Future<void> setDailyRestartEnabled(bool value) async {
+    await _repo.setValue(DailyRestartService.keyEnabled, value.toString());
+    _dailyRestartEnabled = value;
+    notifyListeners();
+  }
+
+  /// [time] — `HH:mm` ko'rinishida.
+  Future<void> setDailyRestartTime(String time) async {
+    await _repo.setValue(DailyRestartService.keyTime, time);
+    _dailyRestartTime = time;
     notifyListeners();
   }
 

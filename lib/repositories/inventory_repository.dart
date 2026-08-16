@@ -762,27 +762,32 @@ class InventoryRepository {
     );
   }
 
-  /// Birlashgan harakatlar tarixi: xomashyo (`stock_movements`) + tayyor
-  /// mahsulot (`product_movements`) — §4.6 ekrani uchun.
+  /// Pishirishda xomashyo chegirilganda `stock_movements.reason` shu qiymat
+  /// bilan yoziladi. Tarixda bunday qator oddiy chiqim emas — **sarf**
+  /// (`CONSUME`) sifatida ko'rsatiladi (§18).
+  static const productionReason = 'production';
+
+  /// Tarixdagi sarf (pishirishga ketgan xomashyo) turining sun'iy kodi.
+  /// DB'da alohida `type` yo'q — `OUT` + `reason='production'` shunga aylanadi.
+  static const consumeType = 'CONSUME';
+
+  /// [getHistory] va [getHistoryCount] uchun umumiy WHERE/JOIN qismlari.
   ///
-  /// Qaytadi: `source` ('ingredient'|'product'), `item_id`, `item_name`,
-  /// `unit`, `type`, `qty`, `cost_price`, `supplier`, `note`, `reason`,
-  /// `created_at`, `created_by`, `user_name`.
+  /// Ikkala so'rov bir xil filtrlarni ishlatadi — mantiq bitta joyda tursin
+  /// (aks holda filtr qo'shilganda sanoq bilan ro'yxat bir-biriga mos
+  /// kelmay qolardi).
   ///
-  /// [types] — `IN/OUT/ADJUST/RETURN/PRODUCE/PURCHASE/SALE/WASTE`.
-  /// [source] — `'ingredient'` yoki `'product'`; `null` bo'lsa ikkalasi.
-  Future<List<Map<String, dynamic>>> getHistory({
+  /// Qaytadi: `(ingredientWhere, productWhere)`; [args] to'ldiriladi —
+  /// **chaqiruv tartibi muhim**: avval xomashyo, keyin mahsulot qismi.
+  ({String? ingredient, String? product}) _historyFilters({
+    required List<Object?> args,
     DateTime? from,
     DateTime? to,
     List<String>? types,
     int? itemId,
     String? source,
-    int limit = 200,
-    int offset = 0,
-  }) async {
-    final db = await _dbHelper.database;
-    final args = <Object?>[];
-
+    String? search,
+  }) {
     String dateFilter(String alias) {
       var sql = '';
       if (from != null) {
@@ -796,14 +801,50 @@ class InventoryRepository {
       return sql;
     }
 
-    String typeFilter(String alias) {
+    // `CONSUME` — DB'da yo'q, u `OUT` + `reason='production'`. Shu sababli
+    // oddiy `OUT` filtri sarf qatorlarini **chiqarib tashlaydi**, aks holda
+    // ikkala chip bir xil natija berardi.
+    String typeFilter(String alias, {required bool ingredient}) {
       if (types == null || types.isEmpty) return '';
-      final ph = List.filled(types.length, '?').join(',');
-      args.addAll(types);
-      return ' AND $alias.type IN ($ph)';
+      final ors = <String>[];
+      final plain = <String>[];
+      for (final t in types) {
+        if (ingredient && t == consumeType) {
+          ors.add("($alias.type = 'OUT' AND $alias.reason = ?)");
+          args.add(productionReason);
+        } else if (ingredient && t == 'OUT') {
+          ors.add(
+            "($alias.type = 'OUT' AND ($alias.reason IS NULL OR $alias.reason <> ?))",
+          );
+          args.add(productionReason);
+        } else if (!ingredient && t == consumeType) {
+          continue; // Mahsulot jurnalida sarf yo'q
+        } else {
+          plain.add(t);
+        }
+      }
+      if (plain.isNotEmpty) {
+        ors.add('$alias.type IN (${List.filled(plain.length, '?').join(',')})');
+        args.addAll(plain);
+      }
+      if (ors.isEmpty) return ' AND 1=0'; // Faqat mos kelmaydigan tur tanlangan
+      return ' AND (${ors.join(' OR ')})';
     }
 
-    final parts = <String>[];
+    /// Qidiruv (§17): nomi, izohi, yetkazuvchi va sarfda — qaysi mahsulot
+    /// uchun ketgani.
+    String searchFilter(List<String> columns) {
+      final q = search?.trim();
+      if (q == null || q.isEmpty) return '';
+      final like = '%$q%';
+      for (var i = 0; i < columns.length; i++) {
+        args.add(like);
+      }
+      return ' AND (${columns.map((c) => '$c LIKE ?').join(' OR ')})';
+    }
+
+    String? ingredientWhere;
+    String? productWhere;
 
     if (source == null || source == 'ingredient') {
       var w = '1=1';
@@ -811,19 +852,10 @@ class InventoryRepository {
         w += ' AND sm.ingredient_id = ?';
         args.add(itemId);
       }
-      w += dateFilter('sm') + typeFilter('sm');
-      parts.add('''
-        SELECT 'ingredient' AS source, sm.id AS id, sm.ingredient_id AS item_id,
-               i.name AS item_name, i.base_unit AS unit, sm.type AS type,
-               sm.qty AS qty, sm.cost_price AS cost_price,
-               sm.supplier AS supplier, sm.note AS note, sm.reason AS reason,
-               sm.created_at AS created_at, sm.created_by AS created_by,
-               u.name AS user_name
-        FROM stock_movements sm
-        JOIN ingredients i ON sm.ingredient_id = i.id
-        LEFT JOIN users u ON sm.created_by = u.id
-        WHERE $w
-      ''');
+      w += dateFilter('sm');
+      w += typeFilter('sm', ingredient: true);
+      w += searchFilter(['i.name', 'sm.note', 'sm.supplier', 'rp.name']);
+      ingredientWhere = w;
     }
 
     if (source == null || source == 'product') {
@@ -832,18 +864,87 @@ class InventoryRepository {
         w += ' AND pm.product_id = ?';
         args.add(itemId);
       }
-      w += dateFilter('pm') + typeFilter('pm');
+      w += dateFilter('pm');
+      w += typeFilter('pm', ingredient: false);
+      w += searchFilter(['p.name', 'pm.note', 'pm.supplier']);
+      productWhere = w;
+    }
+
+    return (ingredient: ingredientWhere, product: productWhere);
+  }
+
+  /// Sarf qatorlarida "qaysi mahsulot pishirilganda" — `ref_id` matn sifatida
+  /// saqlanadi, shuning uchun `CAST` bilan bog'lanadi.
+  static const _refProductJoin =
+      "LEFT JOIN products rp ON sm.ref_table = 'products' "
+      'AND sm.ref_id = CAST(rp.id AS TEXT)';
+
+  /// Birlashgan harakatlar tarixi: xomashyo (`stock_movements`) + tayyor
+  /// mahsulot (`product_movements`) — §4.6 ekrani uchun.
+  ///
+  /// Qaytadi: `source` ('ingredient'|'product'), `item_id`, `item_name`,
+  /// `unit`, `type`, `qty`, `cost_price`, `supplier`, `note`, `reason`,
+  /// `ref_name`, `created_at`, `created_by`, `user_name`.
+  ///
+  /// [types] — `IN/OUT/CONSUME/ADJUST/RETURN/PRODUCE/PURCHASE/SALE/WASTE`.
+  /// [source] — `'ingredient'` yoki `'product'`; `null` bo'lsa ikkalasi.
+  /// [search] — nom / izoh / yetkazuvchi / pishirilgan mahsulot bo'yicha.
+  Future<List<Map<String, dynamic>>> getHistory({
+    DateTime? from,
+    DateTime? to,
+    List<String>? types,
+    int? itemId,
+    String? source,
+    String? search,
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final db = await _dbHelper.database;
+    final args = <Object?>[];
+    final where = _historyFilters(
+      args: args,
+      from: from,
+      to: to,
+      types: types,
+      itemId: itemId,
+      source: source,
+      search: search,
+    );
+
+    final parts = <String>[];
+
+    if (where.ingredient != null) {
+      parts.add('''
+        SELECT 'ingredient' AS source, sm.id AS id, sm.ingredient_id AS item_id,
+               i.name AS item_name, i.base_unit AS unit,
+               CASE WHEN sm.type = 'OUT' AND sm.reason = '$productionReason'
+                    THEN '$consumeType' ELSE sm.type END AS type,
+               sm.qty AS qty, sm.cost_price AS cost_price,
+               sm.supplier AS supplier, sm.note AS note, sm.reason AS reason,
+               rp.name AS ref_name,
+               sm.created_at AS created_at, sm.created_by AS created_by,
+               u.name AS user_name
+        FROM stock_movements sm
+        JOIN ingredients i ON sm.ingredient_id = i.id
+        LEFT JOIN users u ON sm.created_by = u.id
+        $_refProductJoin
+        WHERE ${where.ingredient}
+      ''');
+    }
+
+    if (where.product != null) {
       parts.add('''
         SELECT 'product' AS source, pm.id AS id, pm.product_id AS item_id,
                p.name AS item_name, COALESCE(p.unit, 'dona') AS unit,
                pm.type AS type, pm.qty AS qty, pm.cost_price AS cost_price,
                pm.supplier AS supplier, pm.note AS note, NULL AS reason,
+               NULL AS ref_name,
                pm.created_at AS created_at, pm.created_by AS created_by,
                u.name AS user_name
         FROM product_movements pm
         JOIN products p ON pm.product_id = p.id
         LEFT JOIN users u ON pm.created_by = u.id
-        WHERE $w
+        WHERE ${where.product}
       ''');
     }
 
@@ -857,65 +958,43 @@ class InventoryRepository {
   }
 
   /// [getHistory] bilan bir xil filtrlardagi yozuvlar **soni** — sahifalash
-  /// uchun ("1–50 / 1240"). So'rov mantig'i takrorlanmasin uchun bir xil
-  /// filtrlarni quruvchi yordamchi ishlatiladi.
+  /// uchun ("1–50 / 1240").
   Future<int> getHistoryCount({
     DateTime? from,
     DateTime? to,
     List<String>? types,
     int? itemId,
     String? source,
+    String? search,
   }) async {
     final db = await _dbHelper.database;
     final args = <Object?>[];
-
-    String dateFilter(String alias) {
-      var sql = '';
-      if (from != null) {
-        sql += ' AND $alias.created_at >= ?';
-        args.add(from.toIso8601String());
-      }
-      if (to != null) {
-        sql += ' AND $alias.created_at <= ?';
-        args.add(to.toIso8601String());
-      }
-      return sql;
-    }
-
-    String typeFilter(String alias) {
-      if (types == null || types.isEmpty) return '';
-      final ph = List.filled(types.length, '?').join(',');
-      args.addAll(types);
-      return ' AND $alias.type IN ($ph)';
-    }
+    final where = _historyFilters(
+      args: args,
+      from: from,
+      to: to,
+      types: types,
+      itemId: itemId,
+      source: source,
+      search: search,
+    );
 
     final parts = <String>[];
 
-    if (source == null || source == 'ingredient') {
-      var w = '1=1';
-      if (itemId != null) {
-        w += ' AND sm.ingredient_id = ?';
-        args.add(itemId);
-      }
-      w += dateFilter('sm') + typeFilter('sm');
+    if (where.ingredient != null) {
       parts.add('''
         SELECT COUNT(*) AS cnt FROM stock_movements sm
         JOIN ingredients i ON sm.ingredient_id = i.id
-        WHERE $w
+        $_refProductJoin
+        WHERE ${where.ingredient}
       ''');
     }
 
-    if (source == null || source == 'product') {
-      var w = '1=1';
-      if (itemId != null) {
-        w += ' AND pm.product_id = ?';
-        args.add(itemId);
-      }
-      w += dateFilter('pm') + typeFilter('pm');
+    if (where.product != null) {
       parts.add('''
         SELECT COUNT(*) AS cnt FROM product_movements pm
         JOIN products p ON pm.product_id = p.id
-        WHERE $w
+        WHERE ${where.product}
       ''');
     }
 

@@ -844,6 +844,67 @@ void main() {
       expect(inCount, inRows.length);
     });
 
+    test('pishirish xomashyosi tarixda SARF (CONSUME) va mahsulot nomi bilan',
+        () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 2)]);
+      // Oddiy chiqim — sarfdan farqlanishi kerak.
+      await invRepo.stockOut(ingredientId: w.meatId, qty: 10, note: 'buzildi');
+
+      final meat = await invRepo.getHistory(
+        source: 'ingredient',
+        itemId: w.meatId,
+      );
+      final consume = meat.where((r) => r['type'] == 'CONSUME').toList();
+      expect(consume.length, 1);
+      expect(consume.first['ref_name'], 'Burger'); // qaysi mahsulot uchun
+      expect(consume.first['qty'], 300); // 150 g × 2
+
+      // `CONSUME` filtri faqat pishirish sarfini beradi.
+      final onlyConsume = await invRepo.getHistory(types: ['CONSUME']);
+      expect(onlyConsume.length, 2); // go'sht + non
+      expect(onlyConsume.every((r) => r['ref_name'] == 'Burger'), isTrue);
+      expect(await invRepo.getHistoryCount(types: ['CONSUME']), 2);
+
+      // `OUT` filtri esa sarfni ichiga OLMAYDI — faqat haqiqiy chiqim.
+      final onlyOut = await invRepo.getHistory(types: ['OUT']);
+      expect(onlyOut.length, 1);
+      expect(onlyOut.first['note'], 'buzildi');
+      expect(await invRepo.getHistoryCount(types: ['OUT']), 1);
+    });
+
+    test('getHistory qidiruvi: nom, izoh va pishirilgan mahsulot bo\'yicha',
+        () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 1)]);
+      await invRepo.stockOut(ingredientId: w.meatId, qty: 5, note: 'muzlatkich');
+
+      // Xomashyo nomi bo'yicha
+      final byName = await invRepo.getHistory(search: 'sht'); // Go'sht
+      expect(byName.isNotEmpty, isTrue);
+      expect(byName.every((r) => r['item_name'] == 'Go\'sht'), isTrue);
+
+      // Izoh bo'yicha
+      final byNote = await invRepo.getHistory(search: 'muzlat');
+      expect(byNote.length, 1);
+      expect(byNote.first['note'], 'muzlatkich');
+
+      // Sarf qatorlari pishirilgan mahsulot nomi bo'yicha ham topiladi.
+      final byProduct = await invRepo.getHistory(
+        source: 'ingredient',
+        search: 'Burger',
+      );
+      expect(byProduct.length, 2); // go'sht + non sarfi
+      expect(byProduct.every((r) => r['type'] == 'CONSUME'), isTrue);
+
+      // Sanoq ro'yxat bilan mos.
+      expect(
+        await invRepo.getHistoryCount(search: 'muzlat'),
+        byNote.length,
+      );
+      expect(await invRepo.getHistory(search: 'yo\'q-bunday'), isEmpty);
+    });
+
     test('recipeCost = Σ(qty × avg_cost) / yield_qty', () async {
       final w = await setupWorld();
       // go'sht avg_cost = 80/g, non = 2000/dona (setupWorld dagi kirimdan)

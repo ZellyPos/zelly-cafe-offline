@@ -222,6 +222,7 @@ class InventoryProvider extends ChangeNotifier {
     List<String>? types,
     int? itemId,
     String? source,
+    String? search,
     int limit = 200,
     int offset = 0,
   }) => _repo.getHistory(
@@ -230,6 +231,7 @@ class InventoryProvider extends ChangeNotifier {
     types: types,
     itemId: itemId,
     source: source,
+    search: search,
     limit: limit,
     offset: offset,
   );
@@ -241,11 +243,13 @@ class InventoryProvider extends ChangeNotifier {
     List<String>? types,
     int? itemId,
     String? source,
+    String? search,
   }) => _repo.getHistoryCount(
     from: from,
     to: to,
     types: types,
     itemId: itemId,
     source: source,
+    search: search,
   );
 }

@@ -9,6 +9,7 @@ import 'core/theme.dart';
 import 'core/utils/keyboard_utils.dart';
 import 'core/database_helper.dart';
 import 'core/services/license_service.dart';
+import 'core/services/daily_restart_service.dart';
 import 'core/update_service.dart';
 import 'models/license_model.dart';
 import 'features/license/screens/license_import_screen.dart';
@@ -225,11 +226,17 @@ class _TezzroAppState extends State<TezzroApp> {
   void initState() {
     super.initState();
     FocusManager.instance.addListener(_onFocusChange);
+    // Kunlik avtomatik qayta ishga tushirish (§16). Savatda ochiq buyurtma
+    // bo'lsa kechiktiriladi — kassir ish o'rtasida yopilib qolmasin.
+    DailyRestartService.instance.start(
+      busy: () => context.read<CartProvider>().items.isNotEmpty,
+    );
   }
 
   @override
   void dispose() {
     FocusManager.instance.removeListener(_onFocusChange);
+    DailyRestartService.instance.stop();
     super.dispose();
   }
 

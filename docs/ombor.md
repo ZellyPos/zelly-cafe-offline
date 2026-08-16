@@ -1,4 +1,4 @@
-> **Holat:** 9, 10, 12, 13, 14, 15 — bajarildi (2026-08-15, batafsil:
+> **Holat:** 9, 10, 12, 13, 14, 15, 16, 17, 18 — bajarildi (batafsil:
 > [`ombor_progress.md`](ombor_progress.md)). **11 — tashlab ketildi**
 > (foydalanuvchi qarori): ombor turi tanlovi Mahsulotlar sahifasida qoladi,
 > chunki uni olib tashlansa turni o'zgartiradigan joy qolmaydi.
@@ -16,3 +16,9 @@
 14. ✅ Omborxonaning kirim/chiqim sahifasida chiqim knopkasi bosilganda  mahsulot noldan tushib ketmasligi kerak. Tarix va invertizatsiya  knopkalari kirim/chiqim knopkalarini yonida joylashsin, kirim/chiqim degan yuqoridagi so'zni ham olib tashla
 
 15. ✅ Ombordagi harakatlar tarixi sahifasini sahifalab qo'y birdaniga ko'p ma'lumotlar kelsa qiynalib qoladi.
+
+16. ✅ Dastur har kuni bir marta o'zi yopilib qayta ochiladigan qilish kerak
+
+17. ✅ Omborxona sahifasidagi harakatlar tarixi sahifasiga qidiruvni qo'shish kerak
+
+18. ✅ Omborxonada mahsulot pishirilganda xomashyo ayiriladi shuni harakatlar tarixida chiqim deb korsatmoqda shuni sarf deb korsatishi va qaysi mahsulot pishirilganda sarflangani ham korinib turishi kerak

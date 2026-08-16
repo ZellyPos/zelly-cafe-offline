@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -35,6 +37,8 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
   static const _typeLabels = <String, String>{
     'IN': 'Kirim',
     'OUT': 'Chiqim',
+    // Pishirishga ketgan xomashyo — chiqim emas, sarf (§18).
+    'CONSUME': 'Sarf',
     'PRODUCE': 'Pishirish',
     'PURCHASE': 'Kirim (mahsulot)',
     'SALE': 'Sotuv',
@@ -54,6 +58,11 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
   final _selectedTypes = <String>{};
   late String? _source;
 
+  /// Qidiruv (§17) — har harfda so'rov ketmasin uchun kechiktiriladi.
+  final _searchController = TextEditingController();
+  String _search = '';
+  Timer? _searchDebounce;
+
   /// Joriy sahifa (0 dan) va filtrga mos jami yozuvlar soni.
   int _page = 0;
   int _total = 0;
@@ -71,8 +80,21 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      final q = value.trim();
+      if (q == _search) return;
+      setState(() => _search = q);
+      _reload();
+    });
   }
 
   /// Tanlangan kunning oxirigacha kirsin.
@@ -91,12 +113,14 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
     try {
       final provider = context.read<InventoryProvider>();
       final types = _selectedTypes.isEmpty ? null : _selectedTypes.toList();
+      final search = _search.isEmpty ? null : _search;
       final total = await provider.getHistoryCount(
         from: _range?.start,
         to: _to,
         types: types,
         itemId: widget.itemId,
         source: _source,
+        search: search,
       );
       // Filtr toraysa joriy sahifa bo'sh qolishi mumkin — oxirgisiga tushamiz.
       final maxPage = total == 0 ? 0 : (total - 1) ~/ _pageSize;
@@ -108,6 +132,7 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
         types: types,
         itemId: widget.itemId,
         source: _source,
+        search: search,
         limit: _pageSize,
         offset: page * _pageSize,
       );
@@ -311,6 +336,43 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Qidiruv (§17): nom, izoh, yetkazuvchi va pishirilgan mahsulot.
+          SizedBox(
+            height: 44,
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Qidirish: nomi, izoh, kimdan, pishirilgan mahsulot',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                // Faqat tugmachaning o'zi qayta quriladi — har harfda butun
+                // jadval qayta chizilmasin.
+                suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _searchController,
+                  builder: (_, value, _) => value.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          tooltip: 'Tozalash',
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () {
+                            _searchDebounce?.cancel();
+                            _searchController.clear();
+                            if (_search.isEmpty) return;
+                            setState(() => _search = '');
+                            _reload();
+                          },
+                        ),
+                ),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               OutlinedButton.icon(
@@ -474,10 +536,28 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    row['item_name'] as String? ?? '—',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        row['item_name'] as String? ?? '—',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      // Sarf bo'lsa — qaysi mahsulot uchun ketgani (§18).
+                      if (type == 'CONSUME' &&
+                          (row['ref_name'] as String?)?.isNotEmpty == true)
+                        Text(
+                          '→ ${row['ref_name']}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _typeColor('CONSUME'),
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
                 ),
               ],
@@ -554,14 +634,26 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
   }
 
   /// Izoh ustuni: supplier (kirimda), note yoki reason — qaysi biri bo'lsa.
+  ///
+  /// Sarf qatorida (§18) birinchi bo'lib **qaysi mahsulot pishirilgani**
+  /// ko'rsatiladi — xomashyo qayerga ketgani shundan ko'rinadi.
   String _noteText(Map<String, dynamic> row) {
+    final type = row['type'] as String? ?? '';
+    final refName = row['ref_name'] as String?;
     final supplier = row['supplier'] as String?;
     final note = row['note'] as String?;
     final reason = row['reason'] as String?;
+    final isConsume = type == 'CONSUME';
     final parts = <String>[
+      if (isConsume && refName != null && refName.isNotEmpty)
+        '«$refName» pishirildi',
       if (supplier != null && supplier.isNotEmpty) 'kimdan: $supplier',
       if (note != null && note.isNotEmpty) note,
-      if (reason != null && reason.isNotEmpty && reason != 'purchase') reason,
+      if (reason != null &&
+          reason.isNotEmpty &&
+          reason != 'purchase' &&
+          !isConsume)
+        reason,
     ];
     return parts.isEmpty ? '—' : parts.join(' · ');
   }
@@ -575,6 +667,7 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
       case 'RETURN':
         return true;
       case 'OUT':
+      case 'CONSUME':
       case 'SALE':
       case 'WASTE':
         return false;
@@ -593,6 +686,9 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
         return Colors.green.shade700;
       case 'PRODUCE':
         return Colors.orange.shade800;
+      // Sarf — kamayish, lekin "buzilish/chiqim" emas: alohida rang.
+      case 'CONSUME':
+        return Colors.brown.shade600;
       case 'SALE':
         return Colors.blue.shade700;
       case 'OUT':
@@ -612,6 +708,8 @@ class _StockHistoryNewScreenState extends State<StockHistoryNewScreen> {
         return Icons.south_west_rounded;
       case 'PRODUCE':
         return Icons.local_fire_department_rounded;
+      case 'CONSUME':
+        return Icons.soup_kitchen_rounded;
       case 'SALE':
         return Icons.shopping_cart_rounded;
       case 'OUT':

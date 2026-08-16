@@ -628,6 +628,72 @@ o'tdi**; yiqilgan 5 tasi o'sha eski, ombor bilan bog'liq bo'lmagan testlar
 
 ---
 
+## ✅ `docs/ombor.md` 16–18 tuzatishlar — TUGADI (2026-08-16)
+
+| # | Talab | Bajarildi |
+|---|-------|-----------|
+| 16 | Kuniga bir marta o'zi qayta ishga tushsin | Yangi `DailyRestartService` + sozlamada yoqish/vaqt |
+| 17 | Tarixga qidiruv | `getHistory(search:)` + ekranda qidiruv maydoni |
+| 18 | Pishirish "chiqim" emas, **sarf** + qaysi mahsulot | `CONSUME` sun'iy turi + `ref_name` |
+
+### 16 — kunlik avtomatik qayta ishga tushish
+
+**Yangi fayl:** `lib/core/services/daily_restart_service.dart`
+
+Kassa kompyuteri haftalab o'chirilmaydi — xotira to'planadi, ulanishlar
+(WebSocket, tunnel, printer) uzilib qoladi. Kechasi bir marta toza ishga
+tushish shularni tozalaydi.
+
+- **Vaqt oynasi:** default **04:00**, oyna **2 soat**. Oyna o'tib ketsa o'sha
+  kun uchun urinish to'xtaydi — kunduzi hech qachon o'z-o'zidan yopilmaydi.
+- **Kuniga bitta:** sana `settings.daily_restart_last_date` ga **yopishdan
+  oldin** yoziladi — qayta ochilgach sikl takrorlanmaydi.
+- **Band bo'lsa kutadi:** savatda mahsulot bo'lsa restart keyingi
+  tekshiruvga qoldiriladi (kassir ish o'rtasida yopilib qolmaydi).
+- **Uptime < 10 daqiqa** bo'lsa tegilmaydi — restart siklining oldini oladi.
+- **Qayta ochish mexanizmi:** temp papkaga `.bat` yoziladi va `cmd /c` bilan
+  **detached** ishga tushiriladi; u ~5 soniya kutib (`ping`, chunki `timeout`
+  konsolsiz rejimda xato beradi) exe'ni ochadi va o'zini o'chiradi. Kutish
+  shart — eski jarayon SQLite faylini va server portini bo'shatishi kerak.
+  Yangi nusxa ochib bo'lmasa **eskisi yopilmaydi** (kassa qolib ketmasin).
+- **Sozlama:** *Brend / Login rasmi* ekranida yoqish tugmasi + vaqt tanlash.
+  Kalit yo'q bo'lsa **yoqilgan** deb qaraladi (yangi imkoniyat ishlab turadi).
+- Tekshirildi: `.bat` naqshi Windows'da haqiqiy jarayon bilan sinovdan o'tdi
+  (yangi nusxa ochildi, `.bat` o'zini o'chirdi).
+
+### 17 — tarixda qidiruv
+
+`getHistory` / `getHistoryCount` ga `search` parametri: **nomi · izoh ·
+yetkazuvchi**, sarf qatorlarida esa **pishirilgan mahsulot nomi** bo'yicha ham
+(`rp.name`). Ekranda 350 ms kechikishli (debounce) qidiruv maydoni — har
+harfda so'rov ketmaydi; tozalash tugmasi faqat o'zi qayta quriladi.
+
+> Yo'l-yo'lakay: `getHistory` va `getHistoryCount` dagi **takrorlangan filtr
+> mantig'i** bitta `_historyFilters()` ga yig'ildi — aks holda yangi filtr
+> qo'shilganda sanoq bilan ro'yxat bir-biriga mos kelmay qolardi.
+
+### 18 — sarf (CONSUME) va qaysi mahsulot uchun
+
+Pishirishda xomashyo `stock_movements` ga `type='OUT'`,
+`reason='production'`, `ref_table='products'`, `ref_id=<product_id>` bilan
+yozilardi — tarixda esa oddiy **"Chiqim"** ko'rinardi.
+
+- SQL'da sun'iy tur: `OUT + reason='production'` → **`CONSUME`** ("Sarf"),
+  alohida rang va ikonka bilan.
+- `ref_id` bo'yicha `products` ga LEFT JOIN → yangi **`ref_name`** ustuni.
+  Xomashyo nomi ostida `→ Burger`, izohda «Burger» pishirildi.
+- ⭐ Filtr chiplari to'g'ri ajraydi: **"Chiqim"** endi sarf qatorlarini
+  **ichiga olmaydi** (aks holda ikkala chip bir xil natija berardi),
+  **"Sarf"** esa faqat pishirishga ketganini beradi. `ref_id` matn sifatida
+  saqlangani uchun `CAST(rp.id AS TEXT)` bilan bog'lanadi.
+
+**Tekshiruv:** `flutter analyze lib` — o'zgargan fayllarda **0 xato/
+ogohlantirish**. `test/inventory_test.dart` — 2 yangi test (sarf turi va
+qidiruv), jami **39 test, hammasi o'tdi**. `flutter build windows --debug` —
+**muvaffaqiyatli**.
+
+---
+
 **Keyingi ish uchun tavsiya (ixtiyoriy):**
 - Ombor amallarini `AuditService` bilan bog'lash (kim nima qilgani —
   `created_by` allaqachon yoziladi, lekin UI'da foydalanuvchi uzatilmaydi).

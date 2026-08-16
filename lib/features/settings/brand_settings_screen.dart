@@ -7,6 +7,24 @@ import 'dart:io';
 class BrandSettingsScreen extends StatelessWidget {
   const BrandSettingsScreen({super.key});
 
+  /// Kunlik qayta ishga tushish vaqtini tanlash (§16).
+  static Future<void> _pickRestartTime(
+    BuildContext context,
+    AppSettingsProvider provider,
+  ) async {
+    final parts = provider.dailyRestartTime.split(':');
+    final initial = TimeOfDay(
+      hour: int.tryParse(parts.first) ?? 4,
+      minute: parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0,
+    );
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked == null) return;
+    await provider.setDailyRestartTime(
+      '${picked.hour.toString().padLeft(2, '0')}:'
+      '${picked.minute.toString().padLeft(2, '0')}',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppSettingsProvider>();
@@ -134,6 +152,35 @@ class BrandSettingsScreen extends StatelessWidget {
                 activeThumbColor: const Color(0xFF1E293B),
                 contentPadding: EdgeInsets.zero,
               ),
+              SwitchListTile(
+                title: const Text(
+                  "Kunlik avtomatik qayta ishga tushirish",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text(
+                  "Kuniga bir marta kechasi dastur o'zi yopilib qayta ochiladi. "
+                  "Savatda ochiq buyurtma bo'lsa kechiktiriladi.",
+                  style: TextStyle(fontSize: 12),
+                ),
+                value: provider.dailyRestartEnabled,
+                onChanged: (val) => provider.setDailyRestartEnabled(val),
+                activeThumbColor: const Color(0xFF1E293B),
+                contentPadding: EdgeInsets.zero,
+              ),
+              if (provider.dailyRestartEnabled)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Qayta ishga tushish vaqti"),
+                  subtitle: const Text(
+                    "Ish vaqtidan tashqari vaqt tanlang",
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  trailing: OutlinedButton.icon(
+                    icon: const Icon(Icons.schedule, size: 18),
+                    label: Text(provider.dailyRestartTime),
+                    onPressed: () => _pickRestartTime(context, provider),
+                  ),
+                ),
             ],
           ),
         ),

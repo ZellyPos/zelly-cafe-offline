@@ -190,16 +190,19 @@ class InventoryService {
       'UPDATE products SET quantity = COALESCE(quantity, 0) - ? WHERE id = ?',
       [qty, productId],
     );
-    await txn.insert('product_movements', {
-      'product_id': productId,
-      'type': 'SALE',
-      'qty': qty,
-      'ref_table': 'orders',
-      'ref_id': orderId,
-      'note': note,
-      'created_at': DateTime.now().toIso8601String(),
-      'created_by': userId,
-    });
+    await txn.insert(
+      'product_movements',
+      await withItemSnapshot(txn, {
+        'product_id': productId,
+        'type': 'SALE',
+        'qty': qty,
+        'ref_table': 'orders',
+        'ref_id': orderId,
+        'note': note,
+        'created_at': DateTime.now().toIso8601String(),
+        'created_by': userId,
+      }, kind: StockItemKind.product),
+    );
   }
 
   // --- Buyurtmani tasdiqlash (§8) ---
@@ -310,16 +313,19 @@ class InventoryService {
             'UPDATE products SET quantity = COALESCE(quantity, 0) + ? WHERE id = ?',
             [-entry.value, entry.key],
           );
-          await txn.insert('product_movements', {
-            'product_id': entry.key,
-            'type': 'ADJUST',
-            'qty': -entry.value,
-            'ref_table': 'orders',
-            'ref_id': orderId,
-            'note': 'confirm: buyurtmada kamaytirildi',
-            'created_at': DateTime.now().toIso8601String(),
-            'created_by': userId,
-          });
+          await txn.insert(
+            'product_movements',
+            await withItemSnapshot(txn, {
+              'product_id': entry.key,
+              'type': 'ADJUST',
+              'qty': -entry.value,
+              'ref_table': 'orders',
+              'ref_id': orderId,
+              'note': 'confirm: buyurtmada kamaytirildi',
+              'created_at': DateTime.now().toIso8601String(),
+              'created_by': userId,
+            }, kind: StockItemKind.product),
+          );
         }
       }
     });
@@ -412,29 +418,35 @@ class InventoryService {
             'UPDATE ingredient_stock SET on_hand = on_hand - ?, updated_at = ? WHERE ingredient_id = ?',
             [entry.value, now, entry.key],
           );
-          await txn.insert('stock_movements', {
-            'ingredient_id': entry.key,
-            'type': 'OUT',
-            'qty': entry.value,
-            'reason': 'production',
-            'ref_table': 'products',
-            'ref_id': pi.productId.toString(),
-            'created_at': now,
-            'created_by': userId,
-          });
+          await txn.insert(
+            'stock_movements',
+            await withItemSnapshot(txn, {
+              'ingredient_id': entry.key,
+              'type': 'OUT',
+              'qty': entry.value,
+              'reason': 'production',
+              'ref_table': 'products',
+              'ref_id': pi.productId.toString(),
+              'created_at': now,
+              'created_by': userId,
+            }, kind: StockItemKind.ingredient),
+          );
         }
 
         await txn.rawUpdate(
           'UPDATE products SET quantity = COALESCE(quantity, 0) + ? WHERE id = ?',
           [pi.count, pi.productId],
         );
-        await txn.insert('product_movements', {
-          'product_id': pi.productId,
-          'type': 'PRODUCE',
-          'qty': pi.count,
-          'created_at': now,
-          'created_by': userId,
-        });
+        await txn.insert(
+          'product_movements',
+          await withItemSnapshot(txn, {
+            'product_id': pi.productId,
+            'type': 'PRODUCE',
+            'qty': pi.count,
+            'created_at': now,
+            'created_by': userId,
+          }, kind: StockItemKind.product),
+        );
       }
     });
   }
@@ -511,14 +523,17 @@ class InventoryService {
       'UPDATE products SET quantity = COALESCE(quantity, 0) + ? WHERE id = ?',
       [qty, productId],
     );
-    await txn.insert('product_movements', {
-      'product_id': productId,
-      'type': 'ADJUST',
-      'qty': qty,
-      'ref_table': 'orders',
-      'ref_id': orderId,
-      'note': 'refund',
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    await txn.insert(
+      'product_movements',
+      await withItemSnapshot(txn, {
+        'product_id': productId,
+        'type': 'ADJUST',
+        'qty': qty,
+        'ref_table': 'orders',
+        'ref_id': orderId,
+        'note': 'refund',
+        'created_at': DateTime.now().toIso8601String(),
+      }, kind: StockItemKind.product),
+    );
   }
 }

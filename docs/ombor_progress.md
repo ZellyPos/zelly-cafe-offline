@@ -698,3 +698,75 @@ qidiruv), jami **39 test, hammasi o'tdi**. `flutter build windows --debug` —
 - Ombor amallarini `AuditService` bilan bog'lash (kim nima qilgani —
   `created_by` allaqachon yoziladi, lekin UI'da foydalanuvchi uzatilmaydi).
 - Hisobotlarga food-cost bo'yicha kesim qo'shish.
+
+---
+
+### 20 — tarix mahsulot/xomashyo o'chganda ham qoladi
+
+**Asl sabab CASCADE emas edi.** Schema'da `ON DELETE CASCADE` bor edi, lekin
+`PRAGMA foreign_keys` loyihada hech qachon ON qilinmagan — ya'ni kaskad
+ishlamagan va yozuvlar bazada turgan. Ular **`getHistory` dagi INNER JOIN**
+tufayli ko'rinmay qolardi: element o'chgach qator yetim bo'lib, `JOIN
+ingredients` uni filtrlab tashlardi.
+
+To'rt qadamda tuzatildi:
+
+1. **Yumshoq o'chirish.** `deleteIngredient` endi `DELETE` emas,
+   `is_active = 0`. Ro'yxatlar allaqachon `WHERE is_active = 1` bilan
+   filtrlangani uchun UI o'zgarmadi. Yo'l-yo'lakay: o'chirilgan xomashyo
+   **faol retseptdan** olib tashlanadi (avval u yerda `?` bo'lib turardi) —
+   retsept joriy sozlama, tarix emas.
+2. **`JOIN` → `LEFT JOIN` + `COALESCE`** (`getHistory`, `getHistoryCount` va
+   qidiruv filtrlarida ham — aks holda `i.name LIKE ?` NULL'da hech qachon
+   mos kelmasdi, sanoq esa ro'yxatga to'g'ri kelmasdi).
+3. **CASCADE olib tashlandi** (v57, jadval qayta quriladi). U mina edi:
+   kimdir `PRAGMA foreign_keys = ON` qilgan kuni butun tarix o'chib ketardi.
+   Ledger jadvalida FK umuman qoldirilmadi — bog'langan qatorning yo'qligi
+   bu yerda **normal holat**.
+4. **Nom/birlik snapshot'i** (v58): `item_name`, `item_unit` ustunlari,
+   yozuv kiritilayotganda to'ldiriladi (`withItemSnapshot`), eski qatorlar
+   migratsiyada to'ldiriladi. Ko'rsatish tartibi:
+   `joriy nom → snapshot → "O'chirilgan #id"` — element bor ekan joriy nom
+   ustun turadi (nomdagi xato tuzatilsa hamma joyda bir xil ko'rinsin).
+
+> ⚠️ **Trigger yondashuvi sinab ko'rilib, rad etildi.** `AFTER INSERT`
+> trigger 12 ta yozuv joyini tahrirlashdan qutqarardi, lekin SQLite
+> `ALTER TABLE ... RENAME` paytida **trigger tanasini tekshiradi** —
+> v56 migratsiyasi `ingredients` ni qayta qurayotganda (DROP + RENAME)
+> trigger mavjud bo'lmagan jadvalga murojaat qilib, **butun migratsiyani
+> uzib qo'ydi va baza `ingredients` jadvalisiz qoldi**. Ya'ni bitta mina
+> o'rniga boshqasi qo'yilgan bo'lardi. Shu sabab snapshot yozuv joylarida
+> ochiq-oydin (`withItemSnapshot`) qilinadi.
+
+### 19 — tarix retention
+
+**Talab 6 oy edi; default 24 oy qilindi, sozlanadigan.** Sabablar:
+
+- Harakatlar jurnali — buxgalteriya manbai: tannarx dinamikasi, yetkazuvchi
+  bo'yicha tahlil, sarf/isrof trendi, tekshiruvda "bu xomashyo qachon kirim
+  bo'lgan?". 6 oyda o'tgan yilning shu oyi bilan taqqoslash ham yo'qoladi.
+- Hajm asosi yo'q: qator ≈ 150 bayt, kuniga ~1000 harakat ≈ **50 MB/yil**.
+  SQLite indeks bilan millionlab qatorni sezmaydi, sahifalash ham bor (§15).
+  Ya'ni bu "baza shishmasin" chorasi, tezlik chorasi emas.
+
+- `purgeHistoryOlderThan(months)` — bitta tranzaksiyada ikkala jurnal.
+- **Qoida:** yozuv *faqat yoshi bo'yicha* o'chadi, element o'chirilgani
+  sababli hech qachon (§20). Shu sababli yumshoq o'chirilgan xomashyo qatori
+  ham faqat **oxirgi harakati ketgandan keyin** fizik yo'q qilinadi — aks
+  holda undan oldingi tarix nomsiz qolardi.
+- `VACUUM` — `DELETE` fayl hajmini kichraytirmaydi, bo'shagan sahifalar
+  qaytarilmasa tozalashning ma'nosi qolmaydi.
+- `created_at` bo'yicha alohida indeks (v59): mavjud
+  `(ingredient_id, created_at)` sof sana filtriga yaramaydi — birinchi ustun
+  `WHERE` da yo'q.
+- **Qachon:** `HistoryRetentionService` — ilova ochilgach 30 soniyadan keyin,
+  kuniga bir marta (`history_purge_last_date`). Kassir kutib qolmaydi.
+- **Sozlama:** *Brend / Login rasmi* ekranida 6 / 12 / 24 / 36 oy / Cheksiz
+  (`0` = cheksiz). Ombor yoqilgan bo'lsagina ko'rinadi.
+
+**Tekshiruv:** `flutter analyze` — o'zgargan fayllarda 0 xato/ogohlantirish.
+`test/inventory_test.dart` +10 test (o'chirilgan element tarixi, snapshot,
+retention), `test/db_migration_test.dart` +2 test (v56→v57 CASCADE olinishi
+va yozuvlar saqlanishi, v57→v58 snapshot backfill + v59 indekslar). Jami
+**54 test o'tdi**; qolgan 5 ta uzilish (`analytics`, `shift`, `widget`) shu
+ishdan **oldin ham** mavjud edi.

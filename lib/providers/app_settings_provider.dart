@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../data/repositories/settings_repository.dart';
 import '../core/services/telegram_bot_service.dart';
 import '../core/services/daily_restart_service.dart';
+import '../core/services/history_retention_service.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -22,6 +23,7 @@ class AppSettingsProvider extends ChangeNotifier {
   bool _enableInventory = false;
   bool _dailyRestartEnabled = true;
   String _dailyRestartTime = DailyRestartService.defaultTime;
+  int _historyRetentionMonths = HistoryRetentionService.defaultMonths;
 
   String get loginPin => _loginPin;
   String? get brandImagePath => _brandImagePath;
@@ -37,6 +39,9 @@ class AppSettingsProvider extends ChangeNotifier {
 
   /// `HH:mm` — kechasi qaysi vaqtda qayta ishga tushsin.
   String get dailyRestartTime => _dailyRestartTime;
+
+  /// Ombor tarixi necha oy saqlansin (§19). `0` — cheksiz.
+  int get historyRetentionMonths => _historyRetentionMonths;
 
   Future<void> loadSettings() async {
     // Barcha sozlamalarni bitta query da olamiz
@@ -68,6 +73,13 @@ class AppSettingsProvider extends ChangeNotifier {
         settings[DailyRestartService.keyEnabled] != 'false';
     _dailyRestartTime =
         settings[DailyRestartService.keyTime] ?? DailyRestartService.defaultTime;
+
+    final months = int.tryParse(
+      settings[HistoryRetentionService.keyMonths] ?? '',
+    );
+    _historyRetentionMonths = (months == null || months < 0)
+        ? HistoryRetentionService.defaultMonths
+        : months;
 
     _startBot();
     notifyListeners();
@@ -108,6 +120,13 @@ class AppSettingsProvider extends ChangeNotifier {
   Future<void> setDailyRestartTime(String time) async {
     await _repo.setValue(DailyRestartService.keyTime, time);
     _dailyRestartTime = time;
+    notifyListeners();
+  }
+
+  /// Ombor tarixi saqlanish muddati (oy). `0` — cheksiz saqlash.
+  Future<void> setHistoryRetentionMonths(int months) async {
+    await HistoryRetentionService.instance.setRetentionMonths(months);
+    _historyRetentionMonths = months;
     notifyListeners();
   }
 

@@ -36,6 +36,41 @@ class StockBatchLine {
   });
 }
 
+/// Harakat jurnaliga yoziladigan qatorga nom/birlik **snapshot**'ini qo'shadi
+/// (§20).
+///
+/// `stock_movements` / `product_movements` — moliyaviy ledger: xomashyo yoki
+/// mahsulot keyin o'chirilsa, `JOIN` orqali nom topilmaydi. Shuning uchun nom
+/// va birlik yozuv kiritilayotgan paytda ko'chirib olinadi.
+///
+/// Trigger ishlatilmaydi: SQLite `ALTER TABLE ... RENAME` paytida trigger
+/// tanasini tekshiradi, shu sabab jadval qayta qurilishi (migratsiyalarda tez
+/// uchraydi) uzilib qolardi.
+Future<Map<String, Object?>> withItemSnapshot(
+  DatabaseExecutor executor,
+  Map<String, Object?> row, {
+  required StockItemKind kind,
+}) async {
+  final isIngredient = kind == StockItemKind.ingredient;
+  final id = row[isIngredient ? 'ingredient_id' : 'product_id'];
+  if (id == null) return row;
+
+  final rows = await executor.query(
+    isIngredient ? 'ingredients' : 'products',
+    columns: ['name', if (isIngredient) 'base_unit' else 'unit'],
+    where: 'id = ?',
+    whereArgs: [id],
+    limit: 1,
+  );
+  if (rows.isEmpty) return row;
+
+  return {
+    ...row,
+    'item_name': rows.first['name'],
+    'item_unit': rows.first[isIngredient ? 'base_unit' : 'unit'],
+  };
+}
+
 class InventoryRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
@@ -55,9 +90,14 @@ class InventoryRepository {
     });
   }
 
+  /// Faol xomashyolar. O'chirilganlari (`is_active = 0`) qaytmaydi — ular
+  /// faqat harakatlar tarixida ko'rinadi.
   Future<List<Ingredient>> getAllIngredients() async {
     final db = await _dbHelper.database;
-    final List<Map<String, dynamic>> maps = await db.query('ingredients');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'ingredients',
+      where: 'is_active = 1',
+    );
     return List.generate(maps.length, (i) => Ingredient.fromMap(maps[i]));
   }
 
@@ -71,9 +111,28 @@ class InventoryRepository {
     );
   }
 
+  /// Xomashyoni **yumshoq** o'chiradi (`is_active = 0`).
+  ///
+  /// Fizik `DELETE` qilinmaydi: `stock_movements` dagi harakatlar tarixi
+  /// moliyaviy jurnal — xomashyo o'chirilgani sababli yo'qolmasligi kerak
+  /// (§20). Qator faqat retention muddati (§19) o'tganda tozalanadi.
   Future<int> deleteIngredient(int id) async {
     final db = await _dbHelper.database;
-    return await db.delete('ingredients', where: 'id = ?', whereArgs: [id]);
+    return await db.transaction((txn) async {
+      // Retseptlar — joriy sozlama, tarix emas: o'chirilgan xomashyo faol
+      // retseptda qolmasligi kerak (aks holda ro'yxatda "?" bo'lib turadi).
+      await txn.delete(
+        'recipe_items',
+        where: 'ingredient_id = ?',
+        whereArgs: [id],
+      );
+      return txn.update(
+        'ingredients',
+        {'is_active': 0},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
   }
 
   Future<IngredientStock?> getIngredientStock(int ingredientId) async {
@@ -151,7 +210,14 @@ class InventoryRepository {
     final executor = txn ?? (await _dbHelper.database);
 
     // 1. Insert Movement
-    await executor.insert('stock_movements', movement.toMap());
+    await executor.insert(
+      'stock_movements',
+      await withItemSnapshot(
+        executor,
+        movement.toMap(),
+        kind: StockItemKind.ingredient,
+      ),
+    );
 
     // 2. Update Stock
     double factor = 1.0;
@@ -489,16 +555,19 @@ class InventoryRepository {
           : cost;
     }
 
-    await txn.insert('stock_movements', {
-      'ingredient_id': ingredientId,
-      'type': 'IN',
-      'qty': qty,
-      'reason': 'purchase',
-      'cost_price': cost,
-      'supplier': supplier,
-      'created_at': now,
-      'created_by': userId,
-    });
+    await txn.insert(
+      'stock_movements',
+      await withItemSnapshot(txn, {
+        'ingredient_id': ingredientId,
+        'type': 'IN',
+        'qty': qty,
+        'reason': 'purchase',
+        'cost_price': cost,
+        'supplier': supplier,
+        'created_at': now,
+        'created_by': userId,
+      }, kind: StockItemKind.ingredient),
+    );
     await txn.rawUpdate(
       'UPDATE ingredient_stock SET on_hand = on_hand + ?, updated_at = ? WHERE ingredient_id = ?',
       [qty, now, ingredientId],
@@ -549,15 +618,18 @@ class InventoryRepository {
       }
     }
 
-    await txn.insert('stock_movements', {
-      'ingredient_id': ingredientId,
-      'type': 'OUT',
-      'qty': qty,
-      'reason': reason,
-      'note': note,
-      'created_at': now,
-      'created_by': userId,
-    });
+    await txn.insert(
+      'stock_movements',
+      await withItemSnapshot(txn, {
+        'ingredient_id': ingredientId,
+        'type': 'OUT',
+        'qty': qty,
+        'reason': reason,
+        'note': note,
+        'created_at': now,
+        'created_by': userId,
+      }, kind: StockItemKind.ingredient),
+    );
     await txn.rawUpdate(
       'UPDATE ingredient_stock SET on_hand = on_hand - ?, updated_at = ? WHERE ingredient_id = ?',
       [qty, now, ingredientId],
@@ -597,15 +669,18 @@ class InventoryRepository {
       'UPDATE products SET quantity = COALESCE(quantity, 0) + ?, avg_cost = ? WHERE id = ?',
       [qty, newAvg, productId],
     );
-    await txn.insert('product_movements', {
-      'product_id': productId,
-      'type': 'PURCHASE',
-      'qty': qty,
-      'cost_price': cost,
-      'supplier': supplier,
-      'created_at': now,
-      'created_by': userId,
-    });
+    await txn.insert(
+      'product_movements',
+      await withItemSnapshot(txn, {
+        'product_id': productId,
+        'type': 'PURCHASE',
+        'qty': qty,
+        'cost_price': cost,
+        'supplier': supplier,
+        'created_at': now,
+        'created_by': userId,
+      }, kind: StockItemKind.product),
+    );
   }
 
   Future<void> _productOut(
@@ -645,14 +720,17 @@ class InventoryRepository {
       'UPDATE products SET quantity = COALESCE(quantity, 0) - ? WHERE id = ?',
       [qty, productId],
     );
-    await txn.insert('product_movements', {
-      'product_id': productId,
-      'type': 'WASTE',
-      'qty': qty,
-      'note': note,
-      'created_at': now,
-      'created_by': userId,
-    });
+    await txn.insert(
+      'product_movements',
+      await withItemSnapshot(txn, {
+        'product_id': productId,
+        'type': 'WASTE',
+        'qty': qty,
+        'note': note,
+        'created_at': now,
+        'created_by': userId,
+      }, kind: StockItemKind.product),
+    );
   }
 
   // --- Inventarizatsiya (real songa tenglashtirish) ---
@@ -681,14 +759,17 @@ class InventoryRepository {
           where: 'ingredient_id = ?',
           whereArgs: [entry.key],
         );
-        await txn.insert('stock_movements', {
-          'ingredient_id': entry.key,
-          'type': 'ADJUST',
-          'qty': diff,
-          'reason': 'inventory',
-          'created_at': now,
-          'created_by': userId,
-        });
+        await txn.insert(
+          'stock_movements',
+          await withItemSnapshot(txn, {
+            'ingredient_id': entry.key,
+            'type': 'ADJUST',
+            'qty': diff,
+            'reason': 'inventory',
+            'created_at': now,
+            'created_by': userId,
+          }, kind: StockItemKind.ingredient),
+        );
       }
     });
   }
@@ -716,14 +797,17 @@ class InventoryRepository {
           entry.value,
           entry.key,
         ]);
-        await txn.insert('product_movements', {
-          'product_id': entry.key,
-          'type': 'ADJUST',
-          'qty': diff,
-          'note': 'inventory',
-          'created_at': now,
-          'created_by': userId,
-        });
+        await txn.insert(
+          'product_movements',
+          await withItemSnapshot(txn, {
+            'product_id': entry.key,
+            'type': 'ADJUST',
+            'qty': diff,
+            'note': 'inventory',
+            'created_at': now,
+            'created_by': userId,
+          }, kind: StockItemKind.product),
+        );
       }
     });
   }
@@ -854,7 +938,14 @@ class InventoryRepository {
       }
       w += dateFilter('sm');
       w += typeFilter('sm', ingredient: true);
-      w += searchFilter(['i.name', 'sm.note', 'sm.supplier', 'rp.name']);
+      // `i.name` emas — o'chirilgan xomashyoda u NULL, `LIKE` hech qachon mos
+      // kelmasdi. Ekranda ko'rinayotgan nom bo'yicha qidiriladi.
+      w += searchFilter([
+        _historyName('i', 'sm', 'ingredient_id'),
+        'sm.note',
+        'sm.supplier',
+        'rp.name',
+      ]);
       ingredientWhere = w;
     }
 
@@ -866,7 +957,11 @@ class InventoryRepository {
       }
       w += dateFilter('pm');
       w += typeFilter('pm', ingredient: false);
-      w += searchFilter(['p.name', 'pm.note', 'pm.supplier']);
+      w += searchFilter([
+        _historyName('p', 'pm', 'product_id'),
+        'pm.note',
+        'pm.supplier',
+      ]);
       productWhere = w;
     }
 
@@ -878,6 +973,20 @@ class InventoryRepository {
   static const _refProductJoin =
       "LEFT JOIN products rp ON sm.ref_table = 'products' "
       'AND sm.ref_id = CAST(rp.id AS TEXT)';
+
+  /// Tarixdagi nom (§20), muhimlik tartibida:
+  /// 1. joriy nom — element bor bo'lsa (nomi tuzatilgan bo'lsa yangisi
+  ///    hamma joyda bir xil ko'rinsin);
+  /// 2. `item_name` snapshot — yozuv kiritilgan paytdagi nom, element
+  ///    o'chirilgan bo'lsa;
+  /// 3. `O'chirilgan #id` — snapshot'gacha yozilgan eski qatorlar uchun.
+  static String _historyName(String item, String mv, String fk) =>
+      "COALESCE($item.name, $mv.item_name, 'O''chirilgan #' || $mv.$fk)";
+
+  /// Birlik uchun ham xuddi shunday zanjir — o'chirilgan xomashyoning miqdori
+  /// birliksiz o'qilmaydi ("300" — gramm mi, dona mi?).
+  static String _historyUnit(String item, String mv, String col, String or) =>
+      "COALESCE($item.$col, $mv.item_unit, '$or')";
 
   /// Birlashgan harakatlar tarixi: xomashyo (`stock_movements`) + tayyor
   /// mahsulot (`product_movements`) — §4.6 ekrani uchun.
@@ -916,7 +1025,8 @@ class InventoryRepository {
     if (where.ingredient != null) {
       parts.add('''
         SELECT 'ingredient' AS source, sm.id AS id, sm.ingredient_id AS item_id,
-               i.name AS item_name, i.base_unit AS unit,
+               ${_historyName('i', 'sm', 'ingredient_id')} AS item_name,
+               ${_historyUnit('i', 'sm', 'base_unit', '')} AS unit,
                CASE WHEN sm.type = 'OUT' AND sm.reason = '$productionReason'
                     THEN '$consumeType' ELSE sm.type END AS type,
                sm.qty AS qty, sm.cost_price AS cost_price,
@@ -925,7 +1035,7 @@ class InventoryRepository {
                sm.created_at AS created_at, sm.created_by AS created_by,
                u.name AS user_name
         FROM stock_movements sm
-        JOIN ingredients i ON sm.ingredient_id = i.id
+        LEFT JOIN ingredients i ON sm.ingredient_id = i.id
         LEFT JOIN users u ON sm.created_by = u.id
         $_refProductJoin
         WHERE ${where.ingredient}
@@ -935,14 +1045,15 @@ class InventoryRepository {
     if (where.product != null) {
       parts.add('''
         SELECT 'product' AS source, pm.id AS id, pm.product_id AS item_id,
-               p.name AS item_name, COALESCE(p.unit, 'dona') AS unit,
+               ${_historyName('p', 'pm', 'product_id')} AS item_name,
+               ${_historyUnit('p', 'pm', 'unit', 'dona')} AS unit,
                pm.type AS type, pm.qty AS qty, pm.cost_price AS cost_price,
                pm.supplier AS supplier, pm.note AS note, NULL AS reason,
                NULL AS ref_name,
                pm.created_at AS created_at, pm.created_by AS created_by,
                u.name AS user_name
         FROM product_movements pm
-        JOIN products p ON pm.product_id = p.id
+        LEFT JOIN products p ON pm.product_id = p.id
         LEFT JOIN users u ON pm.created_by = u.id
         WHERE ${where.product}
       ''');
@@ -984,7 +1095,7 @@ class InventoryRepository {
     if (where.ingredient != null) {
       parts.add('''
         SELECT COUNT(*) AS cnt FROM stock_movements sm
-        JOIN ingredients i ON sm.ingredient_id = i.id
+        LEFT JOIN ingredients i ON sm.ingredient_id = i.id
         $_refProductJoin
         WHERE ${where.ingredient}
       ''');
@@ -993,7 +1104,7 @@ class InventoryRepository {
     if (where.product != null) {
       parts.add('''
         SELECT COUNT(*) AS cnt FROM product_movements pm
-        JOIN products p ON pm.product_id = p.id
+        LEFT JOIN products p ON pm.product_id = p.id
         WHERE ${where.product}
       ''');
     }
@@ -1004,6 +1115,74 @@ class InventoryRepository {
       args,
     );
     return (rows.first['total'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Harakatlar tarixini muddati o'tgan yozuvlardan tozalaydi (§19).
+  ///
+  /// Yozuv **faqat yoshi bo'yicha** o'chadi — xomashyo/mahsulot o'chirilgani
+  /// sababli emas (§20). Shuning uchun yumshoq o'chirilgan xomashyo qatori
+  /// ham faqat unga tegishli oxirgi harakat ketgandan keyin yo'q qilinadi,
+  /// aks holda undan oldingi tarix nomsiz qolardi.
+  ///
+  /// [months] `<= 0` bo'lsa hech nima o'chirilmaydi ("cheksiz saqlash").
+  /// Qaytadi: o'chirilgan qatorlar soni.
+  Future<({int ingredient, int product})> purgeHistoryOlderThan(
+    int months, {
+    DateTime? now,
+  }) async {
+    if (months <= 0) return (ingredient: 0, product: 0);
+
+    final ref = now ?? DateTime.now();
+    final cutoff = DateTime(
+      ref.year,
+      ref.month - months,
+      ref.day,
+      ref.hour,
+      ref.minute,
+      ref.second,
+    ).toIso8601String();
+
+    final db = await _dbHelper.database;
+    return db.transaction((txn) async {
+      final ing = await txn.delete(
+        'stock_movements',
+        where: 'created_at < ?',
+        whereArgs: [cutoff],
+      );
+      final prod = await txn.delete(
+        'product_movements',
+        where: 'created_at < ?',
+        whereArgs: [cutoff],
+      );
+
+      // Endi hech qanday tarixi qolmagan, o'chirilgan xomashyolarni fizik
+      // yo'q qilamiz — bazada abadiy o'sib boradigan "o'lik" qatorlar
+      // qolmasin.
+      await txn.rawDelete('''
+        DELETE FROM ingredient_stock WHERE ingredient_id IN (
+          SELECT id FROM ingredients WHERE is_active = 0
+            AND id NOT IN (SELECT DISTINCT ingredient_id FROM stock_movements
+                           WHERE ingredient_id IS NOT NULL)
+        )
+      ''');
+      await txn.rawDelete('''
+        DELETE FROM ingredients WHERE is_active = 0
+          AND id NOT IN (SELECT DISTINCT ingredient_id FROM stock_movements
+                         WHERE ingredient_id IS NOT NULL)
+      ''');
+
+      return (ingredient: ing, product: prod);
+    });
+  }
+
+  /// Bo'shagan sahifalarni operatsion tizimga qaytaradi.
+  ///
+  /// `DELETE` o'zi fayl hajmini kichraytirmaydi — `VACUUM` bo'lmasa
+  /// tozalashning ma'nosi qolmaydi. Tranzaksiya ichida ishlamaydi, shuning
+  /// uchun [purgeHistoryOlderThan] dan **keyin** alohida chaqiriladi.
+  Future<void> vacuum() async {
+    final db = await _dbHelper.database;
+    await db.execute('VACUUM');
   }
 
   /// Mahsulot turini o'zgartiradi: `'prepared'` (tayyorlanadi, retseptli) yoki

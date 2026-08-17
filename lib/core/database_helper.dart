@@ -32,7 +32,7 @@ class DatabaseHelper {
 
     final db = await openDatabase(
       path,
-      version: 56,
+      version: 59,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -1353,6 +1353,186 @@ class DatabaseHelper {
         print('Error upgrading database to v56 (base_unit CHECK): $e');
       }
     }
+
+    if (oldVersion < 57) {
+      try {
+        // Harakatlar jurnalidan (`stock_movements`, `product_movements`)
+        // `ON DELETE CASCADE` olib tashlanadi.
+        //
+        // Bu jadvallar — moliyaviy ledger: xomashyo yoki mahsulot o'chirilgani
+        // sababli yozuv yo'qolmasligi kerak (§20). Hozir `PRAGMA foreign_keys`
+        // yoqilmagani uchun CASCADE ishlamayapti, lekin u yoqilgan kuni butun
+        // tarixni olib ketardi — shuning uchun bog'lanish umuman olib
+        // tashlanadi (o'chirilgan element `LEFT JOIN` bilan ko'rsatiladi).
+        await _dropMovementCascade(db, 'stock_movements', const [
+          'id',
+          'ingredient_id',
+          'type',
+          'qty',
+          'reason',
+          'ref_table',
+          'ref_id',
+          'note',
+          'created_at',
+          'created_by',
+          'cost_price',
+          'supplier',
+        ], '''
+          CREATE TABLE stock_movements_v57 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ingredient_id INTEGER,
+            type TEXT NOT NULL CHECK (type IN ('IN', 'OUT', 'ADJUST', 'RETURN')),
+            qty REAL NOT NULL,
+            reason TEXT,
+            ref_table TEXT,
+            ref_id TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            created_by INTEGER,
+            cost_price REAL DEFAULT 0,
+            supplier TEXT
+          )
+        ''', 'CREATE INDEX IF NOT EXISTS idx_stock_movements_lookup '
+            'ON stock_movements (ingredient_id, created_at)');
+
+        await _dropMovementCascade(db, 'product_movements', const [
+          'id',
+          'product_id',
+          'type',
+          'qty',
+          'ref_table',
+          'ref_id',
+          'cost_price',
+          'supplier',
+          'note',
+          'created_at',
+          'created_by',
+        ], '''
+          CREATE TABLE product_movements_v57 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            type TEXT NOT NULL CHECK (type IN ('PRODUCE','PURCHASE','SALE','WASTE','ADJUST')),
+            qty REAL NOT NULL,
+            ref_table TEXT,
+            ref_id TEXT,
+            cost_price REAL DEFAULT 0,
+            supplier TEXT,
+            note TEXT,
+            created_at TEXT NOT NULL,
+            created_by INTEGER
+          )
+        ''', 'CREATE INDEX IF NOT EXISTS idx_product_movements_lookup '
+            'ON product_movements (product_id, created_at)');
+      } catch (e) {
+        print('Error upgrading database to v57 (movement CASCADE): $e');
+      }
+    }
+
+    if (oldVersion < 58) {
+      try {
+        // §20: tarixda nom/birlik snapshot'i — element o'chirilsa ham yozuv
+        // "O'chirilgan #12" emas, haqiqiy nomi bilan o'qiladi.
+        await _addSnapshotColumns(
+          db,
+          'stock_movements',
+          'ingredients',
+          'ingredient_id',
+          'base_unit',
+        );
+        await _addSnapshotColumns(
+          db,
+          'product_movements',
+          'products',
+          'product_id',
+          'unit',
+        );
+      } catch (e) {
+        print('Error upgrading database to v58 (name snapshot): $e');
+      }
+    }
+
+    if (oldVersion < 59) {
+      try {
+        // §19: retention tozalashi sof `created_at` bo'yicha o'chiradi. Mavjud
+        // `(ingredient_id, created_at)` indeksi bunga yaramaydi — birinchi
+        // ustun filtrda yo'q. Tarix ekrani ham `ORDER BY created_at` qiladi.
+        for (final sql in _historyDateIndexes) {
+          await db.execute(sql);
+        }
+      } catch (e) {
+        print('Error upgrading database to v59 (created_at index): $e');
+      }
+    }
+  }
+
+  /// Sana bo'yicha indekslar: retention tozalashi va tarix ekranidagi
+  /// `ORDER BY created_at DESC` uchun (§19).
+  static const _historyDateIndexes = <String>[
+    'CREATE INDEX IF NOT EXISTS idx_stock_movements_date '
+        'ON stock_movements (created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_product_movements_date '
+        'ON product_movements (created_at)',
+  ];
+
+  /// Harakat jadvalini FK'siz qayta quradi (§20).
+  ///
+  /// [canonicalColumns] — yangi jadvaldagi ustunlar; eskisida yo'qlari
+  /// ko'chirilmaydi, shuning uchun migratsiya har qanday oraliq versiyadan
+  /// ishlaydi. CASCADE qolmagan bo'lsa hech nima qilmaydi (idempotent).
+  Future<void> _dropMovementCascade(
+    Database db,
+    String table,
+    List<String> canonicalColumns,
+    String createSql,
+    String indexSql,
+  ) async {
+    final schema = await db.rawQuery(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+      [table],
+    );
+    if (schema.isEmpty) return;
+    final currentSql = (schema.first['sql'] as String?)?.toUpperCase();
+    if (currentSql == null || !currentSql.contains('CASCADE')) return;
+
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final existing = info.map((c) => c['name'] as String).toSet();
+    final copy = canonicalColumns.where(existing.contains).join(', ');
+
+    await db.execute(createSql);
+    await db.execute(
+      'INSERT INTO ${table}_v57 ($copy) SELECT $copy FROM $table',
+    );
+    await db.execute('DROP TABLE $table');
+    await db.execute('ALTER TABLE ${table}_v57 RENAME TO $table');
+    await db.execute(indexSql);
+  }
+
+  /// Snapshot ustunlarini qo'shadi (yo'q bo'lsa) va mavjud yozuvlarni
+  /// hozirgi nomlar bilan to'ldiradi. Idempotent.
+  Future<void> _addSnapshotColumns(
+    Database db,
+    String table,
+    String sourceTable,
+    String fkColumn,
+    String unitColumn,
+  ) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final cols = info.map((c) => c['name'] as String).toSet();
+    if (!cols.contains('item_name')) {
+      await db.execute('ALTER TABLE $table ADD COLUMN item_name TEXT');
+    }
+    if (!cols.contains('item_unit')) {
+      await db.execute('ALTER TABLE $table ADD COLUMN item_unit TEXT');
+    }
+    // Eski yozuvlar uchun — hali o'chirilmagan elementlarning nomi olinadi.
+    // O'chirilganlariniki NULL qoladi (nom endi hech qayerda yo'q).
+    await db.execute('''
+      UPDATE $table SET
+        item_name = (SELECT name FROM $sourceTable WHERE id = $table.$fkColumn),
+        item_unit = (SELECT $unitColumn FROM $sourceTable
+                     WHERE id = $table.$fkColumn)
+      WHERE item_name IS NULL
+    ''');
   }
 
   Future _createDB(Database db, int version) async {
@@ -1662,9 +1842,11 @@ CREATE TABLE IF NOT EXISTS users (
         created_by INTEGER,
         cost_price REAL DEFAULT 0,
         supplier TEXT,
-        FOREIGN KEY (ingredient_id) REFERENCES ingredients (id) ON DELETE CASCADE
+        item_name TEXT,
+        item_unit TEXT
       )
     ''');
+    // FK yo'q — bu ledger: xomashyo o'chirilsa ham yozuv qolishi kerak (§20).
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS recipes (
@@ -1712,12 +1894,17 @@ CREATE TABLE IF NOT EXISTS users (
         note TEXT,
         created_at $textType,
         created_by INTEGER,
-        FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+        item_name TEXT,
+        item_unit TEXT
       )
     ''');
+    // FK yo'q — bu ledger: mahsulot o'chirilsa ham yozuv qolishi kerak (§20).
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_product_movements_lookup ON product_movements (product_id, created_at)',
     );
+    for (final sql in _historyDateIndexes) {
+      await db.execute(sql);
+    }
 
     // Add new indexes for v23
     await db.execute(

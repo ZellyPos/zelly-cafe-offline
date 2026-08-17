@@ -10,6 +10,7 @@ import 'core/utils/keyboard_utils.dart';
 import 'core/database_helper.dart';
 import 'core/services/license_service.dart';
 import 'core/services/daily_restart_service.dart';
+import 'core/services/history_retention_service.dart';
 import 'core/update_service.dart';
 import 'models/license_model.dart';
 import 'features/license/screens/license_import_screen.dart';
@@ -231,6 +232,8 @@ class _TezzroAppState extends State<TezzroApp> {
     DailyRestartService.instance.start(
       busy: () => context.read<CartProvider>().items.isNotEmpty,
     );
+    // Muddati o'tgan ombor tarixini kuniga bir marta tozalash (§19).
+    HistoryRetentionService.instance.scheduleOnStartup();
   }
 
   @override

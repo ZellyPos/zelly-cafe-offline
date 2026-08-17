@@ -905,6 +905,227 @@ void main() {
       expect(await invRepo.getHistory(search: 'yo\'q-bunday'), isEmpty);
     });
 
+    test('o\'chirilgan xomashyoning tarixi qoladi (§20)', () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 2)]);
+      await invRepo.stockOut(ingredientId: w.meatId, qty: 5, note: 'muzlatkich');
+
+      final before = await invRepo.getHistoryCount();
+      final meatBefore = await invRepo.getHistory(
+        source: 'ingredient',
+        itemId: w.meatId,
+      );
+      expect(meatBefore, isNotEmpty);
+
+      await invRepo.deleteIngredient(w.meatId);
+
+      // Ro'yxatlardan chiqadi...
+      final active = await invRepo.getAllIngredients();
+      expect(active.any((i) => i.id == w.meatId), isFalse);
+      final withStock = await invRepo.getIngredientsWithStock();
+      expect(withStock.any((r) => r['id'] == w.meatId), isFalse);
+
+      // ...lekin tarixdan CHIQMAYDI.
+      expect(await invRepo.getHistoryCount(), before);
+      final meatAfter = await invRepo.getHistory(
+        source: 'ingredient',
+        itemId: w.meatId,
+      );
+      expect(meatAfter.length, meatBefore.length);
+      expect(meatAfter.first['item_name'], 'Go\'sht');
+      expect(meatAfter.any((r) => r['note'] == 'muzlatkich'), isTrue);
+
+      // Izoh va sarf bo'yicha qidiruv ham ishlayveradi.
+      expect(await invRepo.getHistory(search: 'muzlat'), hasLength(1));
+      final consume = await invRepo.getHistory(types: ['CONSUME']);
+      expect(consume.any((r) => r['item_id'] == w.meatId), isTrue);
+    });
+
+    test('o\'chirilgan xomashyo faol retseptdan olib tashlanadi', () async {
+      final w = await setupWorld();
+      await invRepo.deleteIngredient(w.meatId);
+
+      final recipe = await invRepo.getRecipeForProduct(w.burgerId);
+      expect(recipe, isNotNull);
+      expect(recipe!.items.any((it) => it.ingredientId == w.meatId), isFalse);
+      expect(recipe.items.any((it) => it.ingredientId == w.breadId), isTrue);
+    });
+
+    test('o\'chirilgan mahsulotning tarixi qoladi (§20)', () async {
+      final w = await setupWorld();
+      await invRepo.resaleStockIn(productId: w.colaId, qty: 10, cost: 5000);
+
+      final before = await invRepo.getHistoryCount();
+      final db = await dbHelper.database;
+      await db.delete('products', where: 'id = ?', whereArgs: [w.colaId]);
+
+      expect(await invRepo.getHistoryCount(), before);
+      final rows = await invRepo.getHistory(
+        source: 'product',
+        itemId: w.colaId,
+      );
+      expect(rows, isNotEmpty);
+      // Mahsulot qatori yo'q, lekin nom snapshot'i tarixda qolgan.
+      expect(rows.first['item_name'], 'Cola 0.5');
+      expect(rows.first['qty'], 10);
+
+      // Snapshot bo'yicha qidiruv ham ishlaydi.
+      final found = await invRepo.getHistory(source: 'product', search: 'Cola');
+      expect(found, isNotEmpty);
+    });
+
+    test('snapshot: nom o\'zgarsa tarixda joriy nom ko\'rinadi', () async {
+      final w = await setupWorld();
+      await invRepo.resaleStockIn(productId: w.colaId, qty: 10, cost: 5000);
+
+      final db = await dbHelper.database;
+      // Snapshot yozuv kiritilganda saqlanadi...
+      final snap = await db.query(
+        'product_movements',
+        where: 'product_id = ?',
+        whereArgs: [w.colaId],
+      );
+      expect(snap.first['item_name'], 'Cola 0.5');
+
+      // ...lekin mahsulot mavjud ekan, tarixda JORIY nom ustun turadi.
+      await db.update(
+        'products',
+        {'name': 'Coca-Cola 0.5'},
+        where: 'id = ?',
+        whereArgs: [w.colaId],
+      );
+      final rows = await invRepo.getHistory(
+        source: 'product',
+        itemId: w.colaId,
+      );
+      expect(rows.first['item_name'], 'Coca-Cola 0.5');
+    });
+
+    test('snapshot: o\'chirilgan xomashyoning birligi saqlanadi', () async {
+      final w = await setupWorld();
+      await invRepo.stockOut(ingredientId: w.meatId, qty: 5, note: 'buzildi');
+
+      final db = await dbHelper.database;
+      // Xomashyo qatorini butunlay yo'qotamiz (eski hard-delete bazalar).
+      await db.delete('ingredients', where: 'id = ?', whereArgs: [w.meatId]);
+
+      final rows = await invRepo.getHistory(
+        source: 'ingredient',
+        itemId: w.meatId,
+      );
+      expect(rows, isNotEmpty);
+      expect(rows.first['item_name'], 'Go\'sht');
+      expect(rows.first['unit'], 'g');
+    });
+
+    test('harakat jurnallarida CASCADE bog\'lanish yo\'q (§20)', () async {
+      await setupWorld();
+      final db = await dbHelper.database;
+      for (final table in ['stock_movements', 'product_movements']) {
+        final schema = await db.rawQuery(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+          [table],
+        );
+        expect(schema, isNotEmpty, reason: '$table topilmadi');
+        expect(
+          (schema.first['sql'] as String).toUpperCase(),
+          isNot(contains('CASCADE')),
+          reason: '$table — ledger, o\'chirish kaskadi bo\'lmasligi kerak',
+        );
+      }
+    });
+
+    /// §19: eski yozuvlarni tozalash. Sana bo'yicha — element o'chirilgani
+    /// sababli emas (§20).
+    group('Retention (§19)', () {
+      /// Berilgan yozuvlarni "eski" qilib qo'yadi.
+      Future<void> ageAll(String createdAt) async {
+        final db = await dbHelper.database;
+        await db.update('stock_movements', {'created_at': createdAt});
+        await db.update('product_movements', {'created_at': createdAt});
+      }
+
+      test('muddati o\'tgan yozuvlar o\'chadi, yangilari qoladi', () async {
+        final w = await setupWorld();
+        await invRepo.resaleStockIn(productId: w.colaId, qty: 10, cost: 5000);
+        await ageAll('2023-01-01T10:00:00.000');
+
+        // Chegaradan keyingi yangi yozuv.
+        await invRepo.stockIn(ingredientId: w.meatId, qty: 100, cost: 80);
+        final freshCount = await invRepo.getHistoryCount();
+
+        final removed = await invRepo.purgeHistoryOlderThan(
+          24,
+          now: DateTime(2026, 8, 17),
+        );
+        expect(removed.ingredient, greaterThan(0));
+        expect(removed.product, 1);
+
+        final left = await invRepo.getHistory(limit: 1000);
+        expect(left, hasLength(1)); // faqat yangi kirim
+        expect(left.first['qty'], 100);
+        expect(freshCount, greaterThan(left.length));
+      });
+
+      test('0 oy = cheksiz saqlash, hech nima o\'chmaydi', () async {
+        final w = await setupWorld();
+        await invRepo.resaleStockIn(productId: w.colaId, qty: 10, cost: 5000);
+        await ageAll('2015-01-01T10:00:00.000');
+        final before = await invRepo.getHistoryCount();
+
+        final removed = await invRepo.purgeHistoryOlderThan(0);
+        expect(removed.ingredient, 0);
+        expect(removed.product, 0);
+        expect(await invRepo.getHistoryCount(), before);
+      });
+
+      test('tarixi qolgan o\'chirilgan xomashyo saqlanadi', () async {
+        final w = await setupWorld();
+        await invRepo.deleteIngredient(w.meatId);
+
+        // Tarix hali muddati ichida — xomashyo qatori ham turishi kerak,
+        // aks holda undagi yozuvlar nomsiz qolardi.
+        await invRepo.purgeHistoryOlderThan(24, now: DateTime(2026, 8, 17));
+
+        final db = await dbHelper.database;
+        final rows = await db.query(
+          'ingredients',
+          where: 'id = ?',
+          whereArgs: [w.meatId],
+        );
+        expect(rows, hasLength(1));
+        expect(rows.first['is_active'], 0);
+      });
+
+      test('tarixi tugagan o\'chirilgan xomashyo fizik yo\'q qilinadi',
+          () async {
+        final w = await setupWorld();
+        await invRepo.deleteIngredient(w.meatId);
+        await ageAll('2015-01-01T10:00:00.000');
+
+        await invRepo.purgeHistoryOlderThan(24, now: DateTime(2026, 8, 17));
+
+        final db = await dbHelper.database;
+        expect(
+          await db.query('ingredients', where: 'id = ?', whereArgs: [w.meatId]),
+          isEmpty,
+        );
+        expect(
+          await db.query(
+            'ingredient_stock',
+            where: 'ingredient_id = ?',
+            whereArgs: [w.meatId],
+          ),
+          isEmpty,
+        );
+        // Faol xomashyoga tegilmagan.
+        expect(
+          await db.query('ingredients', where: 'id = ?', whereArgs: [w.breadId]),
+          hasLength(1),
+        );
+      });
+    });
+
     test('recipeCost = Σ(qty × avg_cost) / yield_qty', () async {
       final w = await setupWorld();
       // go'sht avg_cost = 80/g, non = 2000/dona (setupWorld dagi kirimdan)

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/services/history_retention_service.dart';
 import '../../providers/app_settings_provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
@@ -179,6 +180,36 @@ class BrandSettingsScreen extends StatelessWidget {
                     icon: const Icon(Icons.schedule, size: 18),
                     label: Text(provider.dailyRestartTime),
                     onPressed: () => _pickRestartTime(context, provider),
+                  ),
+                ),
+              if (provider.enableInventory)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    "Ombor tarixini saqlash muddati",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Text(
+                    "Muddati o'tgan harakatlar kuniga bir marta o'chiriladi. "
+                    "Tannarx va yetkazuvchi tahlili shu tarixga tayanadi — "
+                    "muddatni qisqartirishdan oldin o'ylab ko'ring.",
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  trailing: DropdownButton<int>(
+                    value: provider.historyRetentionMonths,
+                    underline: const SizedBox.shrink(),
+                    items: [
+                      for (final m in HistoryRetentionService.options)
+                        DropdownMenuItem(
+                          value: m,
+                          child: Text(m == 0 ? 'Cheksiz' : '$m oy'),
+                        ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        provider.setHistoryRetentionMonths(val);
+                      }
+                    },
                   ),
                 ),
             ],

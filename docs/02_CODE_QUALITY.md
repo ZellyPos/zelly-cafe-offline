@@ -1,9 +1,36 @@
 # Kod Sifati, Linting va Texnik Qarz
 
 > Bog'liq: [`01_ARCHITECTURE.md`](01_ARCHITECTURE.md) · [`04_ROADMAP.md`](04_ROADMAP.md)
-> Manba: `flutter analyze` (393 issue) + kod skani.
 
 ---
+
+## 0. Joriy holat — 2026-08-18 ✅
+
+| Ko'rsatkich | Avval (2026-08-07) | **Hozir** |
+|---|---:|---:|
+| `flutter analyze` | 393 issue | **10** (0 xato, 10 warning) |
+| `withOpacity` (eskirgan) | 255 | **0** |
+| `print()` ishlab chiqarish kodida | 72 | **0** |
+| `use_build_context_synchronously` | 36 | **10** |
+| O'lik kod / ishlatilmagan e'lonlar | 6 | **0** |
+| Testlar | 6 fayl, **5 tasi yiqilardi** | 6 fayl, **67 test — hammasi o'tadi** |
+| Linter qoidalari | default shablon | 10 qoida + 8 ta `error` darajasi |
+| Git'da maxfiy fayllar | `.pem` × 2, `license.json` | kuzatuvdan chiqarildi |
+
+**Qolgan 10 warning** — hammasi `cart_provider.dart` da: `BuildContext`
+async metodlarga uzatiladi. To'g'ri yechim — provider'dan `BuildContext`ni
+butunlay olib tashlash ([`04_ROADMAP.md`](04_ROADMAP.md) Bosqich 4). Ular
+`warning` darajasida — ko'rinib turadi, lekin CI'ni to'xtatmaydi.
+
+**Sifat qulfi.** Tuzatilgan har bir muammoning linti `analysis_options.yaml`
+da `error` darajasiga ko'tarildi (`avoid_print`, `dead_code`,
+`unused_element`, `constant_identifier_names`, ...) — ya'ni ular
+**qaytib kela olmaydi**, kod kompilyatsiya bo'lmaydi.
+
+---
+
+<details>
+<summary>Quyidagi bo'limlar — 2026-08-07 dagi dastlabki tahlil (tarix uchun)</summary>
 
 ## 1. `flutter analyze` natijasi: 393 ta issue
 
@@ -151,3 +178,21 @@ balansi) unit test bilan qoplash.
 | 6 | Linter qoidalarini kuchaytirish | kelajakdagi regressiyani to'xtatadi |
 
 Batafsil bosqichma-bosqich reja: [`04_ROADMAP.md`](04_ROADMAP.md).
+
+</details>
+
+---
+
+## 9. Keyingi sifat maqsadi
+
+Quyidagi lint qoidalari hali yoqilmagan (yoqilsa shuncha ogohlantirish
+chiqadi). Har birini alohida ko'rib chiqish kerak — avtomatik tuzatib
+bo'lmaydi:
+
+| Qoida | Soni | Nima kerak |
+|---|---:|---|
+| `avoid_dynamic_calls` | ~100 | `Map<String, dynamic>` ustidagi chaqiruvlar — modellarni tiplashtirish bilan yo'qoladi |
+| `unawaited_futures` | ~36 | Har biri "ataylab kutilmayapti"mi yoki unutilganmi — qo'lda tekshirish |
+| `avoid_slow_async_io` | ~14 | `AppLogger`da ataylab async I/O — bu qoida bu loyihaga mos emas |
+
+Ular `analysis_options.yaml` da izoh sifatida yozib qo'yilgan.

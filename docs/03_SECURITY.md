@@ -1,7 +1,25 @@
 # Xavfsizlik Tahlili
 
 > Bog'liq: [`00_OVERVIEW.md`](00_OVERVIEW.md) · [`04_ROADMAP.md`](04_ROADMAP.md)
-> ⚠️ Bu hujjatda **darhol hal qilinishi kerak** bo'lgan topilma bor.
+
+---
+
+## 0. Joriy holat — 2026-08-18
+
+| Topilma | Holat |
+|---|---|
+| 🔴 Maxfiy kalit git'da | 🟡 **Qisman** — kuzatuvdan chiqarildi va `.gitignore`ga qo'shildi; **tarixda qoldi** (qarang §1) |
+| 🔴 Kalit ilova build'iga kiradimi | ✅ **Yo'q** — `build/` da `.pem` topilmadi; `pubspec.yaml` assets'ida faqat `assets/images/` |
+| 🔴 API tokeni taxmin qilinardi (`admin-token-1`) | ✅ **Hal qilindi** — tasodifiy, 12 soatlik, bekor qilinadigan token |
+| 🔴 Ko'p endpoint autentifikatsiyani umuman tekshirmasdi | ✅ **Hal qilindi** — markazlashgan middleware |
+| 🔴 `GET /users` PIN kodlarni qaytarardi | ✅ **Hal qilindi** — PIN javoblardan olib tashlandi |
+| 🟡 PIN brute-force himoyasi yo'q | ✅ **Hal qilindi** — 5 urinish → 5 daqiqa blok |
+| 🟡 Ofitsiant barcha hisobotlarni ko'ra olardi | ✅ **Hal qilindi** — rolga qarab bo'lindi |
+| 🟡 SQL injection | ✅ **Xavf topilmadi** — barcha so'rovlar parametrlangan (qarang §3) |
+| 🟡 HTTP (TLS yo'q) | ⏳ Ochiq — tarmoqni ajratish bilan yumshatiladi |
+| 🟡 PIN'lar bazada ochiq matnda | ⏳ Ochiq — hash migratsiyasi kerak |
+
+Batafsil: [`API.md`](../API.md) §2 va §8, [`01_ARCHITECTURE.md`](01_ARCHITECTURE.md) §4.6.
 
 ---
 
@@ -52,37 +70,64 @@ kalit allaqachon oshkor bo'lgan hisoblanadi.
 
 ---
 
-## 🟡 2. Lokal server (`api_server.dart`) autentifikatsiyasi
+## ✅ 2. Lokal server autentifikatsiyasi — hal qilindi (2026-08-18)
 
-Server `Authorization: Bearer <token>` ishlatadi (`API.md`). Tekshirilishi
-kerak bo'lgan nuqtalar:
+**Topilgan muammo (o'sha paytdagidan ham jiddiyroq bo'lib chiqdi):**
 
-- Token qanday yaratiladi va muddati bormi (expiry)?
-- HTTP (shifrlanmagan) ishlatilyaptimi? Lokal tarmoqda ham PIN/token ochiq
-  uzatilsa, xuddi shu Wi-Fi'dagi qurilma uni ushlashi mumkin.
-- Rate limiting bormi (PIN brute-force'ga qarshi)?
-- CORS sozlamalari qanchalik ochiq?
+```dart
+'token': 'admin-token-${user['id']}',   // eski kod
+```
 
-**Tavsiya:** token muddati + PIN uchun urinishlar chegarasi, imkon bo'lsa
-lokal TLS yoki hech bo'lmasa token'ni qisqa muddatli qilish.
+Token oddiy, taxmin qilinadigan qator edi. Ya'ni **istalgan odam
+`Authorization: Bearer admin-token-1` yuborib to'liq admin huquqini olardi** —
+PIN kerak emas, brute-force kerak emas. Bundan tashqari:
+
+- Token muddatsiz va bekor qilib bo'lmaydigan edi (xodim ishdan ketsa ham
+  tokeni ishlardi);
+- autentifikatsiya endpoint'lar **ichida qo'lda** bajarilgan — ko'p endpoint
+  umuman tekshirmasdi;
+- `GET /users` javobida **PIN kodlar** ochiq qaytarilardi;
+- ofitsiant butun savdo hisobotini, mijozlar bazasini va xarajatlarni
+  ko'ra olardi.
+
+**Bajarilgan yechim** (`lib/core/server/auth_token_service.dart` +
+`ApiServer._authMiddleware()`):
+
+| Chora | Tafsilot |
+|---|---|
+| Tasodifiy token | `Random.secure()`, 32 bayt, base64url |
+| Muddat | 12 soat, har so'rovda uzayadi (smena davomida qayta login yo'q) |
+| Bekor qilish | `/auth/logout`; xodim o'chirilganda avtomatik |
+| Markazlashgan tekshiruv | Bitta middleware — endpoint yozganda unutib bo'lmaydi |
+| Brute-force | 5 daqiqada 5 urinish → 5 daqiqa blok (`429`) |
+| Ma'lumot oqishi | PIN'lar javoblardan olib tashlandi |
+| Rolga bo'lish | Hisobot/xodim/mijoz/xarajat — faqat admin/kassir |
+| Ishonchsiz kirish | `waiter_id` endi faqat tokendan olinadi |
+
+Qamrov: `test/api_auth_test.dart` — 9 test.
+
+**Qolgan ochiq nuqtalar:** TLS yo'q (HTTP), PIN'lar bazada ochiq matnda.
+Ikkalasi ham [`API.md`](../API.md) §8 da hujjatlangan.
 
 ---
 
-## 🟡 3. SQL injection xavfi
+## ✅ 3. SQL injection — xavf topilmadi
 
-Kod bazasida `rawQuery`/`rawInsert` keng ishlatilgan (provider va ekranlarda).
-Agar biror joyda foydalanuvchi kiritgan matn to'g'ridan-to'g'ri SQL satriga
-qo'shilsa (string interpolation bilan), bu injection xavfini yaratadi.
+Butun `lib/` bo'yicha `rawQuery`/`rawInsert` chaqiruvlari tekshirildi.
+Interpolatsiya (`$`) uchraydigan barcha joylar xavfsiz:
 
-**Tavsiya:** barcha so'rovlarda **parametrlangan** shakldan foydalanish:
-```dart
-// ✅ to'g'ri
-db.rawQuery('SELECT * FROM products WHERE name = ?', [userInput]);
-// ❌ xatarli
-db.rawQuery("SELECT * FROM products WHERE name = '$userInput'");
-```
-Repository qatloviga o'tish (qarang [`01_ARCHITECTURE.md`](01_ARCHITECTURE.md))
-bu tekshiruvni bitta joyga jamlaydi.
+| Joy | Nima interpolatsiya qilinadi | Xavfsizmi |
+|---|---|---|
+| `inventory_service.dart:267` | `int` mahsulot ID'lari (ichki `Map` kalitlari) | ✅ Foydalanuvchi matni emas |
+| `database_helper.dart:2392` | Kod tuzgan `WHERE` bandi — qiymatlar `?` orqali | ✅ |
+| `inventory_repository.dart:1066` | `UNION ALL` qismlari — kod tuzadi | ✅ |
+| `developer_repository.dart:59` | Jadval nomi (ichki ro'yxatdan) | ✅ Faqat dasturchi ekranida |
+
+Foydalanuvchi kiritgan qiymatlar hamma joyda `?` parametri orqali uzatiladi.
+
+> **Kuzatuvda ushlash kerak:** `DeveloperRepository.runRawQuery()` — ixtiyoriy
+> SQL bajaradi. Bu ataylab qilingan (dasturchi konsoli) va API orqali
+> **ochilmagan**, lekin kelajakda uni endpoint qilib chiqarmaslik kerak.
 
 ---
 
@@ -99,14 +144,19 @@ bu tekshiruvni bitta joyga jamlaydi.
 
 ## 5. Xavfsizlik bo'yicha ustuvor ro'yxat
 
-| Ustuvorlik | Ish |
-|:---------:|-----|
-| 🔴 Darhol | `*.pem`, `license.json`ni git'dan olib tashlash + `.gitignore` |
-| 🔴 Darhol | RSA kalit juftligini yangilash (rotate) |
-| 🔴 Darhol | Private key ilova build'iga kirmasligini tasdiqlash |
-| 🟡 Yaqinda | Server token muddati + PIN rate-limiting |
-| 🟡 Yaqinda | Barcha SQL parametrlangan ekanini audit qilish |
-| 🟢 Keyin | Lokal TLS / shifrlangan ulanish |
+| Ustuvorlik | Ish | Holat |
+|:---------:|-----|:---:|
+| 🔴 Darhol | `*.pem`, `license.json`ni git'dan olib tashlash + `.gitignore` | ✅ |
+| 🔴 Darhol | Private key ilova build'iga kirmasligini tasdiqlash | ✅ |
+| 🟡 Yaqinda | Server token muddati + PIN rate-limiting | ✅ |
+| 🟡 Yaqinda | Barcha SQL parametrlangan ekanini audit qilish | ✅ |
+| 🔴 **Sizdan** | Git **tarixidan** kalitni tozalash (`git filter-repo` + force-push) | ⏳ |
+| 🔴 **Sizdan** | RSA kalit juftligini yangilash (mijoz litsenziyalariga ta'sir qiladi) | ⏳ |
+| 🟡 Keyin | PIN'larni hash qilish (bcrypt) | ⏳ |
+| 🟢 Keyin | Lokal TLS / shifrlangan ulanish | ⏳ |
+
+Oxirgi ikki "sizdan" bandi bo'yicha qadamlar:
+[`04_ROADMAP.md`](04_ROADMAP.md) → "Qo'lda bajariladigan ishlar".
 
 > Eslatma: bu tahlil statik kod skani asosida. To'liq xavfsizlik auditi uchun
 > `/security-review` skill'ini alohida ishga tushirish tavsiya etiladi.

@@ -199,7 +199,7 @@ osonlashtiradi.
 > Natijada `UI → Provider → Repository → DataSource(SQLite/API)` arxitekturasi
 > izchil qo'llanildi. §2.1 dagi "data layer yo'q" muammosi **hal qilindi**.
 
-Data layer joriy qilish. `lib/data/repositories/` yaratildi:
+**Batafsil:** `lib/data/repositories/` yaratildi:
 
 - **`BaseRepository<T>`** — umumiy lokal/remote CRUD (getAll + remote→lokal
   kesh, add/update/deleteById, client-rejim tarmoqqa yo'naltirish).
@@ -219,20 +219,50 @@ Data layer joriy qilish. `lib/data/repositories/` yaratildi:
   almashtirilishi mumkin), public API o'zgarmadi (ekranlar ta'sirlanmadi).
 - `flutter analyze`: 0 xato; savat charge testi o'tadi.
 
-**Qolgan ishlar:**
-- Murakkab provider'lar: `product`, `report`.
-- Sozlama (key-value) provider'lari: `app_settings`, `receipt_settings`,
-  `printer` — alohida `SettingsRepository` pattern kerak.
-- `shift`, `inventory` — allaqachon repozitoriyga ega.
-- Ekranlardagi to'g'ridan-to'g'ri SQL (10 fayl) — hali olib tashlanmagan.
+**Qolgan kichik qarz:** repozitoriylar ikki papkada — `lib/data/repositories/`
+(16 ta) va `lib/repositories/` (`inventory`, `shift`). Ikkinchisini birinchisiga
+ko'chirish kerak.
+
+---
+
+## 4.6. Bajarilgan ishlar (API xavfsizligi) — 2026-08-18 ✅
+
+> Serverning autentifikatsiya qatlami butunlay qayta yozildi.
+> Batafsil: [`API.md`](../API.md) §9.
+
+**Muammo edi:** token `admin-token-<id>` ko'rinishida taxmin qilinardi —
+istalgan mijoz `Authorization: Bearer admin-token-1` yuborib to'liq admin
+huquqini olardi. Bundan tashqari autentifikatsiya endpoint'lar ichida
+qo'lda va nomuvofiq bajarilgan, ko'p endpoint umuman tekshirmagan edi.
+
+**Bajarildi:**
+- `lib/core/server/auth_token_service.dart` — tasodifiy (32 bayt), 12 soatlik,
+  serverda saqlanadigan va bekor qilinadigan token; `api_sessions` jadvali.
+- `ApiServer._authMiddleware()` — **bitta joyda** barcha so'rovlarni
+  tekshiradigan qatlam. Ochiq yo'llar aniq ro'yxatda (`/auth/login`,
+  `/reports/view`, `/uploads/...`, `/ws`).
+- Rolga qarab bo'linish: hisobot/xodim/mijoz/xarajat bo'limlari ofitsiantlar
+  uchun yopildi; `pin`/`pin_code` javoblardan olib tashlandi.
+- Granular huquqlar serverda ham tekshiriladi (`change_table`,
+  `print_receipt`).
+- Login uchun brute-force himoyasi (5 urinish → 5 daqiqa blok).
+- `waiter_id` endi faqat tokendan olinadi — mijoz uni yozib yubora olmaydi.
+- `test/api_auth_test.dart` — 9 ta test.
+
+**Arxitektura darsi:** avval har bir endpoint o'zi xavfsizlikni hal qilardi
+(cross-cutting concern tarqoq edi). Endi u middleware — bitta joyda,
+testlanadigan va unutib bo'lmaydigan.
 
 ## 5. Ustuvor qadamlar (arxitektura)
 
-1. Bitta domendan boshlab (masalan `Product`) to'liq repository yozib,
-   provider va ekranlardagi SQL'ni ko'chirish — **namuna sifatida**.
-2. Shu namunani qolgan domenlarga bosqichma-bosqich tarqatish.
-3. Ekranlardagi to'g'ridan-to'g'ri SQL'ni butunlay yo'q qilish (10 ta fayl).
-4. God file'larni bo'lish (`api_server`, `pos_screen`, `printing_service`).
-5. `database_helper`ni schema/migration fayllariga ajratish.
+1. ~~Data layer namunasi~~ ✅
+2. ~~Data layer'ni barcha domenlarga tarqatish~~ ✅
+3. ~~API autentifikatsiya qatlami~~ ✅ (2026-08-18)
+4. **God file'larni bo'lish** — `api_server` (2 900+), `pos_screen` (2 400+),
+   `printing_service` (2 200+), `database_helper` (2 500+). ← keyingi ish
+5. `cart_provider`dan `BuildContext`ni butunlay olib tashlash — qolgan
+   10 ta `use_build_context_synchronously` warning aynan shundan.
+6. `database_helper`ni `schema/` + `migrations/` fayllariga ajratish.
+7. `lib/repositories/` → `lib/data/repositories/` ga birlashtirish.
 
 Batafsil bosqichli reja: [`04_ROADMAP.md`](04_ROADMAP.md).

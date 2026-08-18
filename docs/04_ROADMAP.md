@@ -8,35 +8,44 @@ Prinsip: **kichik, xavfsiz qadamlar** — katta "big bang" refaktoring emas.
 
 ---
 
-## Bosqich 0 — Darhol (xavfsizlik + tozalik) · ~1 kun
+## Bosqich 0 — Xavfsizlik + tozalik · ✅ BAJARILDI (2026-08-18)
 
-> Bularsiz keyingi ishlarni boshlash xavfli.
+- [x] `private_key.pem`, `public_key.pem`, `license.json` git kuzatuvidan
+      chiqarildi (`git rm --cached`); `.gitignore`ga `*.pem`, `*.key`,
+      `*.p12`, `*.jks`, `secrets.json` qo'shildi
+- [x] **API autentifikatsiyasi qayta yozildi** — taxmin qilinadigan
+      `admin-token-<id>` o'rniga tasodifiy, muddatli, bekor qilinadigan token
+      → [`01_ARCHITECTURE.md`](01_ARCHITECTURE.md) §4.6, [`API.md`](../API.md) §9
+- [x] Login uchun brute-force himoyasi (5 urinish → 5 daqiqa blok)
+- [x] PIN kodlar API javoblaridan olib tashlandi
+- [x] Litsenziya imzosini `print()` bilan konsolga chiqarish olib tashlandi
 
-- [ ] `private_key.pem`, `public_key.pem`, `license.json`ni git'dan olib tashlash
-      (`git rm --cached`) va `.gitignore`ga qo'shish → [`03_SECURITY.md`](03_SECURITY.md)
-- [ ] RSA kalit juftligini yangilash (rotate) va private key build'ga
-      kirmasligini tasdiqlash
-- [ ] `{userdesktop}/` papkasi va `ZellySetup_*.exe` build artefaktlarini
-      repodan olib tashlash
-- [ ] `pubspec.yaml` `description` va `README.md`ni to'g'rilash (yoki `docs/`ga havola)
-
-**Natija:** repozitoriya xavfsiz va toza.
+**⚠️ Foydalanuvchi bajarishi kerak** (bu ishlarni avtomatik qilib bo'lmaydi,
+chunki ular mijozlarga ta'sir qiladi — pastdagi "Qo'lda bajariladigan ishlar"
+bo'limiga qarang):
+- [ ] Git **tarixidan** kalitni tozalash (`git filter-repo`) + force-push
+- [ ] RSA kalit juftligini yangilash va mijozlarga yangi litsenziya berish
 
 ---
 
-## Bosqich 1 — Tez g'alabalar (kod sifati) · ~1–2 kun
+## Bosqich 1 — Tez g'alabalar (kod sifati) · ✅ BAJARILDI (2026-08-18)
 
-> Kod o'zgarmaydi, faqat toza bo'ladi. Riska past.
+- [x] `dart fix --apply` + 225 ta `withOpacity` → `withValues(alpha:)`
+- [x] Barcha 72 ta `print()` → `AppLogger.d/i/w/e()`
+- [x] `use_build_context_synchronously`: 36 → **10** (qolgani `cart_provider`,
+      Bosqich 4 refaktorini talab qiladi)
+- [x] O'lik kod va ishlatilmagan e'lonlar o'chirildi
+- [x] Enum nomlari camelCase (`MovementType.stockIn`, `PrinterType.usbLegacy`) —
+      bazadagi qiymatlar `dbValue` orqali eski holida saqlandi
+- [x] `analysis_options.yaml` kuchaytirildi: 10 lint qoidasi + 8 ta `error`
+      darajasi (tuzatilgan muammo qaytib kela olmaydi)
+- [x] **Yiqilgan 5 test tuzatildi** — testlar eskirgan sxemaga tayangan edi
+      (`service_fee` → `service_total`, to'lovlar endi `order_payments` da)
+- [x] `widget_test.dart` (Flutter shablonidagi "counter" testi) o'chirildi,
+      o'rniga `api_auth_test.dart` — 9 ta xavfsizlik testi
 
-- [ ] `dart fix --apply` — 255 ta `withOpacity` va boshqa deprecation'lar
-- [ ] Barcha `print()` (69 ta) → `AppLogger` ga almashtirish
-- [ ] `use_build_context_synchronously` (36 ta) — `if (!context.mounted) return;`
-      qo'shish yoki context'ni async'dan chiqarish
-- [ ] O'lik kodni o'chirish (`_whereTime`, `dead_code`, unused)
-- [ ] `analysis_options.yaml`ni kuchaytirish → [`02_CODE_QUALITY.md`](02_CODE_QUALITY.md) §5
-- [ ] `flutter analyze` **0 issue** bo'lguncha yetkazish
-
-**Natija:** `flutter analyze` toza, CI'ga tayyor.
+**Natija:** `flutter analyze` 393 → **10** (0 xato). `flutter test`: **67/67 o'tadi**.
+`flutter build windows` muvaffaqiyatli.
 
 ---
 
@@ -107,18 +116,62 @@ joriy qilindi. ✅
 
 | Bosqich | Taxminiy | Holat |
 |---------|----------|:-----:|
-| 0 — Xavfsizlik | 1 kun | ⏳ Bajarilmagan |
-| 1 — Tez g'alabalar | 1–2 kun | ⏳ Bajarilmagan |
-| 2 — Data layer namunasi | 3–5 kun | ✅ Bajarildi |
-| 3 — Tarqatish | 1–2 hafta | ✅ Bajarildi |
-| 4 — God file'lar | 1–2 hafta | ⏳ Bajarilmagan |
-| 5 — Testlar/CI | davomiy | ⏳ Bajarilmagan |
+| 0 — Xavfsizlik | 1 kun | ✅ Bajarildi (2026-08-18) |
+| 1 — Tez g'alabalar | 1–2 kun | ✅ Bajarildi (2026-08-18) |
+| 2 — Data layer namunasi | 3–5 kun | ✅ Bajarildi (2026-08-07) |
+| 3 — Tarqatish | 1–2 hafta | ✅ Bajarildi (2026-08-07) |
+| 4 — God file'lar | 1–2 hafta | ⏳ **Keyingi ish** |
+| 5 — Testlar/CI | davomiy | 🔄 Boshlandi (67 test) |
 
-> **Bajarildi:** Bosqich 2–3 (Data layer to'liq joriy qilindi, 18 repozitoriy,
-> `flutter analyze` 0 xato). Batafsil: [`01_ARCHITECTURE.md`](01_ARCHITECTURE.md) §4.5.
->
-> **Keyingi tavsiya:** Bosqich 0 (xavfsizlik — git'dagi RSA kalit) va Bosqich 1
-> (tez g'alabalar) — eng kam xarajatda eng katta ta'sir. Keyin Bosqich 4–5.
+**Keyingi tavsiya — Bosqich 4**, `api_server.dart` dan boshlab: u endi
+xavfsizlik qatlamiga ega, shuning uchun route'larga bo'lish xavfsiz.
+Keyin `cart_provider` dan `BuildContext`ni olib tashlash (qolgan 10 warning).
+
+---
+
+## ⚠️ Qo'lda bajariladigan ishlar
+
+Bu ikki ish **avtomatik bajarilmadi**, chunki ular sizdan tashqaridagi
+odamlarga ta'sir qiladi — qarorni siz qabul qilishingiz kerak.
+
+### 1. Kalitni git tarixidan tozalash
+
+`git rm --cached` faqat kelajakdagi commit'larni tozalaydi. `private_key.pem`
+hali ham **git tarixida** va ikkala GitHub remote'ida
+(`ZellyPos/zelly-cafe-offline`, `zellyuz/zellyoffline`) turibdi.
+
+```bash
+# 1. Zaxira nusxa oling!
+git clone --mirror <repo-url> backup-repo.git
+
+# 2. Tarixdan tozalash (git-filter-repo o'rnatilgan bo'lishi kerak)
+git filter-repo --invert-paths --path private_key.pem --path license.json
+
+# 3. Force-push (DIQQAT: tarix o'zgaradi, boshqa nusxalar buziladi)
+git push origin --force --all
+git push origin --force --tags
+```
+
+> Loyihada boshqa dasturchi ishlayotgan bo'lsa, force-push'dan oldin
+> ogohlantiring — ular repozitoriyani qayta klon qilishi kerak bo'ladi.
+
+### 2. RSA kalit juftligini yangilash
+
+Kalit ochiq internetda bo'lgani uchun **texnik jihatdan har kim soxta
+litsenziya yasashi mumkin**. Lekin kalitni almashtirish **barcha mavjud
+mijoz litsenziyalarini bekor qiladi** — ularga yangi litsenziya fayli
+yuborish kerak bo'ladi.
+
+Qadamlar:
+1. Yangi RSA juftlik generatsiya qiling
+2. `lib/core/services/license_service.dart` dagi `_publicKey` ni yangilang
+3. Barcha faol mijozlar uchun yangi `license.json` generatsiya qiling
+4. Yangi versiyani tarqating va litsenziyalarni yuboring
+
+**Bu qanchalik shoshilinch?** Kalit private repozitoriyada bo'lsa va unga
+kirish cheklangan bo'lsa — shoshilinch emas, rejalashtirilgan versiya bilan
+birga qiling. Repozitoriya ochiq bo'lsa yoki kirish huquqi bo'lgan odam
+ketgan bo'lsa — darhol qiling.
 
 ---
 

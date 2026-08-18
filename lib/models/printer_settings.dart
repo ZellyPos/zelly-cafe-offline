@@ -1,6 +1,16 @@
 import 'dart:convert';
 
-enum PrinterType { network, windows, usb_legacy, receipt }
+/// Bazada `toDbValue` orqali saqlanadi — enum nomini o'zgartirish
+/// saqlangan ma'lumotni buzmasligi uchun.
+enum PrinterType {
+  network,
+  windows,
+  usbLegacy,
+  receipt;
+
+  /// SQLite ustunidagi qiymat (eski yozuvlar bilan mos).
+  String get dbValue => this == PrinterType.usbLegacy ? 'usb_legacy' : name;
+}
 
 class PrinterSettings {
   final int? id;
@@ -28,7 +38,7 @@ class PrinterSettings {
   Map<String, dynamic> toMap() {
     final map = <String, dynamic>{
       'display_name': displayName,
-      'type': type.name,
+      'type': type.dbValue,
       'printer_name': printerName ?? '',
       'ip_address': ipAddress ?? '',
       'port': port,
@@ -46,7 +56,7 @@ class PrinterSettings {
     if (typeStr == 'windows') {
       type = PrinterType.windows;
     } else if (typeStr == 'usb' || typeStr == 'usb_legacy') {
-      type = PrinterType.usb_legacy;
+      type = PrinterType.usbLegacy;
     } else if (typeStr == 'receipt') {
       type = PrinterType.receipt;
     }
@@ -95,7 +105,9 @@ class PrinterSettings {
       port: port ?? this.port,
       categoryIds: categoryIds ?? this.categoryIds,
       isMain: isMain ?? this.isMain,
-      locationId: locationId == _sentinel ? this.locationId : locationId as int?,
+      locationId: locationId == _sentinel
+          ? this.locationId
+          : locationId as int?,
     );
   }
 }

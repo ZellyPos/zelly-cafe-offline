@@ -217,13 +217,18 @@ class CartProvider extends ChangeNotifier {
   void setWaiter(int? waiterId, [BuildContext? context]) async {
     final oldWaiterId = _activeWaiterId;
     _activeWaiterId = waiterId;
-    
+
+    // Provider `await`dan OLDIN o'qiladi — keyin ekran yopilgan bo'lsa
+    // `context.read` xato beradi.
+    final ConnectivityProvider? connectivity = context?.read<
+      ConnectivityProvider
+    >();
+
     // Recalculate totals and sync order header (which now saves waiter_id to SQLite)
     await _syncOrderHeader(context);
 
     // If client mode, sync immediately to server
-    if (context != null) {
-      final connectivity = context.read<ConnectivityProvider>();
+    if (context != null && connectivity != null) {
       if (connectivity.mode == ConnectivityMode.client) {
         await _syncItems(connectivity, context);
       } else {
@@ -549,7 +554,7 @@ class CartProvider extends ChangeNotifier {
     try {
       currentDailyNo = await _repo.getOrderDailyNumber(_activeOrderId!);
     } catch (e) {
-      debugPrint("Could not fetch daily number for confirm: $e");
+      debugPrint('Could not fetch daily number for confirm: $e');
     }
 
     final double roomCharge = _activeOrderType == 0
@@ -1089,6 +1094,9 @@ class CartProvider extends ChangeNotifier {
 
   Future<void> _checkAutoConfirm(BuildContext? context) async {
     if (context == null) return;
+    // Microtask navbatida chaqiriladi — o'sha paytgacha ekran yopilgan
+    // bo'lishi mumkin. Yopilgan ekranda avto-tasdiqlashning ma'nosi yo'q.
+    if (!context.mounted) return;
     try {
       final connectivity = context.read<ConnectivityProvider>();
       // Waiters always use the manual SAQLASH button — never auto-confirm for them
@@ -1100,7 +1108,7 @@ class CartProvider extends ChangeNotifier {
         await confirmTableOrder(context, connectivity, false);
       }
     } catch (e) {
-      debugPrint("Auto-confirm error: $e");
+      debugPrint('Auto-confirm error: $e');
     }
   }
 
@@ -1218,13 +1226,18 @@ class CartProvider extends ChangeNotifier {
     try {
       activeShiftId = context.read<ShiftProvider>().activeShift?.id;
     } catch (_) {}
+    // Connectivity ham shu yerda o'qiladi: quyida u `await`lardan keyin
+    // kerak bo'ladi, o'sha paytda ekran yopilgan bo'lsa `context.read`
+    // xato beradi va to'lov yarim yo'lda uzilib qolardi.
+    final ConnectivityProvider checkoutConnectivity = context
+        .read<ConnectivityProvider>();
 
     // Automatic kitchen printing for unconfirmed changes during checkout
     if (hasUnconfirmedChanges) {
       try {
         await confirmTableOrder(context, null, false);
       } catch (e) {
-        debugPrint("Automatic kitchen print error: $e");
+        debugPrint('Automatic kitchen print error: $e');
       }
     }
 
@@ -1324,7 +1337,7 @@ class CartProvider extends ChangeNotifier {
         discountNote: _orderDiscountNote,
       );
 
-      final connectivity = context.read<ConnectivityProvider>();
+      final connectivity = checkoutConnectivity;
       final isClient = connectivity.mode == ConnectivityMode.client;
 
       // 1. Process Order Payment/Inventory (Server or Local)
@@ -1345,7 +1358,7 @@ class CartProvider extends ChangeNotifier {
         );
 
         if (!paySuccess) {
-          debugPrint("Server payOrder failed");
+          debugPrint('Server payOrder failed');
           return null;
         }
       } else {
@@ -1356,7 +1369,7 @@ class CartProvider extends ChangeNotifier {
           try {
             await InventoryService.instance.processOrderPaid(populatedOrder);
           } catch (e) {
-            debugPrint("Inventory processing error: $e");
+            debugPrint('Inventory processing error: $e');
           }
         } else {
           // Basic stock tracking: always decrement products.quantity in DB
@@ -1448,12 +1461,12 @@ class CartProvider extends ChangeNotifier {
         } else if (pricingType == 2) {
           totalCharge += fixedAmount;
         } else if (pricingType == 3) {
-          totalCharge += (totalForServiceCharge * servicePercentage / 100);
+          totalCharge += totalForServiceCharge * servicePercentage / 100;
         }
       }
       return totalCharge;
     } catch (e) {
-      debugPrint("Error calculating room charge: $e");
+      debugPrint('Error calculating room charge: $e');
     }
     return 0;
   }
@@ -1497,7 +1510,7 @@ class CartProvider extends ChangeNotifier {
         return waiter.value;
       }
     } catch (e) {
-      debugPrint("Error calculating waiter service fee: $e");
+      debugPrint('Error calculating waiter service fee: $e');
     }
     return 0;
   }
@@ -1562,7 +1575,7 @@ class CartProvider extends ChangeNotifier {
         );
 
         if (response.statusCode != 200) {
-          debugPrint("Failed to cancel order on server");
+          debugPrint('Failed to cancel order on server');
           return false;
         }
       } else {
@@ -1582,7 +1595,7 @@ class CartProvider extends ChangeNotifier {
 
       return true;
     } catch (e) {
-      debugPrint("Cancel order error: $e");
+      debugPrint('Cancel order error: $e');
       return false;
     }
   }
@@ -1658,7 +1671,7 @@ class CartProvider extends ChangeNotifier {
         );
 
         if (response.statusCode != 200) {
-          debugPrint("Failed to move order on server");
+          debugPrint('Failed to move order on server');
           return false;
         }
       } else {
@@ -1695,7 +1708,7 @@ class CartProvider extends ChangeNotifier {
 
       return true;
     } catch (e) {
-      debugPrint("Move order error: $e");
+      debugPrint('Move order error: $e');
       return false;
     }
   }
@@ -1753,7 +1766,7 @@ class CartProvider extends ChangeNotifier {
 
       return true;
     } catch (e) {
-      debugPrint("Merge table error: $e");
+      debugPrint('Merge table error: $e');
       return false;
     }
   }

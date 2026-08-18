@@ -130,7 +130,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
         Text(
           'Mijoz cheki va oshxona cheki dizaynini sozlang',
           style: TextStyle(
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             fontSize: 14,
           ),
         ),
@@ -361,7 +361,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withOpacity(0.45)),
+                              .withValues(alpha: 0.45)),
                     ),
                   ],
                 ),
@@ -371,7 +371,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
           const SizedBox(height: 24),
           _buildSection(
             title: "Ko'rsatiladigan ma'lumotlar",
-            hint: "Oshxona chekiga nima chiqishini belgilang",
+            hint: 'Oshxona chekiga nima chiqishini belgilang',
             child: _buildCard([
               _buildToggleRow(
                 'Buyurtma raqami',
@@ -407,7 +407,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
               const Divider(height: 1),
               _buildToggleRow(
                 'Izoh (Note)',
-                "Buyurtmaga yozilgan izohni chiqarish",
+                'Buyurtmaga yozilgan izohni chiqarish',
                 settings.kitchenShowNote,
                 (v) => provider.updateSettings(
                     settings.copyWith(kitchenShowNote: v)),
@@ -447,7 +447,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
           const SizedBox(height: 24),
           _buildSection(
             title: "Qog'oz sozlamalari",
-            hint: "Feed va kesish",
+            hint: 'Feed va kesish',
             child: _buildCard([
               _buildSettingRow(
                 "Bo'sh qatorlar (Feed)",
@@ -480,7 +480,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
       height: double.infinity,
       color: theme.brightness == Brightness.light
           ? const Color(0xFFF1F5F9)
-          : theme.colorScheme.onSurface.withOpacity(0.05),
+          : theme.colorScheme.onSurface.withValues(alpha: 0.05),
       padding: const EdgeInsets.all(32),
       child: Column(
         children: [
@@ -488,7 +488,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
             'MIJOZ CHEKI',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               letterSpacing: 1,
               fontSize: 12,
             ),
@@ -514,7 +514,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
       height: double.infinity,
       color: theme.brightness == Brightness.light
           ? const Color(0xFFF1F5F9)
-          : theme.colorScheme.onSurface.withOpacity(0.05),
+          : theme.colorScheme.onSurface.withValues(alpha: 0.05),
       padding: const EdgeInsets.all(32),
       child: Column(
         children: [
@@ -522,7 +522,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
             'OSHXONA CHEKI',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               letterSpacing: 1,
               fontSize: 12,
             ),
@@ -551,11 +551,11 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
         color: theme.colorScheme.surface,
         border: Border(
           top: BorderSide(
-              color: theme.colorScheme.onSurface.withOpacity(0.08)),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.08)),
         ),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withOpacity(0.05),
+            color: theme.shadowColor.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
@@ -612,7 +612,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
         Text(hint,
             style: TextStyle(
                 fontSize: 13,
-                color: theme.colorScheme.onSurface.withOpacity(0.6))),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
         const SizedBox(height: 16),
         child,
       ],
@@ -628,7 +628,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
         border: Border.all(
           color: theme.brightness == Brightness.light
               ? const Color(0xFFE2E8F0)
-              : theme.colorScheme.onSurface.withOpacity(0.1),
+              : theme.colorScheme.onSurface.withValues(alpha: 0.1),
         ),
       ),
       child: Column(children: children),
@@ -663,7 +663,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
                         color: Theme.of(context)
                             .colorScheme
                             .onSurface
-                            .withOpacity(0.6))),
+                            .withValues(alpha: 0.6))),
                 TextField(
                   controller: controller,
                   enabled: enabled,
@@ -703,7 +703,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
                         color: Theme.of(context)
                             .colorScheme
                             .onSurface
-                            .withOpacity(0.6))),
+                            .withValues(alpha: 0.6))),
               ],
             ),
           ),
@@ -731,7 +731,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
       decoration: BoxDecoration(
         color: theme.brightness == Brightness.light
             ? const Color(0xFFF1F5F9)
-            : theme.colorScheme.onSurface.withOpacity(0.08),
+            : theme.colorScheme.onSurface.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
       ),
       child: DropdownButton<int>(
@@ -777,7 +777,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
           filled: true,
           fillColor: theme.brightness == Brightness.light
               ? const Color(0xFFF1F5F9)
-              : theme.colorScheme.onSurface.withOpacity(0.08),
+              : theme.colorScheme.onSurface.withValues(alpha: 0.08),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
             borderSide: BorderSide.none,
@@ -805,7 +805,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
         child: Text(
           "Hech qanday printer sozlanmagan. Avval printer qo'shing.",
           style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.5)),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
         ),
       );
     }
@@ -836,7 +836,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
                         : Icons.radio_button_off,
                     color: isSelected
                         ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurface.withOpacity(0.4),
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -859,7 +859,7 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen>
                           style: TextStyle(
                             fontSize: 12,
                             color: theme.colorScheme.onSurface
-                                .withOpacity(0.5),
+                                .withValues(alpha: 0.5),
                           ),
                         ),
                         if (printer.categoryIds.isNotEmpty)
@@ -956,7 +956,7 @@ class _ReceiptPreviewWidget extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),

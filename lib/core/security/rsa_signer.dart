@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:pointycastle/export.dart';
 import 'package:pointycastle/asn1.dart';
+import '../app_logger.dart';
 
 /// RSA-SHA256 raqamli imzolarini yaratish uchun xizmat.
 class RsaSigner {
@@ -56,7 +57,7 @@ class RsaSigner {
 
       return base64.encode(signature);
     } catch (e) {
-      print('RSA Signing Error: $e');
+      AppLogger.w('RSA', 'RSA Signing Error: $e');
       rethrow;
     }
   }

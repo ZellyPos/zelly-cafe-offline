@@ -75,8 +75,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     final items = [
                       _buildReportCard(
                         context: context,
-                        title: "Vizual Analitika",
-                        subtitle: "Grafiklar va trendlar",
+                        title: 'Vizual Analitika',
+                        subtitle: 'Grafiklar va trendlar',
                         icon: Icons.dashboard_customize,
                         color: Colors.indigo,
                         metric: "Grafiklarni ko'rish",
@@ -99,7 +99,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         subtitle: AppStrings.topProductsSubtitle,
                         icon: Icons.restaurant_menu,
                         color: Colors.orange,
-                        metric: "$orderCount taom",
+                        metric: '$orderCount taom',
                         onTap: () =>
                             _navigateTo(context, const ProductsReportScreen()),
                       ),
@@ -260,7 +260,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               controller: tokenController,
               decoration: InputDecoration(
                 labelText: AppStrings.botToken,
-                hintText: "12345678:ABCDE...",
+                hintText: '12345678:ABCDE...',
               ),
             ),
             const SizedBox(height: 16),
@@ -268,7 +268,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               controller: chatController,
               decoration: InputDecoration(
                 labelText: AppStrings.chatId,
-                hintText: "-10012345678",
+                hintText: '-10012345678',
               ),
             ),
           ],
@@ -369,7 +369,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           }
         }
       } catch (e) {
-        debugPrint("Error taking screenshot: $e");
+        debugPrint('Error taking screenshot: $e');
       }
 
       final errorStr = await TelegramService.sendMessage(
@@ -396,7 +396,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Xatolik: $e"), backgroundColor: Colors.red),
+          SnackBar(content: Text('Xatolik: $e'), backgroundColor: Colors.red),
         );
       }
     }

@@ -27,7 +27,7 @@ class _ProductsReportScreenState extends State<ProductsReportScreen> {
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: const Text(
-          "Taomlar Hisoboti",
+          'Taomlar Hisoboti',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -62,12 +62,12 @@ class _ProductsReportScreenState extends State<ProductsReportScreen> {
                     showDialog(
                       context: context,
                       builder: (_) => AlertDialog(
-                        title: const Text("Chop etishda xatolik"),
-                        content: SingleChildScrollView(child: Text("$e")),
+                        title: const Text('Chop etishda xatolik'),
+                        content: SingleChildScrollView(child: Text('$e')),
                         actions: [
                           TextButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text("OK"))
+                              child: const Text('OK'))
                         ],
                       ),
                     );
@@ -75,7 +75,7 @@ class _ProductsReportScreenState extends State<ProductsReportScreen> {
                 }
               },
               icon: const Icon(Icons.print),
-              label: const Text("Chek chiqarish"),
+              label: const Text('Chek chiqarish'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade700,
                 foregroundColor: Colors.white,
@@ -135,14 +135,14 @@ class _ProductsReportScreenState extends State<ProductsReportScreen> {
                             Row(
                               children: [
                                 _buildSummaryCard(
-                                  "Jami sotilgan son",
-                                  "$totalQty ta",
+                                  'Jami sotilgan son',
+                                  '$totalQty ta',
                                   Icons.shopping_basket_outlined,
                                   Colors.blue,
                                 ),
                                 const SizedBox(width: 24),
                                 _buildSummaryCard(
-                                  "Jami summa",
+                                  'Jami summa',
                                   "${PriceFormatter.format(totalRevenue)} so'm",
                                   Icons.payments_outlined,
                                   Colors.green,
@@ -277,31 +277,31 @@ class _ProductsReportScreenState extends State<ProductsReportScreen> {
         children: [
           Expanded(
               flex: 3,
-              child: Text("Taom nomi",
+              child: Text('Taom nomi',
                   style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF64748B)))),
           Expanded(
               flex: 2,
-              child: Text("Kategoriya",
+              child: Text('Kategoriya',
                   style: TextStyle(
                       fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
                   textAlign: TextAlign.center)),
           Expanded(
               flex: 1,
-              child: Text("Sotildi",
+              child: Text('Sotildi',
                   style: TextStyle(
                       fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
                   textAlign: TextAlign.center)),
           Expanded(
               flex: 1,
-              child: Text("Qoldiq",
+              child: Text('Qoldiq',
                   style: TextStyle(
                       fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
                   textAlign: TextAlign.center)),
           Expanded(
               flex: 2,
-              child: Text("Jami summa",
+              child: Text('Jami summa',
                   style: TextStyle(
                       fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
                   textAlign: TextAlign.right)),
@@ -348,15 +348,15 @@ class _ProductsReportScreenState extends State<ProductsReportScreen> {
           ),
           Expanded(
               flex: 1,
-              child: Text("${soldQty.toStringAsFixed(0)} ta",
+              child: Text('${soldQty.toStringAsFixed(0)} ta',
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontWeight: FontWeight.bold))),
           Expanded(
             flex: 1,
             child: Text(
               currentStock != null
-                  ? "${currentStock.toStringAsFixed(0)} ta"
-                  : "—",
+                  ? '${currentStock.toStringAsFixed(0)} ta'
+                  : '—',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: currentStock != null

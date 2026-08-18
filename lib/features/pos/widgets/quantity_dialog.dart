@@ -137,7 +137,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
                 child: Row(
                   children: [
                     _buildModeTab(
-                      label: "Soni",
+                      label: 'Soni',
                       icon: Icons.exposure_rounded,
                       active: !_isPriceMode,
                       isSmall: isSmall,
@@ -148,7 +148,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
                       }),
                     ),
                     _buildModeTab(
-                      label: "Narxi",
+                      label: 'Narxi',
                       icon: Icons.payments_rounded,
                       active: _isPriceMode,
                       isSmall: isSmall,
@@ -190,7 +190,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
                         Text(
                           _isPriceMode
                               ? "Donasi (so'm):"
-                              : "Soni (${AppStrings.getUnitLabel(widget.product.unit)}):",
+                              : 'Soni (${AppStrings.getUnitLabel(widget.product.unit)}):',
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -219,7 +219,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          "Jami summa:",
+                          'Jami summa:',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -321,7 +321,7 @@ class _QuantityDialogState extends State<QuantityDialog> {
                           elevation: 0,
                         ),
                         child: const Text(
-                          "TASDIQLASH",
+                          'TASDIQLASH',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,

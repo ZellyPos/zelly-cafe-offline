@@ -28,7 +28,7 @@ class CategoryProvider extends ChangeNotifier {
         forceRemote: forceRemote,
       );
     } catch (e) {
-      debugPrint("Error loading categories: $e");
+      debugPrint('Error loading categories: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

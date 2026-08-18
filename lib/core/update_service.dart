@@ -204,6 +204,7 @@ class UpdateService {
     UpdateInfo info,
   ) async {
     final current = await getCurrentVersion();
+    if (!context.mounted) return;
 
     await showDialog(
       context: context,

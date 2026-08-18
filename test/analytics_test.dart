@@ -18,6 +18,7 @@ void main() {
       await db.delete('orders');
       await db.delete('order_items');
       await db.delete('waiters');
+      await db.delete('order_payments');
 
       // Test uchun ofitsiant qo'shish
       await db.insert('waiters', {
@@ -33,11 +34,12 @@ void main() {
       // 1-buyurtma (Naqd)
       await db.insert('orders', {
         'id': 'ord1',
+        'total': 100000,
         'grand_total': 100000,
         'payment_type': 'Naqd',
         'status': 1,
         'waiter_id': 1,
-        'service_fee': 10000,
+        'service_total': 10000,
         'created_at': now.toIso8601String(),
       });
       await db.insert('order_items', {
@@ -51,11 +53,12 @@ void main() {
       // 2-buyurtma (Karta)
       await db.insert('orders', {
         'id': 'ord2',
+        'total': 50000,
         'grand_total': 50000,
         'payment_type': 'Karta',
         'status': 1,
         'waiter_id': 1,
-        'service_fee': 5000,
+        'service_total': 5000,
         'created_at': now.toIso8601String(),
       });
       await db.insert('order_items', {
@@ -64,6 +67,22 @@ void main() {
         'product_name': 'Choy',
         'qty': 5,
         'price': 10000,
+      });
+
+      // To'lov turlari endi alohida `order_payments` jadvalidan olinadi
+      // (bo'lingan to'lovlarni qo'llab-quvvatlash uchun) — analitika
+      // `orders.payment_type` ustuniga tayanmaydi.
+      await db.insert('order_payments', {
+        'order_id': 'ord1',
+        'payment_type': 'cash',
+        'amount': 100000,
+        'created_at': now.toIso8601String(),
+      });
+      await db.insert('order_payments', {
+        'order_id': 'ord2',
+        'payment_type': 'card',
+        'amount': 50000,
+        'created_at': now.toIso8601String(),
       });
 
       AnalyticsService.instance.clearCache();

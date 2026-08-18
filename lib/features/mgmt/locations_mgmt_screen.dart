@@ -76,16 +76,16 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
               decoration: InputDecoration(
                 hintText: "Joy nomi bo'yicha qidirish...",
                 hintStyle: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
                 prefixIcon: Icon(
                   Icons.search,
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
                 filled: true,
                 fillColor: theme.brightness == Brightness.light
                     ? const Color(0xFFF1F5F9)
-                    : theme.colorScheme.onSurface.withOpacity(0.05),
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -133,13 +133,13 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
           Icon(
             Icons.location_off_outlined,
             size: 64,
-            color: theme.colorScheme.onSurface.withOpacity(0.1),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
           ),
           const SizedBox(height: 16),
           Text(
-            searchQuery.isEmpty ? "Joylar mavjud emas" : "Hech narsa topilmadi",
+            searchQuery.isEmpty ? 'Joylar mavjud emas' : 'Hech narsa topilmadi',
             style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               fontSize: 18,
             ),
           ),
@@ -160,7 +160,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withOpacity(0.03),
+            color: theme.shadowColor.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -168,7 +168,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
         border: Border.all(
           color: theme.brightness == Brightness.light
               ? const Color(0xFFE2E8F0)
-              : theme.colorScheme.onSurface.withOpacity(0.1),
+              : theme.colorScheme.onSurface.withValues(alpha: 0.1),
         ),
       ),
       child: Material(
@@ -235,7 +235,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                   decoration: BoxDecoration(
                     color: theme.brightness == Brightness.light
                         ? Colors.blue.shade50
-                        : theme.colorScheme.onSurface.withOpacity(0.05),
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -250,7 +250,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        "$tableCount ta stol",
+                        '$tableCount ta stol',
                         style: TextStyle(
                           color: theme.brightness == Brightness.light
                               ? Colors.blue.shade700
@@ -327,7 +327,7 @@ class _LocationsMgmtScreenState extends State<LocationsMgmtScreen> {
                 decoration: InputDecoration(
                   labelText: AppStrings.locationName,
                   labelStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),

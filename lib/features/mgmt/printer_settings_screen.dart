@@ -116,11 +116,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
         border: Border.all(
           color: theme.brightness == Brightness.light
               ? const Color(0xFFE2E8F0)
-              : theme.colorScheme.onSurface.withOpacity(0.1),
+              : theme.colorScheme.onSurface.withValues(alpha: 0.1),
         ),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withOpacity(0.02),
+            color: theme.shadowColor.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -131,7 +131,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.1),
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -165,7 +165,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
+                          color: Colors.green.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: Colors.green, width: 0.5),
                         ),
@@ -186,7 +186,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       ? 'IP: ${printer.ipAddress}:${printer.port}'
                       : 'USB: ${printer.printerName}',
                   style: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     fontSize: 14,
                   ),
                 ),
@@ -238,7 +238,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
             child: Text(
               'Printerlarni kategoriyalar bo‘yicha ajatsangiz, buyurtmalar avtomatik ravishda tegishli departamentlarga (oshxona, bar va h.k.) yuboriladi.',
               style: TextStyle(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 fontSize: 13,
               ),
             ),
@@ -292,7 +292,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       decoration: InputDecoration(
                         labelText: 'Printer nomi',
                         labelStyle: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ),
@@ -337,12 +337,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                                 labelText: 'IP manzil',
                                 labelStyle: TextStyle(
                                   color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
+                                      .withValues(alpha: 0.6),
                                 ),
                                 hintText: '192.168.1.100',
                                 hintStyle: TextStyle(
                                   color: theme.colorScheme.onSurface
-                                      .withOpacity(0.4),
+                                      .withValues(alpha: 0.4),
                                 ),
                               ),
                             ),
@@ -360,7 +360,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                                 labelText: 'Port',
                                 labelStyle: TextStyle(
                                   color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
+                                      .withValues(alpha: 0.6),
                                 ),
                               ),
                             ),
@@ -380,7 +380,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                           ? Text(
                               'Printerlar topilmadi',
                               style: TextStyle(
-                                color: theme.colorScheme.onSurface.withOpacity(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 
                                   0.5,
                                 ),
                               ),
@@ -497,7 +497,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSel
-                ? theme.colorScheme.primary.withOpacity(0.1)
+                ? theme.colorScheme.primary.withValues(alpha: 0.1)
                 : theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
@@ -505,7 +505,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   ? theme.colorScheme.primary
                   : theme.brightness == Brightness.light
                   ? Colors.grey[300]!
-                  : theme.colorScheme.onSurface.withOpacity(0.1),
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.1),
             ),
           ),
           child: Center(
@@ -552,7 +552,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           content: Text(
             'Rostdan ham "${printer.displayName}" printerni o\'chirib tashlamoqchimisiz?',
             style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.8),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
             ),
           ),
           actions: [
@@ -572,7 +572,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       },
     );
 
-    if (confirm == true && mounted) {
+    if (confirm == true && context.mounted) {
       await context.read<PrinterProvider>().deletePrinter(printer.id!);
     }
   }

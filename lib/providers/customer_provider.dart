@@ -31,7 +31,7 @@ class CustomerProvider extends ChangeNotifier {
         forceRemote: forceRemote,
       );
     } catch (e) {
-      debugPrint("Error loading customers: $e");
+      debugPrint('Error loading customers: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -77,7 +77,7 @@ class CustomerProvider extends ChangeNotifier {
         forceRemote: forceRemote,
       );
     } catch (e) {
-      debugPrint("Error loading transactions: $e");
+      debugPrint('Error loading transactions: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

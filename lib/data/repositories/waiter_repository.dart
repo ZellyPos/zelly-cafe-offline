@@ -62,7 +62,7 @@ class WaiterRepository extends BaseRepository<Waiter> {
         ? "name != 'Kassa' AND type = $onlyCurrentType"
         : "name != 'Kassa'";
     await db.rawUpdate(
-      "UPDATE waiters SET type = ?, value = ? WHERE $where",
+      'UPDATE waiters SET type = ?, value = ? WHERE $where',
       [type, value],
     );
   }
@@ -78,7 +78,7 @@ class WaiterRepository extends BaseRepository<Waiter> {
         ? "name != 'Kassa' AND type = $onlyCurrentType"
         : "name != 'Kassa'";
     final rows = await db.rawQuery(
-      "SELECT id, permissions FROM waiters WHERE $where",
+      'SELECT id, permissions FROM waiters WHERE $where',
     );
     final batch = db.batch();
     for (final row in rows) {
@@ -91,7 +91,7 @@ class WaiterRepository extends BaseRepository<Waiter> {
       }
       perms.removeWhere((p) => remove.contains(p));
       batch.rawUpdate(
-        "UPDATE waiters SET permissions = ? WHERE id = ?",
+        'UPDATE waiters SET permissions = ? WHERE id = ?',
         [perms.join(','), row['id']],
       );
     }
@@ -119,7 +119,7 @@ class WaiterRepository extends BaseRepository<Waiter> {
     if (waiterData.isEmpty) return {};
     final type = waiterData.first['type'] as int;
     final value = (waiterData.first['value'] as num).toDouble();
-    final isKassa = waiterData.first['name'] == "Kassa";
+    final isKassa = waiterData.first['name'] == 'Kassa';
 
     // 2. Buyurtmalar yig'indisi (faqat status=1)
     final ordersRes = await db.rawQuery(

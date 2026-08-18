@@ -19,7 +19,7 @@ class LocationsReportScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: const Text(
-          "Joylar Hisoboti",
+          'Joylar Hisoboti',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -57,14 +57,14 @@ class LocationsReportScreen extends StatelessWidget {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: const Text("Chop etishda xatolik"),
+                        title: const Text('Chop etishda xatolik'),
                         content: SingleChildScrollView(
-                          child: Text("Xatolik xabari: $e"),
+                          child: Text('Xatolik xabari: $e'),
                         ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text("OK"),
+                            child: const Text('OK'),
                           ),
                         ],
                       ),
@@ -73,7 +73,7 @@ class LocationsReportScreen extends StatelessWidget {
                 }
               },
               icon: const Icon(Icons.print),
-              label: const Text("Chek chiqarish"),
+              label: const Text('Chek chiqarish'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade700,
                 foregroundColor: Colors.white,
@@ -133,7 +133,7 @@ class LocationsReportScreen extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10),
         ],
       ),
       child: Column(
@@ -144,7 +144,7 @@ class LocationsReportScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.1),
+                  color: Colors.teal.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -169,10 +169,10 @@ class LocationsReportScreen extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          _buildStatRow("Jami buyurtmalar", "$count ta"),
+          _buildStatRow('Jami buyurtmalar', '$count ta'),
           const SizedBox(height: 8),
           _buildStatRow(
-            "Umumiy tushum",
+            'Umumiy tushum',
             "$total so'm",
             isBold: true,
             color: Colors.teal,

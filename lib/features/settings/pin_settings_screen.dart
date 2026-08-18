@@ -36,7 +36,7 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
       return;
     }
     if (newPin != confirm) {
-      _showError("Yangi PIN tasdiqlash mos kelmadi");
+      _showError('Yangi PIN tasdiqlash mos kelmadi');
       return;
     }
 
@@ -87,7 +87,7 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: theme.shadowColor.withOpacity(0.04),
+                color: theme.shadowColor.withValues(alpha: 0.04),
                 blurRadius: 20,
               ),
             ],
@@ -102,29 +102,29 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                "Xavfsizlik uchun joriy PIN kodni kiriting",
+                'Xavfsizlik uchun joriy PIN kodni kiriting',
                 style: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                   fontSize: 13,
                 ),
               ),
               const SizedBox(height: 32),
               _buildPinField(
-                "Joriy PIN",
+                'Joriy PIN',
                 _currentPinController,
                 _obscureCurrent,
                 (val) => setState(() => _obscureCurrent = !val),
               ),
               const SizedBox(height: 20),
               _buildPinField(
-                "Yangi PIN",
+                'Yangi PIN',
                 _newPinController,
                 _obscureNew,
                 (val) => setState(() => _obscureNew = !val),
               ),
               const SizedBox(height: 20),
               _buildPinField(
-                "Tasdiqlash",
+                'Tasdiqlash',
                 _confirmPinController,
                 _obscureConfirm,
                 (val) => setState(() => _obscureConfirm = !val),
@@ -143,7 +143,7 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
                     ),
                   ),
                   child: const Text(
-                    "Saqlash",
+                    'Saqlash',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -169,7 +169,7 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
           label,
           style: TextStyle(
             fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             fontSize: 13,
           ),
         ),
@@ -186,11 +186,11 @@ class _PinSettingsScreenState extends State<PinSettingsScreen> {
             color: theme.colorScheme.onSurface,
           ),
           decoration: InputDecoration(
-            counterText: "",
+            counterText: '',
             filled: true,
             fillColor: theme.brightness == Brightness.light
                 ? const Color(0xFFF8FAFC)
-                : theme.colorScheme.onSurface.withOpacity(0.08),
+                : theme.colorScheme.onSurface.withValues(alpha: 0.08),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,

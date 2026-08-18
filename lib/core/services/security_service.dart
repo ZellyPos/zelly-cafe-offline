@@ -72,6 +72,9 @@ class SecurityService {
                 if (pin.isEmpty) return;
 
                 final approvedById = await verifyManagerPIN(pin);
+                // PIN tekshiruvi async — shu orada dialog yopilgan bo'lishi
+                // mumkin, o'shanda `context` yaroqsiz.
+                if (!context.mounted) return;
                 if (approvedById != null) {
                   if (requireReason && reasonController.text.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(

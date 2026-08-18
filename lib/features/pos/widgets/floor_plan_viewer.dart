@@ -78,13 +78,13 @@ class FloorPlanViewer extends StatelessWidget {
                               color: isCurrentTable
                                   ? Colors.yellow
                                   : (isJoined
-                                        ? Colors.white.withOpacity(0.8)
+                                        ? Colors.white.withValues(alpha: 0.8)
                                         : Colors.white),
                               width: isCurrentTable ? 3 : (isJoined ? 2 : 1),
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
+                                color: Colors.black.withValues(alpha: 0.1),
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
                               ),
@@ -179,7 +179,7 @@ class JoinLinesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final dashPaint = Paint()
-      ..color = Colors.blueAccent.withOpacity(0.4)
+      ..color = Colors.blueAccent.withValues(alpha: 0.4)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 

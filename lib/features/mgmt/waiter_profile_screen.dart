@@ -133,25 +133,25 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
   }
 
   Widget _buildHeaderInfo() {
-    final bool isKassa = widget.waiter.name == "Kassa";
+    final bool isKassa = widget.waiter.name == 'Kassa';
     final String typeLabel = isKassa
-        ? "Kassa"
-        : (widget.waiter.type == 0 ? "Fiksal" : "Foizli");
+        ? 'Kassa'
+        : (widget.waiter.type == 0 ? 'Fiksal' : 'Foizli');
     final Color typeColor = isKassa
         ? Colors.teal
         : (widget.waiter.type == 0 ? Colors.indigo : Colors.orange);
     final String valueText = isKassa
-        ? "Asosiy xodim"
+        ? 'Asosiy xodim'
         : (widget.waiter.type == 0
-              ? "${PriceFormatter.format(widget.waiter.value)} / buyurtma"
-              : "${widget.waiter.value}% savdodan");
+              ? '${PriceFormatter.format(widget.waiter.value)} / buyurtma'
+              : '${widget.waiter.value}% savdodan');
 
     return Row(
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: typeColor.withOpacity(0.1),
+            color: typeColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
@@ -173,14 +173,14 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
       spacing: 16,
       runSpacing: 16,
       children: [
-        _buildCard("Buyurtmalar", "${_summary['order_count']}", Colors.blue),
+        _buildCard('Buyurtmalar', "${_summary['order_count']}", Colors.blue),
         _buildCard(
-          "Jami savdo",
+          'Jami savdo',
           PriceFormatter.format((_summary['total_sales'] as num).toDouble()),
           Colors.green,
         ),
         _buildCard(
-          "Hisoblangan",
+          'Hisoblangan',
           PriceFormatter.format((_summary['earned'] as num).toDouble()),
           Colors.indigo,
         ),
@@ -191,14 +191,14 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
         ),
         if ((_summary['payable'] as num).toDouble() >= 0)
           _buildCard(
-            "Hozir olishi kerak",
+            'Hozir olishi kerak',
             PriceFormatter.format((_summary['payable'] as num).toDouble()),
             Colors.orange,
             isHighlight: true,
           )
         else
           _buildCard(
-            "Qarz (Minus balans)",
+            'Qarz (Minus balans)',
             PriceFormatter.format(
               (_summary['payable'] as num).toDouble().abs(),
             ),
@@ -227,7 +227,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
         boxShadow: [
           if (!isHighlight)
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withValues(alpha: 0.02),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -243,7 +243,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
                 title,
                 style: TextStyle(
                   color: isHighlight
-                      ? Colors.white.withOpacity(0.9)
+                      ? Colors.white.withValues(alpha: 0.9)
                       : Colors.grey.shade500,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -281,7 +281,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
               unselectedLabelColor: Colors.grey,
               indicatorColor: Color(0xFF4C1D95),
               tabs: [
-                Tab(text: "Buyurtmalar"),
+                Tab(text: 'Buyurtmalar'),
                 Tab(text: "Oylik to'lovlari"),
               ],
             ),
@@ -298,7 +298,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
   }
 
   Widget _buildOrdersList() {
-    if (_orders.isEmpty) return _buildEmptyState("Buyurtmalar mavjud emas");
+    if (_orders.isEmpty) return _buildEmptyState('Buyurtmalar mavjud emas');
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 16),
       itemCount: _orders.length,
@@ -346,11 +346,11 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (widget.waiter.name != "Kassa")
+              if (widget.waiter.name != 'Kassa')
                 ElevatedButton.icon(
                   onPressed: _showPaymentModal,
                   icon: const Icon(Icons.add),
-                  label: const Text("Oylik berish"),
+                  label: const Text('Oylik berish'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF4C1D95),
                     foregroundColor: Colors.white,
@@ -430,7 +430,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: noteController,
-              decoration: const InputDecoration(labelText: "Izoh (ixtiyoriy)"),
+              decoration: const InputDecoration(labelText: 'Izoh (ixtiyoriy)'),
             ),
             const SizedBox(height: 16),
             ValueListenableBuilder<TextEditingValue>(
@@ -456,7 +456,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
                         const SizedBox(width: 12),
                         const Expanded(
                           child: Text(
-                            "Diqqat: bu to‘lov qarz (minus balans) hosil qiladi.",
+                            'Diqqat: bu to‘lov qarz (minus balans) hosil qiladi.',
                             style: TextStyle(fontSize: 12, color: Colors.amber),
                           ),
                         ),
@@ -473,7 +473,7 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text(
-              "Bekor qilish",
+              'Bekor qilish',
               style: TextStyle(color: Colors.grey),
             ),
           ),
@@ -516,16 +516,16 @@ class _WaiterProfileScreenState extends State<WaiterProfileScreen> {
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text(
-                        "Printer xatoligi",
+                        'Printer xatoligi',
                         style: TextStyle(color: Colors.red),
                       ),
                       content: Text(
-                        "Oylik chekini chiqarishda xatolik yuz berdi:\n\n$e",
+                        'Oylik chekini chiqarishda xatolik yuz berdi:\n\n$e',
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: const Text("OK"),
+                          child: const Text('OK'),
                         ),
                       ],
                     ),

@@ -87,7 +87,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: const Color(0xFF4C1D95).withOpacity(0.1),
+                    backgroundColor: const Color(0xFF4C1D95).withValues(alpha: 0.1),
                     child: const Icon(Icons.person, color: Color(0xFF4C1D95)),
                   ),
                   const SizedBox(width: 16),
@@ -116,7 +116,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     children: [
                       if (customer.debt > 0)
                         Text(
-                          "${AppStrings.debtLabel}: ${PriceFormatter.format(customer.debt)}",
+                          '${AppStrings.debtLabel}: ${PriceFormatter.format(customer.debt)}',
                           style: const TextStyle(
                             color: Colors.red,
                             fontWeight: FontWeight.bold,
@@ -124,7 +124,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         ),
                       if (customer.credit > 0)
                         Text(
-                          "${AppStrings.creditLabel}: ${PriceFormatter.format(customer.credit)}",
+                          '${AppStrings.creditLabel}: ${PriceFormatter.format(customer.credit)}',
                           style: const TextStyle(
                             color: Colors.green,
                             fontWeight: FontWeight.bold,
@@ -132,7 +132,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         ),
                       if (customer.debt == 0 && customer.credit == 0)
                         Text(
-                          "${AppStrings.balanceLabel}: 0",
+                          '${AppStrings.balanceLabel}: 0',
                           style: const TextStyle(color: Colors.grey),
                         ),
                     ],

@@ -258,7 +258,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   style: TextStyle(
                     color: isSelected
                         ? Colors.white
-                        : theme.colorScheme.onSurface.withOpacity(0.6),
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     fontSize: 15,
                   ),
@@ -452,7 +452,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   _buildIconText(
                     context,
                     Icons.person_outline_rounded,
-                    info.waiterName ?? "Kassa",
+                    info.waiterName ?? 'Kassa',
                     color: onCard.withValues(alpha: 0.85),
                   ),
                   const SizedBox(height: 6),
@@ -467,7 +467,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     _buildIconText(
                       context,
                       Icons.receipt_outlined,
-                      "Chek: ${_formatTime(info.billRequestedAt)}",
+                      'Chek: ${_formatTime(info.billRequestedAt)}',
                       color: billRequested ? Colors.white70 : Colors.orange.shade700,
                     ),
                   ],
@@ -505,14 +505,14 @@ class _TablesScreenState extends State<TablesScreen> {
                     child: Icon(
                       Icons.table_bar_outlined,
                       size: 40,
-                      color: theme.colorScheme.onSurface.withOpacity(0.05),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
                     ),
                   ),
                   const Spacer(),
                   Text(
                     AppStrings.tableEmpty,
                     style: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -534,7 +534,7 @@ class _TablesScreenState extends State<TablesScreen> {
   }) {
     final theme = Theme.of(context);
     final effectiveColor =
-        color ?? theme.colorScheme.onSurface.withOpacity(0.6);
+        color ?? theme.colorScheme.onSurface.withValues(alpha: 0.6);
     return Row(
       children: [
         Icon(icon, size: 16, color: effectiveColor),
@@ -590,7 +590,7 @@ class _TablesScreenState extends State<TablesScreen> {
           const Icon(Icons.link_rounded, size: 12, color: Color(0xFF3B82F6)),
           const SizedBox(width: 4),
           const Text(
-            "Birlashgan",
+            'Birlashgan',
             style: TextStyle(
               color: Color(0xFF3B82F6),
               fontWeight: FontWeight.bold,
@@ -683,13 +683,13 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   String _formatDuration(DateTime? start) {
-    if (start == null) return "0 ${AppStrings.minutesShort}";
+    if (start == null) return '0 ${AppStrings.minutesShort}';
     final diff = DateTime.now().difference(start);
     final h = diff.inHours;
     final m = diff.inMinutes % 60;
     return h > 0
-        ? "$h ${AppStrings.hoursShort} $m ${AppStrings.minutesShortLabel}"
-        : "$m ${AppStrings.minutesShortLabel}";
+        ? '$h ${AppStrings.hoursShort} $m ${AppStrings.minutesShortLabel}'
+        : '$m ${AppStrings.minutesShortLabel}';
   }
 
   void _handleTableTap(BuildContext context, TableModel table) {
@@ -764,7 +764,7 @@ class _TablesScreenState extends State<TablesScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFEF4444).withOpacity(0.3),
+            color: const Color(0xFFEF4444).withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),

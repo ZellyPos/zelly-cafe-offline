@@ -36,7 +36,7 @@ class LocationProvider extends ChangeNotifier {
         forceRemote: forceRemote,
       );
     } catch (e) {
-      debugPrint("Error loading locations: $e");
+      debugPrint('Error loading locations: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

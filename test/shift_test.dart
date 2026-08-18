@@ -17,15 +17,11 @@ void main() {
     final dbHelper = DatabaseHelper.instance;
 
     setUp(() async {
-      print('Setting up test...');
       final db = await dbHelper.database;
-      print('Database opened.');
       await db.delete('shifts');
-      print('Shifts deleted.');
       await db.delete('cash_movements');
-      print('Movements deleted.');
       await db.delete('orders');
-      print('Orders deleted.');
+      await db.delete('order_payments');
     });
 
     test('Smena ochish va yopish jarayoni', () async {
@@ -62,6 +58,14 @@ void main() {
         ...order.toMap(),
         'shift_id': shiftId,
         'status': 1, // To'langan
+      });
+      // Smena hisoboti to'lovlarni `order_payments` jadvalidan oladi
+      // (bo'lingan to'lov qo'llab-quvvatlangani uchun).
+      await db.insert('order_payments', {
+        'order_id': order.id,
+        'payment_type': 'cash',
+        'amount': 250000.0,
+        'created_at': DateTime.now().toIso8601String(),
       });
 
       // 4. Smena hisobotini tekshirish

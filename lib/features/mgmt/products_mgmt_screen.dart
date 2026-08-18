@@ -279,7 +279,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
         boxShadow: AppTheme.softShadow,
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.05)
+              ? Colors.white.withValues(alpha: 0.05)
               : const Color(0xFFE2E8F0),
         ),
       ),
@@ -326,8 +326,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                             ),
                             decoration: BoxDecoration(
                               color: displayQty <= 5
-                                  ? Colors.red.withOpacity(0.1)
-                                  : Colors.orange.withOpacity(0.1),
+                                  ? Colors.red.withValues(alpha: 0.1)
+                                  : Colors.orange.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -375,7 +375,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "${PriceFormatter.format(product.price)} ${AppStrings.currencyLabel}",
+                          '${PriceFormatter.format(product.price)} ${AppStrings.currencyLabel}',
                           style: TextStyle(
                             fontSize: MediaQuery.of(context).size.width <= 1100
                                 ? 16
@@ -388,7 +388,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                         Row(
                           children: [
                             Text(
-                              "${AppStrings.statusLabel}:",
+                              '${AppStrings.statusLabel}:',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
@@ -459,8 +459,8 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: isActive
-            ? Colors.green.withOpacity(0.1)
-            : Colors.red.withOpacity(0.1),
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.red.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -479,7 +479,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(AppStrings.confirmDeleteTitle),
-        content: Text("${product.name} ${AppStrings.confirmDeleteExpense}"),
+        content: Text('${product.name} ${AppStrings.confirmDeleteExpense}'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -756,7 +756,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                             controller: quantityController,
                             decoration: InputDecoration(
                               labelText: AppStrings.productQuantity,
-                              hintText: "Masalan: 50",
+                              hintText: 'Masalan: 50',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -892,7 +892,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                                         child: TextField(
                                           decoration: const InputDecoration(
                                             isDense: true,
-                                            suffixText: "x",
+                                            suffixText: 'x',
                                           ),
                                           keyboardType: TextInputType.number,
                                           controller:
@@ -989,7 +989,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                         await imagesDir.create(recursive: true);
                       }
                       final fileName =
-                          "${DateTime.now().millisecondsSinceEpoch}${p.extension(selectedImagePath!)}";
+                          '${DateTime.now().millisecondsSinceEpoch}${p.extension(selectedImagePath!)}';
                       final newPath = p.join(imagesDir.path, fileName);
                       await File(selectedImagePath!).copy(newPath);
                       finalImagePath = fileName; // Save ONLY the filename
@@ -1166,7 +1166,7 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                 .toList();
 
             return AlertDialog(
-              title: Text("$category - ${AppStrings.reorder}"),
+              title: Text('$category - ${AppStrings.reorder}'),
               content: SizedBox(
                 width: 400,
                 height: 500,

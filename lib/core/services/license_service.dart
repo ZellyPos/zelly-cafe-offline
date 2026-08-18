@@ -86,9 +86,6 @@ HwIDAQAB
 
       // A. Raqamli imzoni tekshirish
       final canonicalJson = payload.toCanonicalJson();
-      print('--- DEBUG: VERIFYING LICENSE ---');
-      print('CANONICAL JSON: $canonicalJson');
-      print('SIGNATURE: $signature');
 
       final isSignatureValid = RsaVerifier.verify(
         canonicalJson,

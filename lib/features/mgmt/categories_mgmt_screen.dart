@@ -89,16 +89,16 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               decoration: InputDecoration(
                 hintText: AppStrings.searchCategoryHint,
                 hintStyle: TextStyle(
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
                 prefixIcon: Icon(
                   Icons.search,
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
                 filled: true,
                 fillColor: theme.brightness == Brightness.light
                     ? const Color(0xFFF1F5F9)
-                    : theme.colorScheme.onSurface.withOpacity(0.05),
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.05),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -146,15 +146,15 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
           Icon(
             Icons.category_outlined,
             size: 64,
-            color: theme.colorScheme.onSurface.withOpacity(0.1),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
           ),
           const SizedBox(height: 16),
           Text(
             searchQuery.isEmpty
-                ? "Kategoriyalar mavjud emas"
-                : "Hech narsa topilmadi",
+                ? 'Kategoriyalar mavjud emas'
+                : 'Hech narsa topilmadi',
             style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               fontSize: 18,
             ),
           ),
@@ -194,7 +194,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: theme.shadowColor.withOpacity(0.06),
+                  color: theme.shadowColor.withValues(alpha: 0.06),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -202,7 +202,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
               border: Border.all(
                 color: theme.brightness == Brightness.light
                     ? const Color(0xFFE2E8F0)
-                    : theme.colorScheme.onSurface.withOpacity(0.1),
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.1),
               ),
             ),
             child: Stack(
@@ -213,7 +213,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                   Image.file(
                     File(category.imagePath!),
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
                 // Gradient overlay for readability
                 if (hasImage)
@@ -223,8 +223,8 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.black.withOpacity(0.15),
-                          Colors.black.withOpacity(0.65),
+                          Colors.black.withValues(alpha: 0.15),
+                          Colors.black.withValues(alpha: 0.65),
                         ],
                       ),
                     ),
@@ -305,10 +305,10 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                         ),
                         decoration: BoxDecoration(
                           color: hasImage
-                              ? Colors.black.withOpacity(0.35)
+                              ? Colors.black.withValues(alpha: 0.35)
                               : (cardColor.computeLuminance() > 0.5
                                     ? Colors.orange.shade50
-                                    : Colors.white.withOpacity(0.2)),
+                                    : Colors.white.withValues(alpha: 0.2)),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -325,7 +325,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              "$productCount ta mahsulot",
+                              '$productCount ta mahsulot',
                               style: TextStyle(
                                 color: hasImage
                                     ? Colors.orange.shade200
@@ -361,7 +361,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.15),
+          color: Colors.black.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: color, size: 18),
@@ -407,6 +407,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
     );
 
     if (confirm == true) {
+      if (!context.mounted) return;
       final categoryProvider = context.read<CategoryProvider>();
       await categoryProvider.deleteCategory(
         category.id!,
@@ -503,7 +504,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                       decoration: InputDecoration(
                         labelText: AppStrings.categoryName,
                         labelStyle: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -514,7 +515,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
 
                     // Image picker
                     Text(
-                      "Rasm",
+                      'Rasm',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.onSurface,
@@ -531,12 +532,12 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                             decoration: BoxDecoration(
                               color: theme.brightness == Brightness.light
                                   ? const Color(0xFFF1F5F9)
-                                  : theme.colorScheme.onSurface.withOpacity(
+                                  : theme.colorScheme.onSurface.withValues(alpha: 
                                       0.05,
                                     ),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: theme.colorScheme.primary.withOpacity(
+                                color: theme.colorScheme.primary.withValues(alpha: 
                                   0.3,
                                 ),
                                 width: 1.5,
@@ -547,7 +548,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                                 ? Image.file(
                                     File(selectedImagePath!),
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
+                                    errorBuilder: (_, _, _) =>
                                         _noImagePlaceholder(theme),
                                   )
                                 : _noImagePlaceholder(theme),
@@ -566,8 +567,8 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                                 ),
                                 label: Text(
                                   hasImage
-                                      ? "Rasmni almashtirish"
-                                      : "Rasm tanlash",
+                                      ? 'Rasmni almashtirish'
+                                      : 'Rasm tanlash',
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: theme.colorScheme.primary,
@@ -640,7 +641,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                                     color: isSelected
                                         ? AppTheme.primaryColor
                                         : theme.colorScheme.onSurface
-                                              .withOpacity(0.1),
+                                              .withValues(alpha: 0.1),
                                     width: isSelected ? 2 : 1,
                                   ),
                                 ),
@@ -650,7 +651,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                                   color: isSelected
                                       ? AppTheme.primaryColor
                                       : theme.colorScheme.onSurface
-                                            .withOpacity(0.4),
+                                            .withValues(alpha: 0.4),
                                 ),
                               ),
                             );
@@ -749,14 +750,14 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
         Icon(
           Icons.add_photo_alternate_outlined,
           size: 28,
-          color: theme.colorScheme.onSurface.withOpacity(0.3),
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
         ),
         const SizedBox(height: 4),
         Text(
           "Rasm yo'q",
           style: TextStyle(
             fontSize: 11,
-            color: theme.colorScheme.onSurface.withOpacity(0.4),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
           ),
         ),
       ],
@@ -796,17 +797,17 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                                 width: 36,
                                 height: 36,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Icon(
+                                errorBuilder: (_, _, _) => Icon(
                                   Icons.drag_handle,
                                   color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
+                                      .withValues(alpha: 0.6),
                                 ),
                               ),
                             )
                           : Icon(
                               Icons.drag_handle,
                               color: theme.colorScheme.onSurface
-                                  .withOpacity(0.6),
+                                  .withValues(alpha: 0.6),
                             ),
                       title: Text(
                         cat.name,
@@ -815,7 +816,7 @@ class _CategoriesMgmtScreenState extends State<CategoriesMgmtScreen> {
                       tileColor: cat.color != null
                           ? Color(
                               int.parse(cat.color!.replaceFirst('#', '0xFF')),
-                            ).withOpacity(0.1)
+                            ).withValues(alpha: 0.1)
                           : null,
                     );
                   },

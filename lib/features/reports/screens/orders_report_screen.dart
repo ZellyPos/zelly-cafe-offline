@@ -20,7 +20,7 @@ class OrdersReportScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: const Text(
-          "Buyurtmalar Hisoboti",
+          'Buyurtmalar Hisoboti',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -58,14 +58,14 @@ class OrdersReportScreen extends StatelessWidget {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: const Text("Chop etishda xatolik"),
+                        title: const Text('Chop etishda xatolik'),
                         content: SingleChildScrollView(
-                          child: Text("Xatolik xabari: $e"),
+                          child: Text('Xatolik xabari: $e'),
                         ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text("OK"),
+                            child: const Text('OK'),
                           ),
                         ],
                       ),
@@ -74,7 +74,7 @@ class OrdersReportScreen extends StatelessWidget {
                 }
               },
               icon: const Icon(Icons.print),
-              label: const Text("Chek chiqarish"),
+              label: const Text('Chek chiqarish'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade700,
                 foregroundColor: Colors.white,
@@ -107,14 +107,14 @@ class OrdersReportScreen extends StatelessWidget {
                       child: Row(
                         children: [
                           _buildSummaryCard(
-                            "Buyurtmalar",
-                            "$orderCount ta",
+                            'Buyurtmalar',
+                            '$orderCount ta',
                             Icons.receipt_long,
                             Colors.blue,
                           ),
                           const SizedBox(width: 16),
                           _buildSummaryCard(
-                            "Jami savdo",
+                            'Jami savdo',
                             "${PriceFormatter.format(totalRevenue)} so'm",
                             Icons.payments,
                             Colors.green,
@@ -181,7 +181,7 @@ class OrdersReportScreen extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10),
           ],
         ),
         child: Column(
@@ -222,8 +222,8 @@ class OrdersReportScreen extends StatelessWidget {
         : idStr.toUpperCase();
     final String? dailyNumber = order['daily_number']?.toString();
     final String displayId = dailyNumber != null
-        ? "№$dailyNumber (#$id)"
-        : "#$id";
+        ? '№$dailyNumber (#$id)'
+        : '#$id';
 
     final String createdAtRaw = order['created_at']?.toString() ?? '';
     final String time = createdAtRaw.length >= 16
@@ -255,7 +255,7 @@ class OrdersReportScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: (isDineIn ? Colors.blue : Colors.orange).withOpacity(
+                color: (isDineIn ? Colors.blue : Colors.orange).withValues(alpha: 
                   0.1,
                 ),
                 borderRadius: BorderRadius.circular(10),
@@ -272,7 +272,7 @@ class OrdersReportScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "$displayId • $time",
+                    '$displayId • $time',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
@@ -301,7 +301,7 @@ class OrdersReportScreen extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  order['payment_type'] ?? "Kassa",
+                  order['payment_type'] ?? 'Kassa',
                   style: const TextStyle(
                     color: Color(0xFF64748B),
                     fontSize: 12,

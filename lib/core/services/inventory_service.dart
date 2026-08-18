@@ -35,7 +35,7 @@ class InventoryService {
   }) async {
     final movement = StockMovement(
       ingredientId: ingredientId,
-      type: MovementType.IN,
+      type: MovementType.stockIn,
       qty: qty,
       reason: 'purchase',
       note: note,
@@ -53,7 +53,7 @@ class InventoryService {
   }) async {
     final movement = StockMovement(
       ingredientId: ingredientId,
-      type: MovementType.OUT,
+      type: MovementType.stockOut,
       qty: qty,
       reason: reason ?? 'waste',
       createdAt: DateTime.now(),
@@ -70,7 +70,7 @@ class InventoryService {
   }) async {
     final movement = StockMovement(
       ingredientId: ingredientId,
-      type: MovementType.ADJUST,
+      type: MovementType.adjust,
       qty: realQty,
       reason: 'adjustment',
       note: note,

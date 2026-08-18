@@ -19,7 +19,7 @@ class TablesReportScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: const Text(
-          "Stollar Hisoboti",
+          'Stollar Hisoboti',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -57,14 +57,14 @@ class TablesReportScreen extends StatelessWidget {
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: const Text("Chop etishda xatolik"),
+                        title: const Text('Chop etishda xatolik'),
                         content: SingleChildScrollView(
-                          child: Text("Xatolik xabari: $e"),
+                          child: Text('Xatolik xabari: $e'),
                         ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text("OK"),
+                            child: const Text('OK'),
                           ),
                         ],
                       ),
@@ -73,7 +73,7 @@ class TablesReportScreen extends StatelessWidget {
                 }
               },
               icon: const Icon(Icons.print),
-              label: const Text("Chek chiqarish"),
+              label: const Text('Chek chiqarish'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue.shade700,
                 foregroundColor: Colors.white,
@@ -135,7 +135,7 @@ class TablesReportScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10),
         ],
       ),
       child: Column(
@@ -158,10 +158,10 @@ class TablesReportScreen extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const Spacer(),
-          _buildStatRow("Buyurtmalar", "$count ta"),
+          _buildStatRow('Buyurtmalar', '$count ta'),
           const SizedBox(height: 8),
           _buildStatRow(
-            "Jami tushum",
+            'Jami tushum',
             "$total so'm",
             isBold: true,
             color: Colors.indigo,

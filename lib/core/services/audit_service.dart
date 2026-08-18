@@ -1,5 +1,6 @@
 import '../database_helper.dart';
 import '../../models/audit_models.dart';
+import '../app_logger.dart';
 
 /// AuditService - Tizimdagi barcha muhim amallarni markazlashgan holda qayd qilish uchun servis
 class AuditService {
@@ -32,7 +33,7 @@ class AuditService {
       await db.insert('audit_logs', log.toMap());
     } catch (e) {
       // Audit logi xatolikka sabab bo'lmasligi kerak
-      print('Audit log recording failed: $e');
+      AppLogger.w('Audit', 'Audit log recording failed: $e');
     }
   }
 

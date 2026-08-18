@@ -126,7 +126,7 @@ class _DeliveryZonesScreenState extends State<DeliveryZonesScreen> {
         builder: (ctx, setS) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(isEdit ? 'Zonani tahrirlash' : "Yangi zona"),
+          title: Text(isEdit ? 'Zonani tahrirlash' : 'Yangi zona'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

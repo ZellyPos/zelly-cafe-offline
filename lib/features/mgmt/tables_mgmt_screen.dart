@@ -151,11 +151,11 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                         horizontal: 16,
                       ),
                     ),
-                    hint: const Text("Barcha joylar"),
+                    hint: const Text('Barcha joylar'),
                     items: [
                       const DropdownMenuItem(
                         value: null,
-                        child: Text("Barcha joylar"),
+                        child: Text('Barcha joylar'),
                       ),
                       ...locationProvider.locations.map(
                         (l) =>
@@ -212,7 +212,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            "Stollar topilmadi",
+            'Stollar topilmadi',
             style: TextStyle(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               fontSize: 18,
@@ -228,16 +228,16 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
     TableModel table,
     Location location,
   ) {
-    String pricingLabel = "Normal";
+    String pricingLabel = 'Normal';
     Color pricingColor = Colors.grey;
     if (table.pricingType == 1) {
-      pricingLabel = "Soatli";
+      pricingLabel = 'Soatli';
       pricingColor = Colors.orange;
     } else if (table.pricingType == 2) {
-      pricingLabel = "Fiksal";
+      pricingLabel = 'Fiksal';
       pricingColor = Colors.purple;
     } else if (table.pricingType == 3) {
-      pricingLabel = "Foizli";
+      pricingLabel = 'Foizli';
       pricingColor = Colors.teal;
     }
 
@@ -329,7 +329,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                     _buildBadge(pricingLabel, pricingColor),
                     const SizedBox(width: 4),
                     _buildBadge(
-                      table.status == 0 ? "Bo'sh" : "Band",
+                      table.status == 0 ? "Bo'sh" : 'Band',
                       table.status == 0 ? Colors.green : Colors.red,
                     ),
                   ],
@@ -801,7 +801,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                         .toList(),
                     onChanged: (val) =>
                         setDialogState(() => selectedLocationId = val),
-                    validator: (val) => val == null ? "Joyni tanlang" : null,
+                    validator: (val) => val == null ? 'Joyni tanlang' : null,
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
@@ -809,7 +809,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                     dropdownColor: theme.colorScheme.surface,
                     style: TextStyle(color: theme.colorScheme.onSurface),
                     decoration: InputDecoration(
-                      labelText: "Narxlash turi",
+                      labelText: 'Narxlash turi',
                       labelStyle: TextStyle(
                         color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
@@ -820,16 +820,16 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                     items: [
                       const DropdownMenuItem(
                         value: 0,
-                        child: Text("Normal (Xona narxisiz)"),
+                        child: Text('Normal (Xona narxisiz)'),
                       ),
-                      const DropdownMenuItem(value: 1, child: Text("Soatli")),
+                      const DropdownMenuItem(value: 1, child: Text('Soatli')),
                       const DropdownMenuItem(
                         value: 2,
-                        child: Text("Fiksal (Fixed)"),
+                        child: Text('Fiksal (Fixed)'),
                       ),
                       const DropdownMenuItem(
                         value: 3,
-                        child: Text("Xizmat foizi"),
+                        child: Text('Xizmat foizi'),
                       ),
                     ],
                     onChanged: (val) =>
@@ -840,7 +840,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                     TextField(
                       controller: hourlyRateController,
                       decoration: InputDecoration(
-                        labelText: "Soatbay narx",
+                        labelText: 'Soatbay narx',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -853,7 +853,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                     TextField(
                       controller: fixedAmountController,
                       decoration: InputDecoration(
-                        labelText: "Fiksal narx",
+                        labelText: 'Fiksal narx',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -866,7 +866,7 @@ class _TablesMgmtScreenState extends State<TablesMgmtScreen> {
                     TextField(
                       controller: servicePercentageController,
                       decoration: InputDecoration(
-                        labelText: "Xizmat foizi (%)",
+                        labelText: 'Xizmat foizi (%)',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

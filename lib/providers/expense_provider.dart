@@ -41,7 +41,7 @@ class ExpenseProvider extends ChangeNotifier {
         forceRemote: forceRemote,
       );
     } catch (e) {
-      debugPrint("Error loading expense categories: $e");
+      debugPrint('Error loading expense categories: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -83,7 +83,7 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       await _loadByFilter();
     } catch (e) {
-      debugPrint("Error loading expenses: $e");
+      debugPrint('Error loading expenses: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -123,7 +123,7 @@ class ExpenseProvider extends ChangeNotifier {
       _expenses = rows;
       _categoryTotals = totals;
     } catch (e) {
-      debugPrint("Error in _loadByFilter: $e");
+      debugPrint('Error in _loadByFilter: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

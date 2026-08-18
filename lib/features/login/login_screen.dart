@@ -135,6 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       // Fallback for settings login pin (admin)
+      if (!mounted) return;
       final settings = context.read<AppSettingsProvider>();
       if (_enteredPin == settings.loginPin) {
         AppLogger.i('Login', 'Admin kirdi (sozlamalar PIN)');

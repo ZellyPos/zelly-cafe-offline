@@ -290,7 +290,7 @@ class PrintingService {
     } else if (settings.type == PrinterType.windows) {
       if (settings.printerName == null) return false;
       return await WindowsPrintingHelper.rawPrint(settings.printerName!, bytes);
-    } else if (settings.type == PrinterType.usb_legacy) {
+    } else if (settings.type == PrinterType.usbLegacy) {
       // Legacy USB logic...
       return false;
     }
@@ -654,7 +654,7 @@ class PrintingService {
       );
     } else if (settings.type == PrinterType.windows) {
       return await _printWindowsRaw(bytes, settings.printerName);
-    } else if (settings.type == PrinterType.usb_legacy) {
+    } else if (settings.type == PrinterType.usbLegacy) {
       return await _printUsbLegacy(bytes, settings.printerName);
     }
     return false;
@@ -874,7 +874,7 @@ class PrintingService {
                 final double q =
                     double.tryParse(compMap['quantity']?.toString() ?? '0') ??
                     0;
-                final String compLine = "  - $name (${q.toStringAsFixed(0)}x)";
+                final String compLine = '  - $name (${q.toStringAsFixed(0)}x)';
                 bytes += generator.text(
                   _padLine(_cleanText(compLine), rSettings.horizontalMargin),
                 );
@@ -1314,10 +1314,10 @@ class PrintingService {
         );
 
         // Print Inventory Info
-        String invInfo = "  Sotildi: ${soldQty.toStringAsFixed(0)}";
+        String invInfo = '  Sotildi: ${soldQty.toStringAsFixed(0)}';
         if (currentStock != null) {
           invInfo =
-              "  Kirim: ${kirimQty.toStringAsFixed(0)}  Sotildi: ${soldQty.toStringAsFixed(0)}  Qoldiq: ${currentStock.toStringAsFixed(0)}";
+              '  Kirim: ${kirimQty.toStringAsFixed(0)}  Sotildi: ${soldQty.toStringAsFixed(0)}  Qoldiq: ${currentStock.toStringAsFixed(0)}';
         }
         bytes += generator.text(
           _padLine(_cleanText(invInfo), rSettings.horizontalMargin),
@@ -1330,7 +1330,7 @@ class PrintingService {
         // Print Revenue
         bytes += generator.text(
           _format2Col(
-            "  Summa:",
+            '  Summa:',
             PriceFormatter.format(revenue),
             margin: rSettings.horizontalMargin,
           ),
@@ -1873,8 +1873,8 @@ class PrintingService {
             : orderIdRaw.toUpperCase();
         final dailyNumber = order['daily_number']?.toString();
         final displayId = dailyNumber != null
-            ? "№$dailyNumber (#$orderNum)"
-            : "#$orderNum";
+            ? '№$dailyNumber (#$orderNum)'
+            : '#$orderNum';
 
         final createdAtRaw = order['created_at']?.toString() ?? '';
         final dateTime = createdAtRaw.length >= 16
@@ -2203,7 +2203,7 @@ class PrintingService {
     String? ip,
     int port,
   ) async {
-    final targetIp = ip ?? "192.168.1.100";
+    final targetIp = ip ?? '192.168.1.100';
     try {
       final socket = await Socket.connect(
         targetIp,

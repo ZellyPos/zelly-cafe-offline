@@ -58,19 +58,19 @@ class _OrderDiscountDialogState extends State<OrderDiscountDialog> {
   }
 
   String? _validate() {
-    if (_value <= 0) return "Chegirma miqdorini kiriting";
+    if (_value <= 0) return 'Chegirma miqdorini kiriting';
     if (_type == 'percent' && _value > 100) {
-      return "Foiz 100% dan oshib ketdi";
+      return 'Foiz 100% dan oshib ketdi';
     }
     if (_type == 'fixed' && _value > widget.foodTotal) {
-      return "Chegirma jami summadan oshib ketdi";
+      return 'Chegirma jami summadan oshib ketdi';
     }
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+
     final error = _value > 0 ? _validate() : null;
 
     return Dialog(
@@ -97,7 +97,7 @@ class _OrderDiscountDialogState extends State<OrderDiscountDialog> {
                   ),
                   const SizedBox(width: 12),
                   const Text(
-                    "Buyurtmaga chegirma",
+                    'Buyurtmaga chegirma',
                     style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
@@ -110,7 +110,7 @@ class _OrderDiscountDialogState extends State<OrderDiscountDialog> {
                 children: [
                   Expanded(
                     child: _typeBtn(
-                      label: "Foiz (%)",
+                      label: 'Foiz (%)',
                       icon: Icons.percent_rounded,
                       selected: _type == 'percent',
                       onTap: () => setState(() => _type = 'percent'),
@@ -137,9 +137,9 @@ class _OrderDiscountDialogState extends State<OrderDiscountDialog> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  labelText: _type == 'percent' ? "Foiz (%)" : "Summa (so'm)",
-                  hintText: "0",
-                  suffixText: _type == 'percent' ? "%" : "so'm",
+                  labelText: _type == 'percent' ? 'Foiz (%)' : "Summa (so'm)",
+                  hintText: '0',
+                  suffixText: _type == 'percent' ? '%' : "so'm",
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
                   errorText: error,
@@ -162,7 +162,7 @@ class _OrderDiscountDialogState extends State<OrderDiscountDialog> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("Chegirma:",
+                      const Text('Chegirma:',
                           style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: Colors.orange)),
@@ -183,8 +183,8 @@ class _OrderDiscountDialogState extends State<OrderDiscountDialog> {
               TextField(
                 controller: _noteCtrl,
                 decoration: InputDecoration(
-                  labelText: "Chegirma sababi (ixtiyoriy)",
-                  hintText: "Masalan: VIP mijoz",
+                  labelText: 'Chegirma sababi (ixtiyoriy)',
+                  hintText: 'Masalan: VIP mijoz',
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
                   contentPadding: const EdgeInsets.symmetric(
@@ -203,7 +203,7 @@ class _OrderDiscountDialogState extends State<OrderDiscountDialog> {
                           Navigator.pop(context, _DiscountResult.remove()),
                       icon: const Icon(Icons.delete_outline_rounded,
                           color: Colors.red, size: 18),
-                      label: const Text("Olib tashlash",
+                      label: const Text('Olib tashlash',
                           style: TextStyle(color: Colors.red)),
                     ),
                   const Spacer(),
@@ -215,7 +215,7 @@ class _OrderDiscountDialogState extends State<OrderDiscountDialog> {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
-                    child: const Text("Bekor"),
+                    child: const Text('Bekor'),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton(
@@ -337,9 +337,9 @@ class _ItemDiscountDialogState extends State<ItemDiscountDialog> {
   double get _amount => double.tryParse(_ctrl.text) ?? 0;
 
   String? _validate() {
-    if (_amount <= 0) return "Chegirma miqdorini kiriting";
+    if (_amount <= 0) return 'Chegirma miqdorini kiriting';
     if (_amount > widget.itemTotal) {
-      return "Chegirma mahsulot summasidan oshib ketdi";
+      return 'Chegirma mahsulot summasidan oshib ketdi';
     }
     return null;
   }
@@ -385,7 +385,7 @@ class _ItemDiscountDialogState extends State<ItemDiscountDialog> {
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: "Chegirma summasi (so'm)",
-                  hintText: "0",
+                  hintText: '0',
                   suffixText: "so'm",
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12)),
@@ -409,7 +409,7 @@ class _ItemDiscountDialogState extends State<ItemDiscountDialog> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("Net summa:",
+                      Text('Net summa:',
                           style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                       Text(
                         "${PriceFormatter.format(widget.itemTotal - _amount)} so'm",
@@ -430,7 +430,7 @@ class _ItemDiscountDialogState extends State<ItemDiscountDialog> {
                     TextButton(
                       onPressed: () =>
                           Navigator.pop(context, _ItemDiscountResult.remove()),
-                      child: const Text("Olib tashlash",
+                      child: const Text('Olib tashlash',
                           style: TextStyle(color: Colors.red)),
                     ),
                   const Spacer(),
@@ -442,7 +442,7 @@ class _ItemDiscountDialogState extends State<ItemDiscountDialog> {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                     ),
-                    child: const Text("Bekor"),
+                    child: const Text('Bekor'),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(

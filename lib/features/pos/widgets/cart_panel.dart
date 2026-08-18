@@ -75,10 +75,10 @@ class CartPanelWidget extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    "$itemCount ta mahsulot",
+                    '$itemCount ta mahsulot',
                     style: TextStyle(
                       fontSize: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -165,6 +165,7 @@ class CartPanelWidget extends StatelessWidget {
                     'delete_item',
                   );
                   if (!hasPerm) return false;
+                  if (!context.mounted) return false;
 
                   if (item.printedQuantity > 0) {
                     cartProvider.removeItem(
@@ -259,14 +260,14 @@ class CartPanelWidget extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isCancelled
-              ? const Color(0xFFFEF2F2).withOpacity(0.5)
+              ? const Color(0xFFFEF2F2).withValues(alpha: 0.5)
               : hasDiscount
                   ? Colors.orange.withValues(alpha: 0.04)
                   : null,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCancelled
-                ? const Color(0xFFFCA5A5).withOpacity(0.3)
+                ? const Color(0xFFFCA5A5).withValues(alpha: 0.3)
                 : hasDiscount
                     ? Colors.orange.withValues(alpha: 0.25)
                     : Colors.transparent,
@@ -297,7 +298,7 @@ class CartPanelWidget extends StatelessWidget {
                   Text(
                     "${PriceFormatter.format(item.product.price)} so'm",
                     style: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
@@ -321,7 +322,7 @@ class CartPanelWidget extends StatelessWidget {
                   if (hasDiscount) ...[
                     const SizedBox(height: 2),
                     Text(
-                      "- ${PriceFormatter.format(item.discountAmount)} chegirma",
+                      '- ${PriceFormatter.format(item.discountAmount)} chegirma',
                       style: const TextStyle(
                         color: Colors.orange,
                         fontSize: 11,
@@ -483,7 +484,7 @@ class CartPanelWidget extends StatelessWidget {
             color: theme.colorScheme.surface,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 20,
                 offset: const Offset(0, -8),
               ),
@@ -513,18 +514,18 @@ class CartPanelWidget extends StatelessWidget {
 
     return Column(
       children: [
-        _buildRow(context, "Taomlar jami", foodTotal),
+        _buildRow(context, 'Taomlar jami', foodTotal),
         if (orderDiscount > 0)
           _buildRow(
             context,
             cartProvider.orderDiscountType == 'percent'
-                ? "Chegirma (-${cartProvider.orderDiscountValue.toStringAsFixed(0)}%)"
-                : "Chegirma",
+                ? 'Chegirma (-${cartProvider.orderDiscountValue.toStringAsFixed(0)}%)'
+                : 'Chegirma',
             orderDiscount,
             isDiscount: true,
           ),
-        if (roomCharge > 0) _buildRow(context, "Xona / Stol", roomCharge),
-        if (serviceFee > 0) _buildRow(context, "Xizmat haqi", serviceFee),
+        if (roomCharge > 0) _buildRow(context, 'Xona / Stol', roomCharge),
+        if (serviceFee > 0) _buildRow(context, 'Xizmat haqi', serviceFee),
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 12),
           child: Divider(color: Color(0xFFF1F5F9)),
@@ -562,7 +563,7 @@ class CartPanelWidget extends StatelessWidget {
           ),
           Text(
             isDiscount
-                ? "- ${PriceFormatter.format(value)}"
+                ? '- ${PriceFormatter.format(value)}'
                 : PriceFormatter.format(value),
             style: TextStyle(
               fontSize: isMain ? 22 : 14,

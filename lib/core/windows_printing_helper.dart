@@ -53,8 +53,7 @@ class WindowsPrintingHelper {
           final structSize = sizeOf<PRINTER_INFO_4>();
           for (var i = 0; i < count; i++) {
             // Calculate address: pPrinters + (i * structSize)
-            final ptr = pPrinters
-                .elementAt(i * structSize)
+            final ptr = (pPrinters + (i * structSize))
                 .cast<PRINTER_INFO_4>();
             if (ptr.ref.pPrinterName != nullptr) {
               printers.add(ptr.ref.pPrinterName.toDartString());

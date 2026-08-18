@@ -27,7 +27,7 @@ class CashiersMgmtScreen extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () => _showAddEditDialog(context),
               icon: const Icon(Icons.add, size: 20),
-              label: const Text("Yangi Kassir"),
+              label: const Text('Yangi Kassir'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: theme.colorScheme.onPrimary,
@@ -73,22 +73,22 @@ class CashiersMgmtScreen extends StatelessWidget {
           Icon(
             Icons.people_alt_outlined,
             size: 80,
-            color: theme.colorScheme.onSurface.withOpacity(0.1),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
           ),
           const SizedBox(height: 16),
           Text(
-            "Kassirlar topilmadi",
+            'Kassirlar topilmadi',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 8),
           Text(
             "Tizimga yangi kassir qo'shish uchun yuqoridagi tugmani bosing",
             style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.4),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
             ),
           ),
         ],
@@ -105,7 +105,7 @@ class CashiersMgmtScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withOpacity(0.04),
+            color: theme.shadowColor.withValues(alpha: 0.04),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -120,7 +120,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.onSurface.withOpacity(0.05),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -145,9 +145,9 @@ class CashiersMgmtScreen extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      "PIN: ${cashier.pin}",
+                      'PIN: ${cashier.pin}',
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         fontSize: 13,
                       ),
                     ),
@@ -159,11 +159,11 @@ class CashiersMgmtScreen extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(left: 8),
                   child: Tooltip(
-                    message: "Ruxsatlar belgilangan",
+                    message: 'Ruxsatlar belgilangan',
                     child: Icon(
                       Icons.security_rounded,
                       size: 18,
-                      color: theme.colorScheme.primary.withOpacity(0.7),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
@@ -186,7 +186,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: () => _showAddEditDialog(context, cashier),
                   icon: const Icon(Icons.edit_outlined, size: 18),
-                  label: const Text("Tahrirlash"),
+                  label: const Text('Tahrirlash'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: theme.colorScheme.primary,
                     side: BorderSide(color: theme.colorScheme.primary),
@@ -239,7 +239,7 @@ class CashiersMgmtScreen extends StatelessWidget {
         return AlertDialog(
           backgroundColor: theme.colorScheme.surface,
           title: Text(
-            cashier == null ? "Yangi Kassir" : "Tahrirlash",
+            cashier == null ? 'Yangi Kassir' : 'Tahrirlash',
             style: TextStyle(color: theme.colorScheme.onSurface),
           ),
           content: Column(
@@ -249,13 +249,13 @@ class CashiersMgmtScreen extends StatelessWidget {
                 controller: nameController,
                 style: TextStyle(color: theme.colorScheme.onSurface),
                 decoration: InputDecoration(
-                  labelText: "Ism",
+                  labelText: 'Ism',
                   labelStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
-                  hintText: "Masalan: Azizbek",
+                  hintText: 'Masalan: Azizbek',
                   hintStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.4),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                   ),
                 ),
               ),
@@ -264,13 +264,13 @@ class CashiersMgmtScreen extends StatelessWidget {
                 controller: pinController,
                 style: TextStyle(color: theme.colorScheme.onSurface),
                 decoration: InputDecoration(
-                  labelText: "PIN kod",
+                  labelText: 'PIN kod',
                   labelStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
-                  hintText: "Masalan: 5555",
+                  hintText: 'Masalan: 5555',
                   hintStyle: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.4),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                   ),
                 ),
                 keyboardType: TextInputType.number,
@@ -280,7 +280,7 @@ class CashiersMgmtScreen extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  "Ruxsatlar:",
+                  'Ruxsatlar:',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: theme.colorScheme.onSurface,
@@ -326,7 +326,7 @@ class CashiersMgmtScreen extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text("Bekor qilish"),
+              child: const Text('Bekor qilish'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -364,7 +364,7 @@ class CashiersMgmtScreen extends StatelessWidget {
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: theme.colorScheme.onPrimary,
               ),
-              child: const Text("Saqlash"),
+              child: const Text('Saqlash'),
             ),
           ],
         );
@@ -386,7 +386,7 @@ class CashiersMgmtScreen extends StatelessWidget {
           content: Text(
             "${cashier.name}ni tizimdan o'chirib tashlamoqchimisiz?",
             style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.8),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
             ),
           ),
           actions: [

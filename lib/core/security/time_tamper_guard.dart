@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database_helper.dart';
+import '../app_logger.dart';
 
 // kernel32 uchun FFI bog'lamasi
 typedef GetTickCount64Native = Uint64 Function();
@@ -32,7 +33,7 @@ class TimeTamperGuard {
     try {
       logs = await db.query('security_logs');
     } catch (e) {
-      print('Security logs table not found or query error: $e');
+      AppLogger.w('TimeGuard', 'Security logs table not found or query error: $e');
       // If table doesn't exist, we might be in middle of migration or error state
     }
 
@@ -51,7 +52,7 @@ class TimeTamperGuard {
 
       // 1. Rollback tekshiruvi: real vaqt orqaga ketganmi?
       if (now.isBefore(lastWall)) {
-        print('Time Tamper Detected: Wall clock rollback');
+        AppLogger.w('TimeGuard', 'Time Tamper Detected: Wall clock rollback');
         return false;
       }
 
@@ -59,7 +60,7 @@ class TimeTamperGuard {
       if (uptime > 0 && uptime < lastUptime) {
         // Reboot bo'lishi mumkin — uptime noldan qayta boshlangan, OK
       } else if (uptime > 0 && uptimeElapsed < -5000) {
-        print('Time Tamper Detected: Uptime inconsistency');
+        AppLogger.w('TimeGuard', 'Time Tamper Detected: Uptime inconsistency');
         return false;
       }
     }

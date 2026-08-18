@@ -99,12 +99,12 @@ class _OutlaysScreenState extends State<OutlaysScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildSummaryItem("Qarz", customer.debt, Colors.red),
+          _buildSummaryItem('Qarz', customer.debt, Colors.red),
           Container(width: 1, height: 40, color: Colors.grey.shade200),
-          _buildSummaryItem("Haqqi", customer.credit, Colors.green),
+          _buildSummaryItem('Haqqi', customer.credit, Colors.green),
           Container(width: 1, height: 40, color: Colors.grey.shade200),
           _buildSummaryItem(
-            "Balans",
+            'Balans',
             customer.credit - customer.debt,
             (customer.credit - customer.debt) >= 0 ? Colors.green : Colors.red,
           ),
@@ -155,7 +155,7 @@ class _OutlaysScreenState extends State<OutlaysScreen> {
           child: ListTile(
             leading: CircleAvatar(
               backgroundColor: (isOutlay ? Colors.red : Colors.green)
-                  .withOpacity(0.1),
+                  .withValues(alpha: 0.1),
               child: Icon(
                 isOutlay ? Icons.arrow_outward : Icons.arrow_downward,
                 color: isOutlay ? Colors.red : Colors.green,

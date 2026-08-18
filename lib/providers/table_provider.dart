@@ -40,7 +40,7 @@ class TableProvider extends ChangeNotifier {
         forceRemote: forceRemote,
       );
     } catch (e) {
-      debugPrint("Error loading tables: $e");
+      debugPrint('Error loading tables: $e');
     }
 
     _isLoading = false;
@@ -181,7 +181,7 @@ class TableProvider extends ChangeNotifier {
     try {
       return await _repo.getTablesForLocation(locationId);
     } catch (e) {
-      debugPrint("Error getting tables for location: $e");
+      debugPrint('Error getting tables for location: $e');
       return [];
     }
   }

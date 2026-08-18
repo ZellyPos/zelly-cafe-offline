@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'app_logger.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -45,7 +46,7 @@ class DatabaseHelper {
         try {
           await db.execute('ALTER TABLE users ADD COLUMN permissions TEXT');
         } catch (e2) {
-          print('Failsafe: Error adding permissions column: $e2');
+          AppLogger.w('DB', 'Failsafe: Error adding permissions column: $e2');
         }
       }
     }
@@ -60,7 +61,7 @@ class DatabaseHelper {
             'ALTER TABLE orders ADD COLUMN bill_requested INTEGER DEFAULT 0',
           );
         } catch (e2) {
-          print('Failsafe: Error adding bill_requested column: $e2');
+          AppLogger.w('DB', 'Failsafe: Error adding bill_requested column: $e2');
         }
       }
     }
@@ -75,7 +76,7 @@ class DatabaseHelper {
             'ALTER TABLE orders ADD COLUMN bill_requested_at TEXT',
           );
         } catch (e2) {
-          print('Failsafe: Error adding bill_requested_at column: $e2');
+          AppLogger.w('DB', 'Failsafe: Error adding bill_requested_at column: $e2');
         }
       }
     }
@@ -88,7 +89,7 @@ class DatabaseHelper {
         WHERE track_type = 0 AND quantity IS NOT NULL AND quantity > 0
       ''');
     } catch (e) {
-      print('Migration: Error updating product track_type: $e');
+      AppLogger.w('DB', 'Migration: Error updating product track_type: $e');
     }
 
     // Failsafe migration for printers.is_main column
@@ -98,9 +99,9 @@ class DatabaseHelper {
       if (e.toString().contains('no such column')) {
         try {
           await db.execute('ALTER TABLE printers ADD COLUMN is_main INTEGER DEFAULT 0');
-          print('Failsafe: Added is_main column to printers table');
+          AppLogger.w('DB', 'Failsafe: Added is_main column to printers table');
         } catch (e2) {
-          print('Failsafe: Error adding is_main column: $e2');
+          AppLogger.w('DB', 'Failsafe: Error adding is_main column: $e2');
         }
       }
     }
@@ -324,7 +325,7 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE waiters ADD COLUMN pin_code TEXT');
       } catch (e) {
-        print('pin_code column already exists: $e');
+        AppLogger.d('DB', 'pin_code column already exists: $e');
       }
 
       try {
@@ -332,7 +333,7 @@ class DatabaseHelper {
           'ALTER TABLE waiters ADD COLUMN is_active INTEGER DEFAULT 1',
         );
       } catch (e) {
-        print('is_active column already exists: $e');
+        AppLogger.d('DB', 'is_active column already exists: $e');
       }
 
       try {
@@ -340,7 +341,7 @@ class DatabaseHelper {
           'CREATE UNIQUE INDEX IF NOT EXISTS idx_waiter_pin ON waiters (pin_code) WHERE pin_code IS NOT NULL',
         );
       } catch (e) {
-        print('idx_waiter_pin index already exists: $e');
+        AppLogger.d('DB', 'idx_waiter_pin index already exists: $e');
       }
     }
 
@@ -359,7 +360,7 @@ class DatabaseHelper {
           'ALTER TABLE orders ADD COLUMN grand_total REAL DEFAULT 0',
         );
       } catch (e) {
-        print('Error adding new total columns: $e');
+        AppLogger.w('DB', 'Error adding new total columns: $e');
       }
     }
 
@@ -412,7 +413,7 @@ class DatabaseHelper {
           'ALTER TABLE tables ADD COLUMN service_percentage REAL DEFAULT 0',
         );
       } catch (e) {
-        print('Error adding service_percentage column: $e');
+        AppLogger.w('DB', 'Error adding service_percentage column: $e');
       }
     }
 
@@ -431,7 +432,7 @@ class DatabaseHelper {
           )
         ''');
       } catch (e) {
-        print('Error upgrading to v15: $e');
+        AppLogger.w('DB', 'Error upgrading to v15: $e');
       }
     }
 
@@ -441,7 +442,7 @@ class DatabaseHelper {
           'ALTER TABLE order_items ADD COLUMN bundle_items_json TEXT',
         );
       } catch (e) {
-        print('Error upgrading to v16: $e');
+        AppLogger.w('DB', 'Error upgrading to v16: $e');
       }
     }
 
@@ -449,7 +450,7 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE categories ADD COLUMN color TEXT');
       } catch (e) {
-        print('Error upgrading to v17: $e');
+        AppLogger.w('DB', 'Error upgrading to v17: $e');
       }
     }
 
@@ -459,7 +460,7 @@ class DatabaseHelper {
           'ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0',
         );
       } catch (e) {
-        print('Error upgrading to v18: $e');
+        AppLogger.w('DB', 'Error upgrading to v18: $e');
       }
     }
 
@@ -480,7 +481,7 @@ class DatabaseHelper {
           'ALTER TABLE products ADD COLUMN sort_order INTEGER DEFAULT 0',
         );
       } catch (e) {
-        print('Error upgrading products table to v20: $e');
+        AppLogger.w('DB', 'Error upgrading products table to v20: $e');
       }
     }
 
@@ -488,7 +489,7 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE products ADD COLUMN quantity REAL');
       } catch (e) {
-        print('Error upgrading products table to v21: $e');
+        AppLogger.w('DB', 'Error upgrading products table to v21: $e');
       }
     }
 
@@ -506,7 +507,7 @@ class DatabaseHelper {
           )
         ''');
       } catch (e) {
-        print('Error upgrading database to v22: $e');
+        AppLogger.w('DB', 'Error upgrading database to v22: $e');
       }
     }
     if (oldVersion < 23) {
@@ -596,7 +597,7 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_products_track_type ON products (track_type)',
         );
       } catch (e) {
-        print('Error upgrading database to v23: $e');
+        AppLogger.w('DB', 'Error upgrading database to v23: $e');
       }
     }
 
@@ -639,7 +640,7 @@ class DatabaseHelper {
           )
         ''');
       } catch (e) {
-        print('Error upgrading database to v24: $e');
+        AppLogger.w('DB', 'Error upgrading database to v24: $e');
       }
     }
 
@@ -666,7 +667,7 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs (entity, entity_id)',
         );
       } catch (e) {
-        print('Error upgrading database to v25: $e');
+        AppLogger.w('DB', 'Error upgrading database to v25: $e');
       }
     }
 
@@ -683,7 +684,7 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items (product_id)',
         );
       } catch (e) {
-        print('Error upgrading database to v26: $e');
+        AppLogger.w('DB', 'Error upgrading database to v26: $e');
       }
     }
 
@@ -714,7 +715,7 @@ class DatabaseHelper {
           'updated_at': DateTime.now().toIso8601String(),
         });
       } catch (e) {
-        print('Error upgrading database to v27: $e');
+        AppLogger.w('DB', 'Error upgrading database to v27: $e');
       }
     }
 
@@ -742,7 +743,7 @@ class DatabaseHelper {
           }
         }
       } catch (e) {
-        print('Error upgrading database to v28: $e');
+        AppLogger.w('DB', 'Error upgrading database to v28: $e');
       }
     }
 
@@ -760,7 +761,7 @@ class DatabaseHelper {
           'ALTER TABLE tables ADD COLUMN shape INTEGER DEFAULT 0',
         ); // 0: square, 1: circle
       } catch (e) {
-        print('Error upgrading database to v29: $e');
+        AppLogger.w('DB', 'Error upgrading database to v29: $e');
       }
     }
 
@@ -770,7 +771,7 @@ class DatabaseHelper {
           'ALTER TABLE products ADD COLUMN no_service_charge INTEGER DEFAULT 0',
         );
       } catch (e) {
-        print('Error upgrading database to v30: $e');
+        AppLogger.w('DB', 'Error upgrading database to v30: $e');
       }
     }
 
@@ -786,7 +787,7 @@ class DatabaseHelper {
           WHERE product_name IS NULL
         ''');
       } catch (e) {
-        print('Error upgrading database to v31: $e');
+        AppLogger.w('DB', 'Error upgrading database to v31: $e');
       }
     }
 
@@ -794,7 +795,7 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE products ADD COLUMN unit TEXT');
       } catch (e) {
-        print('Error upgrading database to v32: $e');
+        AppLogger.w('DB', 'Error upgrading database to v32: $e');
       }
     }
 
@@ -808,7 +809,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE order_items ADD COLUMN unit TEXT');
         }
       } catch (e) {
-        print('Error upgrading database to v33: $e');
+        AppLogger.w('DB', 'Error upgrading database to v33: $e');
       }
     }
 
@@ -823,7 +824,7 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE waiters ADD COLUMN permissions TEXT');
       } catch (e) {
-        print('Error upgrading database to v35: $e');
+        AppLogger.w('DB', 'Error upgrading database to v35: $e');
       }
     }
 
@@ -833,7 +834,7 @@ class DatabaseHelper {
           'ALTER TABLE order_items ADD COLUMN printed_qty REAL DEFAULT 0',
         );
       } catch (e) {
-        print('Error upgrading database to v36: $e');
+        AppLogger.w('DB', 'Error upgrading database to v36: $e');
       }
     }
 
@@ -851,7 +852,7 @@ class DatabaseHelper {
           );
         }
       } catch (e) {
-        print('Error upgrading database to v37: $e');
+        AppLogger.w('DB', 'Error upgrading database to v37: $e');
       }
     }
 
@@ -859,7 +860,7 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE orders ADD COLUMN daily_number INTEGER');
       } catch (e) {
-        print('Error upgrading database to v38: $e');
+        AppLogger.w('DB', 'Error upgrading database to v38: $e');
       }
     }
 
@@ -867,7 +868,7 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE users ADD COLUMN permissions TEXT');
       } catch (e) {
-        print('Error upgrading database to v39: $e');
+        AppLogger.w('DB', 'Error upgrading database to v39: $e');
       }
     }
 
@@ -882,7 +883,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE users ADD COLUMN permissions TEXT');
         }
       } catch (e) {
-        print('Error upgrading database to v42: $e');
+        AppLogger.w('DB', 'Error upgrading database to v42: $e');
       }
     }
     if (oldVersion < 43) {
@@ -893,7 +894,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE orders ADD COLUMN note TEXT');
         }
       } catch (e) {
-        print('Error upgrading database to v43: $e');
+        AppLogger.w('DB', 'Error upgrading database to v43: $e');
       }
     }
 
@@ -905,7 +906,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE printers ADD COLUMN is_main INTEGER DEFAULT 0');
         }
       } catch (e) {
-        print('Error upgrading database to v44: $e');
+        AppLogger.w('DB', 'Error upgrading database to v44: $e');
       }
     }
 
@@ -941,7 +942,7 @@ class DatabaseHelper {
         ''');
         await db.execute('DROP TABLE shifts_old');
       } catch (e) {
-        print('Error upgrading database to v45: $e');
+        AppLogger.w('DB', 'Error upgrading database to v45: $e');
       }
     }
 
@@ -983,7 +984,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE orders ADD COLUMN zone_id INTEGER');
         }
       } catch (e) {
-        print('Error upgrading database to v46: $e');
+        AppLogger.w('DB', 'Error upgrading database to v46: $e');
       }
     }
 
@@ -999,7 +1000,7 @@ class DatabaseHelper {
           )
         ''');
       } catch (e) {
-        print('Error upgrading database to v47: $e');
+        AppLogger.w('DB', 'Error upgrading database to v47: $e');
       }
     }
 
@@ -1050,7 +1051,7 @@ class DatabaseHelper {
           )
         ''');
       } catch (e) {
-        print('Error upgrading database to v48: $e');
+        AppLogger.w('DB', 'Error upgrading database to v48: $e');
       }
     }
 
@@ -1064,7 +1065,7 @@ class DatabaseHelper {
           );
         }
       } catch (e) {
-        print('Error upgrading database to v49: $e');
+        AppLogger.w('DB', 'Error upgrading database to v49: $e');
       }
     }
 
@@ -1078,7 +1079,7 @@ class DatabaseHelper {
           );
         }
       } catch (e) {
-        print('Error upgrading database to v50: $e');
+        AppLogger.w('DB', 'Error upgrading database to v50: $e');
       }
     }
 
@@ -1121,7 +1122,7 @@ class DatabaseHelper {
         await db.execute('CREATE INDEX IF NOT EXISTS idx_shifts_is_synced ON shifts (is_synced)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_cash_movements_is_synced ON cash_movements (is_synced)');
       } catch (e) {
-        print('Error upgrading database to v51 (is_synced columns): $e');
+        AppLogger.w('DB', 'Error upgrading database to v51 (is_synced columns): $e');
       }
     }
 
@@ -1133,7 +1134,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE orders ADD COLUMN bill_requested_at TEXT');
         }
       } catch (e) {
-        print('Error upgrading database to v52 (bill_requested_at): $e');
+        AppLogger.w('DB', 'Error upgrading database to v52 (bill_requested_at): $e');
       }
     }
 
@@ -1145,7 +1146,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE categories ADD COLUMN image_path TEXT');
         }
       } catch (e) {
-        print('Error upgrading database to v53 (categories.image_path): $e');
+        AppLogger.w('DB', 'Error upgrading database to v53 (categories.image_path): $e');
       }
     }
 
@@ -1252,7 +1253,7 @@ class DatabaseHelper {
           ''');
         }
       } catch (e) {
-        print('Error upgrading database to v54: $e');
+        AppLogger.w('DB', 'Error upgrading database to v54: $e');
       }
     }
 
@@ -1306,7 +1307,7 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_product_movements_lookup ON product_movements (product_id, created_at)',
         );
       } catch (e) {
-        print('Error upgrading database to v55 (ombor): $e');
+        AppLogger.w('DB', 'Error upgrading database to v55 (ombor): $e');
       }
     }
 
@@ -1350,7 +1351,7 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE ingredients_v56 RENAME TO ingredients');
         }
       } catch (e) {
-        print('Error upgrading database to v56 (base_unit CHECK): $e');
+        AppLogger.w('DB', 'Error upgrading database to v56 (base_unit CHECK): $e');
       }
     }
 
@@ -1424,7 +1425,7 @@ class DatabaseHelper {
         ''', 'CREATE INDEX IF NOT EXISTS idx_product_movements_lookup '
             'ON product_movements (product_id, created_at)');
       } catch (e) {
-        print('Error upgrading database to v57 (movement CASCADE): $e');
+        AppLogger.w('DB', 'Error upgrading database to v57 (movement CASCADE): $e');
       }
     }
 
@@ -1447,7 +1448,7 @@ class DatabaseHelper {
           'unit',
         );
       } catch (e) {
-        print('Error upgrading database to v58 (name snapshot): $e');
+        AppLogger.w('DB', 'Error upgrading database to v58 (name snapshot): $e');
       }
     }
 
@@ -1460,7 +1461,7 @@ class DatabaseHelper {
           await db.execute(sql);
         }
       } catch (e) {
-        print('Error upgrading database to v59 (created_at index): $e');
+        AppLogger.w('DB', 'Error upgrading database to v59 (created_at index): $e');
       }
     }
   }
@@ -2252,10 +2253,10 @@ CREATE TABLE IF NOT EXISTS users (
   }) async {
     final db = await database;
     final List<dynamic> args = [];
-    String where = "o.status = 1 AND (o.discount_value > 0 OR item_disc.total > 0)";
-    if (shiftId != null) { where += " AND o.shift_id = ?"; args.add(shiftId); }
-    if (start != null)   { where += " AND o.created_at >= ?"; args.add(start); }
-    if (end != null)     { where += " AND o.created_at <= ?"; args.add(end); }
+    String where = 'o.status = 1 AND (o.discount_value > 0 OR item_disc.total > 0)';
+    if (shiftId != null) { where += ' AND o.shift_id = ?'; args.add(shiftId); }
+    if (start != null)   { where += ' AND o.created_at >= ?'; args.add(start); }
+    if (end != null)     { where += ' AND o.created_at <= ?'; args.add(end); }
     return db.rawQuery('''
       SELECT
         o.id, o.daily_number, o.grand_total, o.food_total,
@@ -2373,8 +2374,8 @@ CREATE TABLE IF NOT EXISTS users (
       orderWhere += ' AND shift_id = ?';
       orderArgs.add(shiftId);
     } else {
-      if (fromDate != null) { orderWhere += " AND DATE(closed_at) >= ?"; orderArgs.add(fromDate); }
-      if (toDate != null)   { orderWhere += " AND DATE(closed_at) <= ?"; orderArgs.add(toDate); }
+      if (fromDate != null) { orderWhere += ' AND DATE(closed_at) >= ?'; orderArgs.add(fromDate); }
+      if (toDate != null)   { orderWhere += ' AND DATE(closed_at) <= ?'; orderArgs.add(toDate); }
     }
 
     final orderRes = await db.rawQuery(
@@ -2384,8 +2385,8 @@ CREATE TABLE IF NOT EXISTS users (
 
     final List<dynamic> payArgs = [waiterId];
     String payWhere = 'waiter_id = ?';
-    if (fromDate != null) { payWhere += " AND DATE(paid_at) >= ?"; payArgs.add(fromDate); }
-    if (toDate != null)   { payWhere += " AND DATE(paid_at) <= ?"; payArgs.add(toDate); }
+    if (fromDate != null) { payWhere += ' AND DATE(paid_at) >= ?'; payArgs.add(fromDate); }
+    if (toDate != null)   { payWhere += ' AND DATE(paid_at) <= ?'; payArgs.add(toDate); }
 
     final payRes = await db.rawQuery(
       'SELECT COALESCE(SUM(amount),0) as paid FROM waiter_payments WHERE $payWhere',

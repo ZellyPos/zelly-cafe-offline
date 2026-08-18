@@ -47,7 +47,7 @@ class ProductProvider extends ChangeNotifier {
         await _loadSalesCounts();
       }
     } catch (e) {
-      debugPrint("Error loading products: $e");
+      debugPrint('Error loading products: $e');
     }
 
     _isLoading = false;

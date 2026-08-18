@@ -92,7 +92,26 @@ class IngredientStock {
   }
 }
 
-enum MovementType { IN, OUT, ADJUST, RETURN }
+/// Ombor harakati turi.
+///
+/// Dart nomlari camelCase, lekin bazada tarixiy `IN`/`OUT`/`ADJUST`/`RETURN`
+/// qatorlari saqlanadi — mavjud yozuvlar buzilmasligi uchun konvertatsiya
+/// [dbValue] va [fromDb] orqali qilinadi.
+enum MovementType {
+  stockIn('IN'),
+  stockOut('OUT'),
+  adjust('ADJUST'),
+  stockReturn('RETURN');
+
+  const MovementType(this.dbValue);
+
+  final String dbValue;
+
+  static MovementType fromDb(String value) => MovementType.values.firstWhere(
+    (t) => t.dbValue == value,
+    orElse: () => MovementType.adjust,
+  );
+}
 
 class StockMovement {
   final int? id;
@@ -127,7 +146,7 @@ class StockMovement {
     return {
       'id': id,
       'ingredient_id': ingredientId,
-      'type': type.name,
+      'type': type.dbValue,
       'qty': qty,
       'reason': reason,
       'ref_table': refTable,
@@ -144,7 +163,7 @@ class StockMovement {
     return StockMovement(
       id: map['id'],
       ingredientId: map['ingredient_id'],
-      type: MovementType.values.byName(map['type']),
+      type: MovementType.fromDb(map['type'].toString()),
       qty: (map['qty'] as num).toDouble(),
       reason: map['reason'],
       refTable: map['ref_table'],

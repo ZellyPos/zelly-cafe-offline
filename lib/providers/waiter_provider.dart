@@ -36,7 +36,7 @@ class WaiterProvider with ChangeNotifier {
         forceRemote: forceRemote,
       );
     } catch (e) {
-      debugPrint("Error loading waiters: $e");
+      debugPrint('Error loading waiters: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -303,7 +303,7 @@ class OrderRepository {
         } else if (pricingType == 2) {
           totalRoomCharge += fixedAmount;
         } else if (pricingType == 3) {
-          totalRoomCharge += (totalForServiceCharge * servicePercentage / 100);
+          totalRoomCharge += totalForServiceCharge * servicePercentage / 100;
         }
       }
       final double roomCharge = totalRoomCharge;

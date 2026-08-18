@@ -164,8 +164,9 @@ class ShiftRepository {
       final sum = (row['total_sum'] as num?)?.toDouble() ?? 0.0;
       if (type == 'IN') {
         inSum += sum;
-      } else if (type == 'OUT')
+      } else if (type == 'OUT') {
         outSum += sum;
+      }
     }
 
     // Smenaning ochilish balansini olish

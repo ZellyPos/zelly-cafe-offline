@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../../core/utils/price_formatter.dart';
+import '../app_logger.dart';
 
 /// ExportService - Hisobotlarni Excel va PDF formatida eksport qilish servisi
 class ExportService {
@@ -59,7 +60,7 @@ class ExportService {
       }
       return null;
     } catch (e) {
-      print('Excel export error: $e');
+      AppLogger.w('Export', 'Excel export error: $e');
       return null;
     }
   }
@@ -158,7 +159,7 @@ class ExportService {
       await file.writeAsBytes(await pdf.save());
       return fullPath;
     } catch (e) {
-      print('PDF export error: $e');
+      AppLogger.w('Export', 'PDF export error: $e');
       return null;
     }
   }

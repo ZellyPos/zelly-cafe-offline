@@ -157,7 +157,7 @@ class _WaiterPaymentsScreenState extends State<WaiterPaymentsScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: disabled
-                        ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.4)
+                        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
                         : selected
                         ? const Color(0xFF6366F1)
                         : theme.colorScheme.surfaceContainerHighest,
@@ -169,10 +169,10 @@ class _WaiterPaymentsScreenState extends State<WaiterPaymentsScreen> {
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: disabled
-                          ? theme.colorScheme.onSurface.withOpacity(0.3)
+                          ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
                           : selected
                           ? Colors.white
-                          : theme.colorScheme.onSurface.withOpacity(0.7),
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
@@ -193,13 +193,13 @@ class _WaiterPaymentsScreenState extends State<WaiterPaymentsScreen> {
             Icon(
               Icons.people_alt_rounded,
               size: 64,
-              color: theme.colorScheme.onSurface.withOpacity(0.1),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
             ),
             const SizedBox(height: 12),
             Text(
               'Ofisantlar topilmadi',
               style: TextStyle(
-                color: theme.colorScheme.onSurface.withOpacity(0.4),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ),
           ],
@@ -269,8 +269,8 @@ class _WaiterCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: unpaid > 0
-              ? Colors.red.withOpacity(0.2)
-              : theme.dividerColor.withOpacity(0.12),
+              ? Colors.red.withValues(alpha: 0.2)
+              : theme.dividerColor.withValues(alpha: 0.12),
         ),
       ),
       child: Padding(
@@ -301,7 +301,7 @@ class _WaiterCard extends StatelessWidget {
                           fontSize: 12,
                           color: noRate
                               ? Colors.orange
-                              : theme.colorScheme.onSurface.withOpacity(0.5),
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -312,7 +312,7 @@ class _WaiterCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: (isActive
                         ? const Color(0xFF10B981)
-                        : Colors.grey).withOpacity(0.12),
+                        : Colors.grey).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -402,7 +402,7 @@ class _WaiterCard extends StatelessWidget {
                         backgroundColor: const Color(0xFF6366F1),
                         foregroundColor: Colors.white,
                         disabledBackgroundColor:
-                            const Color(0xFF6366F1).withOpacity(0.3),
+                            const Color(0xFF6366F1).withValues(alpha: 0.3),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -431,7 +431,7 @@ class _WaiterCard extends StatelessWidget {
       width: 44,
       height: 44,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Center(
@@ -461,7 +461,7 @@ class _WaiterCard extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 13,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ),
@@ -596,7 +596,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 children: [
                   _row(theme, 'Hisoblangan:', widget.unpaid),
                   const SizedBox(height: 6),
-                  Divider(height: 1, color: theme.dividerColor.withOpacity(0.3)),
+                  Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.3)),
                   const SizedBox(height: 6),
                   _row(theme, 'Qoldiq:', widget.unpaid, color: Colors.red, bold: true),
                 ],
@@ -690,7 +690,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
             label,
             style: TextStyle(
               fontSize: 13,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ),
@@ -774,13 +774,13 @@ class _WaiterPaymentHistoryScreenState
                   Icon(
                     Icons.receipt_long_rounded,
                     size: 64,
-                    color: theme.colorScheme.onSurface.withOpacity(0.1),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'To\'lovlar tarixi yo\'q',
                     style: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
@@ -803,7 +803,7 @@ class _WaiterPaymentHistoryScreenState
                     color: theme.colorScheme.surface,
                     border: Border(
                       top: BorderSide(
-                        color: theme.dividerColor.withOpacity(0.15),
+                        color: theme.dividerColor.withValues(alpha: 0.15),
                       ),
                     ),
                   ),
@@ -845,7 +845,7 @@ class _WaiterPaymentHistoryScreenState
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.12)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
@@ -853,7 +853,7 @@ class _WaiterPaymentHistoryScreenState
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withOpacity(0.1),
+              color: const Color(0xFF10B981).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
@@ -892,7 +892,7 @@ class _WaiterPaymentHistoryScreenState
                       p.createdBy,
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   ),
@@ -903,7 +903,7 @@ class _WaiterPaymentHistoryScreenState
                       'Izoh: ${p.note}',
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   ),

@@ -151,7 +151,7 @@ class BootstrapErrorApp extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFF2D2D2D),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -174,13 +174,13 @@ class BootstrapErrorApp extends StatelessWidget {
               Text(
                 'Ilovani ishga tushirishda texnik muammo yuzaga keldi. Iltimos, administratorga murojaat qiling.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
               ),
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: SelectableText(

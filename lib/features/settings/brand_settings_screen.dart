@@ -34,7 +34,7 @@ class BrandSettingsScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: const Text(
-          "Brend / Login rasmi",
+          'Brend / Login rasmi',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -50,14 +50,14 @@ class BrandSettingsScreen extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20),
+              BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 20),
             ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                "Login ekrani rasmi",
+                'Login ekrani rasmi',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -105,7 +105,7 @@ class BrandSettingsScreen extends StatelessWidget {
                         }
                       },
                       icon: const Icon(Icons.upload),
-                      label: const Text("Rasm tanlash"),
+                      label: const Text('Rasm tanlash'),
                       style: OutlinedButton.styleFrom(
                         fixedSize: const Size.fromHeight(50),
                         shape: RoundedRectangleBorder(
@@ -133,13 +133,13 @@ class BrandSettingsScreen extends StatelessWidget {
               const Divider(),
               const SizedBox(height: 16),
               const Text(
-                "Umumiy Sozlamalar",
+                'Umumiy Sozlamalar',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               SwitchListTile(
                 title: const Text(
-                  "Ombor qismini yoqish",
+                  'Ombor qismini yoqish',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: const Text(
@@ -155,7 +155,7 @@ class BrandSettingsScreen extends StatelessWidget {
               ),
               SwitchListTile(
                 title: const Text(
-                  "Kunlik avtomatik qayta ishga tushirish",
+                  'Kunlik avtomatik qayta ishga tushirish',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: const Text(
@@ -171,9 +171,9 @@ class BrandSettingsScreen extends StatelessWidget {
               if (provider.dailyRestartEnabled)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text("Qayta ishga tushish vaqti"),
+                  title: const Text('Qayta ishga tushish vaqti'),
                   subtitle: const Text(
-                    "Ish vaqtidan tashqari vaqt tanlang",
+                    'Ish vaqtidan tashqari vaqt tanlang',
                     style: TextStyle(fontSize: 12),
                   ),
                   trailing: OutlinedButton.icon(
@@ -186,12 +186,12 @@ class BrandSettingsScreen extends StatelessWidget {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text(
-                    "Ombor tarixini saqlash muddati",
+                    'Ombor tarixini saqlash muddati',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: const Text(
                     "Muddati o'tgan harakatlar kuniga bir marta o'chiriladi. "
-                    "Tannarx va yetkazuvchi tahlili shu tarixga tayanadi — "
+                    'Tannarx va yetkazuvchi tahlili shu tarixga tayanadi — '
                     "muddatni qisqartirishdan oldin o'ylab ko'ring.",
                     style: TextStyle(fontSize: 12),
                   ),

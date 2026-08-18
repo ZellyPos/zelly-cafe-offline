@@ -115,7 +115,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.shadowColor.withOpacity(0.03),
+                    color: theme.shadowColor.withValues(alpha: 0.03),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -136,7 +136,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                   Text(
                     AppStrings.reportsDescription,
                     style: TextStyle(
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                       fontSize: 14,
                     ),
                   ),
@@ -151,13 +151,13 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.colorScheme.onSurface.withOpacity(0.15),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(
-                          color: theme.colorScheme.onSurface.withOpacity(0.15),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
                         ),
                       ),
                     ),
@@ -178,13 +178,13 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: theme.colorScheme.onSurface.withOpacity(0.15),
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
                               ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: theme.colorScheme.onSurface.withOpacity(0.15),
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
                               ),
                             ),
                           ),
@@ -271,15 +271,15 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           Container(
             width: 42, height: 42,
-            decoration: BoxDecoration(color: color.withOpacity(0.15), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
             child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(width: 14),
@@ -292,7 +292,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
                 const SizedBox(height: 3),
                 Text(subtitle,
                   style: TextStyle(fontSize: 12,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6))),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
               ],
             ),
           ),
@@ -321,7 +321,7 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
         style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: theme.colorScheme.onSurface.withOpacity(0.6),
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
         ),
       ),
     );
@@ -331,16 +331,16 @@ class _TelegramSettingsScreenState extends State<TelegramSettingsScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final bgColor = isDark
-        ? theme.colorScheme.primary.withOpacity(0.08)
+        ? theme.colorScheme.primary.withValues(alpha: 0.08)
         : const Color(0xFFEFF6FF);
     final borderColor = isDark
-        ? theme.colorScheme.primary.withOpacity(0.2)
+        ? theme.colorScheme.primary.withValues(alpha: 0.2)
         : const Color(0xFFDBEAFE);
     final headingColor = isDark
         ? theme.colorScheme.primary
         : const Color(0xFF1E40AF);
     final textColor = isDark
-        ? theme.colorScheme.primary.withOpacity(0.85)
+        ? theme.colorScheme.primary.withValues(alpha: 0.85)
         : const Color(0xFF1E40AF);
     final iconColor = isDark
         ? theme.colorScheme.primary

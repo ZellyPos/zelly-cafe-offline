@@ -371,10 +371,11 @@ class _PosScreenState extends State<PosScreen> {
           const SizedBox(width: 8),
           IconButton(
             onPressed: () async {
-              if (await context.read<CartProvider>().checkPermission(
-                context,
-                'perm_manage_tables',
-              )) {
+              final allowed = await context
+                  .read<CartProvider>()
+                  .checkPermission(context, 'perm_manage_tables');
+              if (!context.mounted) return;
+              if (allowed) {
                 _showChangeTableDialog(context);
               }
             },
@@ -555,12 +556,12 @@ class _PosScreenState extends State<PosScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               color: isDark
-                  ? Colors.orange.withOpacity(0.2)
-                  : Colors.orange.withOpacity(0.1),
+                  ? Colors.orange.withValues(alpha: 0.2)
+                  : Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              "Daq: ${DateTime.now().difference(cartProvider.activeOpenedAt!).inMinutes}",
+              'Daq: ${DateTime.now().difference(cartProvider.activeOpenedAt!).inMinutes}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: isDark ? Colors.orange : Colors.orange.shade900,
@@ -724,7 +725,7 @@ class _PosScreenState extends State<PosScreen> {
                   p.isActive &&
                   (query.isEmpty ||
                       p.name.toLowerCase().contains(query) ||
-                      (p.category.toLowerCase().contains(query) ?? false)),
+                      p.category.toLowerCase().contains(query)),
             )
             .toList();
 
@@ -946,9 +947,9 @@ class _PosScreenState extends State<PosScreen> {
                                 fit: StackFit.expand,
                                 children: [
                                   Image.file(
-                                    File(catImagePath!),
+                                    File(catImagePath),
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
+                                    errorBuilder: (_, _, _) =>
                                         const SizedBox.shrink(),
                                   ),
                                   Container(
@@ -958,7 +959,7 @@ class _PosScreenState extends State<PosScreen> {
                                         end: Alignment.bottomCenter,
                                         colors: [
                                           Colors.transparent,
-                                          Colors.black.withOpacity(0.6),
+                                          Colors.black.withValues(alpha: 0.6),
                                         ],
                                       ),
                                     ),
@@ -1118,11 +1119,11 @@ class _PosScreenState extends State<PosScreen> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: Image.file(
-                        File(catImagePath!),
+                        File(catImagePath),
                         width: 32,
                         height: 32,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1275,7 +1276,7 @@ class _PosScreenState extends State<PosScreen> {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1284,16 +1285,16 @@ class _PosScreenState extends State<PosScreen> {
             const SizedBox(width: 8),
             Text(
               _currentSort == ProductSortMode.custom
-                  ? "Mening tartibim"
+                  ? 'Mening tartibim'
                   : _currentSort == ProductSortMode.popularity
-                  ? "Ommabop"
+                  ? 'Ommabop'
                   : _currentSort == ProductSortMode.priceHighToLow
-                  ? "Qimmat"
+                  ? 'Qimmat'
                   : _currentSort == ProductSortMode.priceLowToHigh
-                  ? "Arzon"
+                  ? 'Arzon'
                   : _currentSort == ProductSortMode.availableFirst
-                  ? "Bor taomlar"
-                  : "Alfabit",
+                  ? 'Bor taomlar'
+                  : 'Alfabit',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
             const Icon(Icons.arrow_drop_down, size: 18),
@@ -1303,11 +1304,11 @@ class _PosScreenState extends State<PosScreen> {
       itemBuilder: (BuildContext context) => <PopupMenuEntry<ProductSortMode>>[
         const PopupMenuItem<ProductSortMode>(
           value: ProductSortMode.custom,
-          child: Text("Sizning tartibingiz"),
+          child: Text('Sizning tartibingiz'),
         ),
         const PopupMenuItem<ProductSortMode>(
           value: ProductSortMode.availableFirst,
-          child: Text("Bor taomlar yuqorida"),
+          child: Text('Bor taomlar yuqorida'),
         ),
         const PopupMenuItem<ProductSortMode>(
           value: ProductSortMode.popularity,
@@ -1425,7 +1426,7 @@ class _PosScreenState extends State<PosScreen> {
                                   : null,
                               boxShadow: [
                                 BoxShadow(
-                                  color: theme.shadowColor.withOpacity(0.05),
+                                  color: theme.shadowColor.withValues(alpha: 0.05),
                                   blurRadius: 4,
                                   offset: const Offset(0, 2),
                                 ),
@@ -1436,9 +1437,9 @@ class _PosScreenState extends State<PosScreen> {
                               children: [
                                 if (hasImage)
                                   Image.file(
-                                    File(catImagePath!),
+                                    File(catImagePath),
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
+                                    errorBuilder: (_, _, _) =>
                                         const SizedBox.shrink(),
                                   ),
                                 if (hasImage)
@@ -1449,7 +1450,7 @@ class _PosScreenState extends State<PosScreen> {
                                         end: Alignment.bottomCenter,
                                         colors: [
                                           Colors.transparent,
-                                          Colors.black.withOpacity(0.6),
+                                          Colors.black.withValues(alpha: 0.6),
                                         ],
                                       ),
                                     ),
@@ -1511,7 +1512,7 @@ class _PosScreenState extends State<PosScreen> {
       builder: (context) => QuantityDialog(product: product),
     );
 
-    if (result != null && result is Map && mounted) {
+    if (result != null && result is Map && context.mounted) {
       final double qty = result['quantity'];
       final double price = result['price'];
       final modifiedProduct = product.copyWith(price: price);
@@ -1627,9 +1628,10 @@ class _PosScreenState extends State<PosScreen> {
       }
 
       if (success) {
+        if (!context.mounted) return;
         final orderId = context.read<CartProvider>().activeOrderId;
         final tableProvider = context.read<TableProvider>();
-        if (orderId != null && mounted) {
+        if (orderId != null) {
           if (connectivity.mode == ConnectivityMode.client) {
             await connectivity.postRemoteData(
               '/orders/$orderId/bill_requested',
@@ -1729,7 +1731,7 @@ class _PosScreenState extends State<PosScreen> {
                         'Quyidagi stollardan birini tanlang. Uning buyurtmasi ushbu stolga qo\'shiladi.',
                         style: TextStyle(
                           fontSize: 14,
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ),
@@ -1771,7 +1773,7 @@ class _PosScreenState extends State<PosScreen> {
                                       decoration: BoxDecoration(
                                         color: isSelected
                                             ? AppTheme.primaryColor
-                                            : theme.dividerColor.withOpacity(
+                                            : theme.dividerColor.withValues(alpha: 
                                                 0.1,
                                               ),
                                         borderRadius: BorderRadius.circular(12),
@@ -1912,7 +1914,7 @@ class _PosScreenState extends State<PosScreen> {
                                             boxShadow: [
                                               BoxShadow(
                                                 color: theme.shadowColor
-                                                    .withOpacity(0.1),
+                                                    .withValues(alpha: 0.1),
                                                 blurRadius: 4,
                                                 offset: const Offset(0, 2),
                                               ),
@@ -2074,7 +2076,7 @@ class _PosScreenState extends State<PosScreen> {
                                       decoration: BoxDecoration(
                                         color: isSelected
                                             ? AppTheme.primaryColor
-                                            : theme.dividerColor.withOpacity(
+                                            : theme.dividerColor.withValues(alpha: 
                                                 0.1,
                                               ),
                                         borderRadius: BorderRadius.circular(12),
@@ -2087,7 +2089,7 @@ class _PosScreenState extends State<PosScreen> {
                                         boxShadow: [
                                           BoxShadow(
                                             color: theme.shadowColor
-                                                .withOpacity(0.05),
+                                                .withValues(alpha: 0.05),
                                             blurRadius: 4,
                                             offset: const Offset(0, 2),
                                           ),
@@ -2168,7 +2170,7 @@ class _PosScreenState extends State<PosScreen> {
                                             boxShadow: [
                                               BoxShadow(
                                                 color: theme.shadowColor
-                                                    .withOpacity(0.1),
+                                                    .withValues(alpha: 0.1),
                                                 blurRadius: 4,
                                                 offset: const Offset(0, 2),
                                               ),
@@ -2184,12 +2186,11 @@ class _PosScreenState extends State<PosScreen> {
                                                 color: theme
                                                     .colorScheme
                                                     .onSurface
-                                                    .withOpacity(0.4),
+                                                    .withValues(alpha: 0.4),
                                               ),
                                               const SizedBox(height: 6),
                                               Text(
-                                                table.name ??
-                                                    'Stol ${table.id}',
+                                                table.name,
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 12,
@@ -2268,7 +2269,7 @@ class _PosScreenState extends State<PosScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Buyurtma ${newTable.name ?? 'Stol ${newTable.id}'} ga ko\'chirildi!',
+            'Buyurtma ${newTable.name} ga ko\'chirildi!',
           ),
           backgroundColor: Colors.green,
         ),

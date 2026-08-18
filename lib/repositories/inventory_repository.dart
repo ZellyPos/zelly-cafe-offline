@@ -221,11 +221,11 @@ class InventoryRepository {
 
     // 2. Update Stock
     double factor = 1.0;
-    if (movement.type == MovementType.OUT) factor = -1.0;
-    if (movement.type == MovementType.RETURN) factor = 1.0;
-    if (movement.type == MovementType.IN) factor = 1.0;
+    if (movement.type == MovementType.stockOut) factor = -1.0;
+    if (movement.type == MovementType.stockReturn) factor = 1.0;
+    if (movement.type == MovementType.stockIn) factor = 1.0;
 
-    if (movement.type == MovementType.ADJUST) {
+    if (movement.type == MovementType.adjust) {
       await executor.update(
         'ingredient_stock',
         {

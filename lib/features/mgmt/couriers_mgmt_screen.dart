@@ -105,8 +105,7 @@ class _CouriersMgmtScreenState extends State<CouriersMgmtScreen>
     return Consumer<DeliveryProvider>(
       builder: (_, dp, _) {
         final newCount = dp.newOrders.length;
-        final onWayCount =
-            dp.preparingOrders.length + dp.onWayOrders.length;
+        final onWayCount = dp.preparingOrders.length + dp.onWayOrders.length;
 
         return Container(
           color: theme.colorScheme.surface,
@@ -194,9 +193,12 @@ class _CourierPanel extends StatelessWidget {
                     backgroundColor: const Color(0xFF6366F1),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -218,13 +220,17 @@ class _CourierPanel extends StatelessWidget {
                         Icon(
                           Icons.delivery_dining_outlined,
                           size: 48,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.1,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         Text(
                           "Kurierlar yo'q",
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.4,
+                            ),
                           ),
                         ),
                       ],
@@ -238,14 +244,16 @@ class _CourierPanel extends StatelessWidget {
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (_, i) => _CourierCard(
                     courier: dp.couriers[i],
-                    activeOrderCount:
-                        dp.getCourierActiveCount(dp.couriers[i].id!),
+                    activeOrderCount: dp.getCourierActiveCount(
+                      dp.couriers[i].id!,
+                    ),
                     onEdit: () =>
                         _showCourierDialog(context, courier: dp.couriers[i]),
-                    onToggle: () =>
-                        dp.toggleCourierStatus(dp.couriers[i].id!, !dp.couriers[i].isActive),
-                    onDelete: () =>
-                        _confirmDelete(context, dp.couriers[i], dp),
+                    onToggle: () => dp.toggleCourierStatus(
+                      dp.couriers[i].id!,
+                      !dp.couriers[i].isActive,
+                    ),
+                    onDelete: () => _confirmDelete(context, dp.couriers[i], dp),
                   ),
                 );
               },
@@ -282,8 +290,10 @@ class _CourierPanel extends StatelessWidget {
                     labelText: 'Ism *',
                     prefixIcon: Icon(Icons.person_rounded),
                     border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -294,8 +304,10 @@ class _CourierPanel extends StatelessWidget {
                     labelText: 'Telefon',
                     prefixIcon: Icon(Icons.phone_rounded),
                     border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -324,13 +336,15 @@ class _CourierPanel extends StatelessWidget {
                 Navigator.pop(ctx);
                 final dp = context.read<DeliveryProvider>();
                 if (isEdit) {
-                  await dp.updateCourier(courier.copyWith(
-                    name: name,
-                    phone: phoneCtrl.text.trim().isEmpty
-                        ? null
-                        : phoneCtrl.text.trim(),
-                    isActive: isActive,
-                  ));
+                  await dp.updateCourier(
+                    courier.copyWith(
+                      name: name,
+                      phone: phoneCtrl.text.trim().isEmpty
+                          ? null
+                          : phoneCtrl.text.trim(),
+                      isActive: isActive,
+                    ),
+                  );
                 } else {
                   await dp.addCourier(
                     name,
@@ -344,7 +358,8 @@ class _CourierPanel extends StatelessWidget {
                 backgroundColor: const Color(0xFF6366F1),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               child: Text(
                 isEdit ? 'Saqlash' : "Qo'shish",
@@ -358,7 +373,10 @@ class _CourierPanel extends StatelessWidget {
   }
 
   void _confirmDelete(
-      BuildContext context, Courier courier, DeliveryProvider dp) {
+    BuildContext context,
+    Courier courier,
+    DeliveryProvider dp,
+  ) {
     final activeCount = dp.getCourierActiveCount(courier.id!);
     showDialog(
       context: context,
@@ -370,11 +388,9 @@ class _CourierPanel extends StatelessWidget {
         content: activeCount > 0
             ? Text(
                 "${courier.name} hozir $activeCount ta yo'ldagi buyurtmaga biriktirilgan. "
-                "Avval bu buyurtmalarni yakunlang.",
+                'Avval bu buyurtmalarni yakunlang.',
               )
-            : Text(
-                "${courier.name} ni o'chirishni tasdiqlaysizmi?",
-              ),
+            : Text("${courier.name} ni o'chirishni tasdiqlaysizmi?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -387,8 +403,10 @@ class _CourierPanel extends StatelessWidget {
                 await dp.deleteCourier(courier.id!);
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text("O'chirish",
-                  style: TextStyle(color: Colors.white)),
+              child: const Text(
+                "O'chirish",
+                style: TextStyle(color: Colors.white),
+              ),
             ),
         ],
       ),
@@ -489,11 +507,11 @@ class _CourierCard extends StatelessWidget {
                       GestureDetector(
                         onTap: () {
                           Clipboard.setData(
-                              ClipboardData(text: courier.phone!));
+                            ClipboardData(text: courier.phone!),
+                          );
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                  '${courier.phone} nusxalandi'),
+                              content: Text('${courier.phone} nusxalandi'),
                               duration: const Duration(seconds: 1),
                             ),
                           );
@@ -503,16 +521,18 @@ class _CourierCard extends StatelessWidget {
                             Icon(
                               Icons.phone_rounded,
                               size: 12,
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.45),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.45,
+                              ),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               courier.phone!,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: theme.colorScheme.onSurface
-                                    .withValues(alpha: 0.55),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.55,
+                                ),
                               ),
                             ),
                           ],
@@ -528,8 +548,7 @@ class _CourierCard extends StatelessWidget {
           if (activeOrderCount > 0) ...[
             const SizedBox(height: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
@@ -537,8 +556,11 @@ class _CourierCard extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.delivery_dining_rounded,
-                      size: 14, color: Colors.orange),
+                  const Icon(
+                    Icons.delivery_dining_rounded,
+                    size: 14,
+                    color: Colors.orange,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     "Hozir: $activeOrderCount ta buyurtma yo'lda",
@@ -559,7 +581,7 @@ class _CourierCard extends StatelessWidget {
               Switch.adaptive(
                 value: isActive,
                 onChanged: (_) => onToggle(),
-                activeColor: const Color(0xFF10B981),
+                activeThumbColor: const Color(0xFF10B981),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               const Spacer(),
@@ -567,20 +589,20 @@ class _CourierCard extends StatelessWidget {
                 icon: const Icon(Icons.edit_rounded, size: 18),
                 onPressed: onEdit,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                    minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 tooltip: 'Tahrirlash',
               ),
               IconButton(
-                icon: Icon(Icons.delete_outline_rounded,
-                    size: 18,
-                    color: activeOrderCount > 0
-                        ? Colors.grey.shade300
-                        : Colors.red),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 18,
+                  color: activeOrderCount > 0
+                      ? Colors.grey.shade300
+                      : Colors.red,
+                ),
                 onPressed: onDelete,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                    minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 tooltip: "O'chirish",
               ),
             ],
@@ -739,9 +761,9 @@ class _OrderCard extends StatelessWidget {
     // Courier info
     final courierName = order.courierId != null
         ? allCouriers
-            .where((c) => c.id == order.courierId)
-            .map((c) => c.name)
-            .firstOrNull
+              .where((c) => c.id == order.courierId)
+              .map((c) => c.name)
+              .firstOrNull
         : null;
 
     // Time label
@@ -771,7 +793,9 @@ class _OrderCard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: isNew
                         ? Colors.blue.withValues(alpha: 0.1)
@@ -807,7 +831,8 @@ class _OrderCard extends StatelessWidget {
                   GestureDetector(
                     onTap: () {
                       Clipboard.setData(
-                          ClipboardData(text: order.customerPhone!));
+                        ClipboardData(text: order.customerPhone!),
+                      );
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('${order.customerPhone} nusxalandi'),
@@ -820,16 +845,18 @@ class _OrderCard extends StatelessWidget {
                         Icon(
                           Icons.phone_rounded,
                           size: 14,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.5),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           order.customerPhone!,
                           style: TextStyle(
                             fontSize: 12,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.6,
+                            ),
                           ),
                         ),
                       ],
@@ -855,7 +882,9 @@ class _OrderCard extends StatelessWidget {
                       order.deliveryAddress!,
                       style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.65,
+                        ),
                       ),
                     ),
                   ),
@@ -911,8 +940,11 @@ class _OrderCard extends StatelessWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(Icons.delivery_dining_rounded,
-                      size: 14, color: Colors.orange),
+                  const Icon(
+                    Icons.delivery_dining_rounded,
+                    size: 14,
+                    color: Colors.orange,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Kuryer: $courierName',
@@ -934,39 +966,35 @@ class _OrderCard extends StatelessWidget {
                   if (isNew)
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () =>
-                            _showAssignDialog(context, order),
+                        onPressed: () => _showAssignDialog(context, order),
                         icon: const Icon(
-                            Icons.delivery_dining_rounded, size: 16),
+                          Icons.delivery_dining_rounded,
+                          size: 16,
+                        ),
                         label: const Text('Kuryer biriktir'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              const Color(0xFF6366F1),
+                          backgroundColor: const Color(0xFF6366F1),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                       ),
                     ),
                   if (isOnWay) ...[
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () =>
-                            _showAssignDialog(context, order),
-                        icon: const Icon(Icons.swap_horiz_rounded,
-                            size: 16),
+                        onPressed: () => _showAssignDialog(context, order),
+                        icon: const Icon(Icons.swap_horiz_rounded, size: 16),
                         label: const Text("Kuryer o'zgartir"),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.orange,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                       ),
                     ),
@@ -977,14 +1005,12 @@ class _OrderCard extends StatelessWidget {
                         icon: const Icon(Icons.check_rounded, size: 16),
                         label: const Text('Yetkazildi ✓'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              const Color(0xFF10B981),
+                          backgroundColor: const Color(0xFF10B981),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                       ),
                     ),
@@ -1000,9 +1026,9 @@ class _OrderCard extends StatelessWidget {
 
   void _showAssignDialog(BuildContext context, Order order) {
     if (couriers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Faol kurierlar yo'q")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Faol kurierlar yo'q")));
       return;
     }
 
@@ -1019,58 +1045,65 @@ class _OrderCard extends StatelessWidget {
           ),
           content: SizedBox(
             width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Active couriers
-                ...couriers.map((c) {
-                  final count = dp.getCourierActiveCount(c.id!);
-                  return RadioListTile<int>(
-                    value: c.id!,
-                    groupValue: selectedId,
-                    onChanged: (v) => setD(() => selectedId = v),
-                    title: Text(
-                      c.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: count > 0
-                        ? Text(
-                            "Hozir $count ta buyurtma",
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.orange,
-                            ),
-                          )
-                        : const Text(
-                            'Bo\'sh',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF10B981),
-                            ),
-                          ),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  );
-                }),
-
-                // Inactive couriers (greyed)
-                ...allCouriers.where((c) => !c.isActive).map((c) =>
-                  Opacity(
-                    opacity: 0.4,
-                    child: RadioListTile<int>(
+            // Flutter 3.32+ da RadioListTile'ning `groupValue`/`onChanged`
+            // parametrlari eskirgan — tanlov endi RadioGroup ajdodi orqali
+            // boshqariladi.
+            child: RadioGroup<int>(
+              groupValue: selectedId,
+              onChanged: (v) => setD(() => selectedId = v),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Active couriers
+                  ...couriers.map((c) {
+                    final count = dp.getCourierActiveCount(c.id!);
+                    return RadioListTile<int>(
                       value: c.id!,
-                      groupValue: null,
-                      onChanged: null,
-                      title: Text(c.name),
-                      subtitle: const Text(
-                        'Nofaol',
-                        style: TextStyle(fontSize: 12),
+                      title: Text(
+                        c.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
+                      subtitle: count > 0
+                          ? Text(
+                              'Hozir $count ta buyurtma',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange,
+                              ),
+                            )
+                          : const Text(
+                              'Bo\'sh',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF10B981),
+                              ),
+                            ),
                       contentPadding: EdgeInsets.zero,
                       dense: true,
-                    ),
-                  )),
-              ],
+                    );
+                  }),
+
+                  // Inactive couriers (greyed)
+                  ...allCouriers
+                      .where((c) => !c.isActive)
+                      .map(
+                        (c) => Opacity(
+                          opacity: 0.4,
+                          child: RadioListTile<int>(
+                            value: c.id!,
+                            enabled: false,
+                            title: Text(c.name),
+                            subtitle: const Text(
+                              'Nofaol',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                          ),
+                        ),
+                      ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -1092,7 +1125,8 @@ class _OrderCard extends StatelessWidget {
                 backgroundColor: const Color(0xFF6366F1),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               child: const Text(
                 'Biriktirish',
@@ -1109,7 +1143,7 @@ class _OrderCard extends StatelessWidget {
     if (order.courierId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Avval kuryer biriktiring"),
+          content: Text('Avval kuryer biriktiring'),
           backgroundColor: Colors.orange,
         ),
       );

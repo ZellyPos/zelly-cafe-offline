@@ -175,7 +175,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog>
       final printError = cartProvider.lastPrintError;
       if (printError != null) {
         messenger.showSnackBar(SnackBar(
-          content: Text("Buyurtma saqlandi, lekin chek chiqarilmadi: $printError"),
+          content: Text('Buyurtma saqlandi, lekin chek chiqarilmadi: $printError'),
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 4),
         ));
@@ -296,7 +296,7 @@ class _StandardPaymentDialogState extends State<StandardPaymentDialog>
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                "Jami summa",
+                'Jami summa',
                 style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.65)),
               ),
               Text(
@@ -806,7 +806,7 @@ class _ChangeDisplay extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                "Qaytim",
+                'Qaytim',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
@@ -862,7 +862,7 @@ class _RemainingIndicator extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                isPaid ? "To'liq to'landi" : "Qolgan summa:",
+                isPaid ? "To'liq to'landi" : 'Qolgan summa:',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 15,
@@ -1049,7 +1049,7 @@ class _PrintToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SwitchListTile(
-      title: const Text("Chek chiqarish", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+      title: const Text('Chek chiqarish', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
       subtitle: const Text("To'lovdan so'ng printerdan chek chiqadi", style: TextStyle(fontSize: 12)),
       value: value,
       onChanged: onChanged,
@@ -1109,7 +1109,7 @@ class _FinishButton extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        "Qaytim: $changeLabel",
+                        'Qaytim: $changeLabel',
                         style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
                       ),
                     ),

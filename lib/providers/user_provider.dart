@@ -30,7 +30,7 @@ class UserProvider with ChangeNotifier {
         forceRemote: forceRemote,
       );
     } catch (e) {
-      debugPrint("Error loading users: $e");
+      debugPrint('Error loading users: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

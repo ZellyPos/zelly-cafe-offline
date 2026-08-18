@@ -29,7 +29,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
       final matchesSearch = w.name.toLowerCase().contains(
         searchQuery.toLowerCase(),
       );
-      final isKassa = w.name == "Kassa";
+      final isKassa = w.name == 'Kassa';
 
       bool matchesType = true;
       if (filterType != null) {
@@ -117,16 +117,16 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                     decoration: InputDecoration(
                       hintText: AppStrings.searchWaiterHint,
                       hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                       prefixIcon: Icon(
                         Icons.search,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                       filled: true,
                       fillColor: theme.brightness == Brightness.light
                           ? const Color(0xFFF1F5F9)
-                          : theme.colorScheme.onSurface.withOpacity(0.05),
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -145,7 +145,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                       filled: true,
                       fillColor: theme.brightness == Brightness.light
                           ? const Color(0xFFF1F5F9)
-                          : theme.colorScheme.onSurface.withOpacity(0.05),
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -212,13 +212,13 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
           Icon(
             Icons.people_outline,
             size: 64,
-            color: theme.colorScheme.onSurface.withOpacity(0.1),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.1),
           ),
           const SizedBox(height: 16),
           Text(
             AppStrings.noWaitersFound,
             style: TextStyle(
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               fontSize: 18,
             ),
           ),
@@ -228,7 +228,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
   }
 
   Widget _buildWaiterCard(BuildContext context, Waiter waiter, bool isAdmin) {
-    final bool isKassa = waiter.name == "Kassa";
+    final bool isKassa = waiter.name == 'Kassa';
     String typeLabel = isKassa
         ? AppStrings.kassa
         : (waiter.type == 0 ? AppStrings.fixed : AppStrings.percentage);
@@ -236,11 +236,11 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
         ? Colors.teal
         : (waiter.type == 0 ? Colors.indigo : Colors.orange);
 
-    String valueText = "";
+    String valueText = '';
     if (!isKassa) {
       valueText = waiter.type == 0
           ? "${waiter.value.toStringAsFixed(0)} so'm"
-          : "${waiter.value}%";
+          : '${waiter.value}%';
     } else {
       valueText = AppStrings.primaryStaff;
     }
@@ -253,7 +253,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: theme.shadowColor.withOpacity(0.03),
+            color: theme.shadowColor.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -261,7 +261,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
         border: Border.all(
           color: theme.brightness == Brightness.light
               ? const Color(0xFFE2E8F0)
-              : theme.colorScheme.onSurface.withOpacity(0.1),
+              : theme.colorScheme.onSurface.withValues(alpha: 0.1),
         ),
       ),
       child: Material(
@@ -332,7 +332,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
                 Text(
                   valueText,
                   style: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     fontSize: 12,
                   ),
                 ),
@@ -376,9 +376,9 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Text(
         label,
@@ -948,7 +948,7 @@ class _WaitersMgmtScreenState extends State<WaitersMgmtScreen> {
     final pinController = TextEditingController(text: waiter?.pinCode ?? '');
     int selectedType = waiter?.type ?? 0;
     int isActive = waiter?.isActive ?? 1;
-    bool isKassa = waiter?.name == "Kassa";
+    bool isKassa = waiter?.name == 'Kassa';
     List<String> selectedPermissions = List.from(waiter?.permissions ?? []);
 
     final List<Map<String, String>> availablePermissions = [

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:pointycastle/export.dart';
 import 'package:pointycastle/asn1.dart';
+import '../app_logger.dart';
 
 /// RSA-SHA256 raqamli imzolarini tekshirish uchun xizmat.
 class RsaVerifier {
@@ -40,20 +41,20 @@ class RsaVerifier {
       final isValid = decryptedHex.endsWith(expectedDigestInfo);
 
       if (!isValid) {
-        print('RSA Mismatch Diagnostics:');
-        print('Expected end: $expectedDigestInfo');
+        AppLogger.d('RSA', 'RSA Mismatch Diagnostics:');
+        AppLogger.d('RSA', 'Expected end: $expectedDigestInfo');
         if (decryptedHex.length >= expectedDigestInfo.length) {
-          print(
+          AppLogger.d('RSA', 
             'Actual end:   ${decryptedHex.substring(decryptedHex.length - expectedDigestInfo.length)}',
           );
         } else {
-          print('Decrypted block too short: $decryptedHex');
+          AppLogger.d('RSA', 'Decrypted block too short: $decryptedHex');
         }
       }
 
       return isValid;
     } catch (e) {
-      print('RSA Verification Error: $e');
+      AppLogger.w('RSA', 'RSA Verification Error: $e');
       return false;
     }
   }

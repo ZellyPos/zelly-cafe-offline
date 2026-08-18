@@ -141,7 +141,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: disabled
-              ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.4)
+              ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
               : selected
               ? Colors.red.shade600
               : theme.colorScheme.surfaceContainerHighest,
@@ -159,10 +159,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               icon,
               size: 15,
               color: disabled
-                  ? theme.colorScheme.onSurface.withOpacity(0.3)
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
                   : selected
                   ? Colors.white
-                  : theme.colorScheme.onSurface.withOpacity(0.7),
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.7),
             ),
             const SizedBox(width: 6),
             Text(
@@ -171,10 +171,10 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: disabled
-                    ? theme.colorScheme.onSurface.withOpacity(0.3)
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
                     : selected
                     ? Colors.white
-                    : theme.colorScheme.onSurface.withOpacity(0.7),
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -193,7 +193,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
             Icon(
               hasCats ? Icons.receipt_long_rounded : Icons.category_rounded,
               size: 64,
-              color: theme.colorScheme.onSurface.withOpacity(0.12),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.12),
             ),
             const SizedBox(height: 12),
             Text(
@@ -202,7 +202,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                   : 'Avval kategoriya qo\'shing',
               style: TextStyle(
                 fontSize: 15,
-                color: theme.colorScheme.onSurface.withOpacity(0.4),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ),
           ],
@@ -239,7 +239,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.15)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,7 +250,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
-              color: theme.colorScheme.onSurface.withOpacity(0.45),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
             ),
           ),
           const SizedBox(height: 10),
@@ -264,7 +264,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       e.key,
                       style: TextStyle(
                         fontSize: 13,
-                        color: theme.colorScheme.onSurface.withOpacity(0.75),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
                       ),
                     ),
                   ),
@@ -332,7 +332,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.dividerColor.withOpacity(0.12)),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.12)),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -340,7 +340,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
+                color: Colors.red.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -371,7 +371,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       'Smena #${expense.shiftId}',
                       style: TextStyle(
                         fontSize: 11,
-                        color: theme.colorScheme.onSurface.withOpacity(0.55),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                       ),
                     ),
                   ),
@@ -386,14 +386,14 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                     Icon(
                       Icons.access_time_rounded,
                       size: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.4),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       timeStr,
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -405,7 +405,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                       expense.note!,
                       style: TextStyle(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withOpacity(0.55),
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -577,7 +577,7 @@ class _AddExpenseDialogState extends State<_AddExpenseDialog> {
           children: [
             // Kategoriya
             DropdownButtonFormField<int>(
-              value: _selectedCatId,
+              initialValue: _selectedCatId,
               decoration: const InputDecoration(
                 labelText: 'Kategoriya',
                 border: OutlineInputBorder(),
@@ -635,7 +635,7 @@ class _AddExpenseDialogState extends State<_AddExpenseDialog> {
                     size: 16,
                     color: widget.shiftId != null
                         ? const Color(0xFF10B981)
-                        : theme.colorScheme.onSurface.withOpacity(0.4),
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.4),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -645,8 +645,8 @@ class _AddExpenseDialogState extends State<_AddExpenseDialog> {
                     style: TextStyle(
                       fontSize: 13,
                       color: widget.shiftId != null
-                          ? theme.colorScheme.onSurface.withOpacity(0.75)
-                          : theme.colorScheme.onSurface.withOpacity(0.4),
+                          ? theme.colorScheme.onSurface.withValues(alpha: 0.75)
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.4),
                     ),
                   ),
                 ],

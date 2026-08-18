@@ -144,7 +144,7 @@ class _FloorPlanEditorState extends State<FloorPlanEditor> {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -214,7 +214,7 @@ class _FloorPlanEditorState extends State<FloorPlanEditor> {
                         border: Border.all(color: Colors.white, width: 2),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 4,
                           ),
                         ],
@@ -353,9 +353,8 @@ class _FloorPlanEditorState extends State<FloorPlanEditor> {
       ),
     );
 
-    if (confirmed == true &&
-        nameController.text.isNotEmpty &&
-        context.mounted) {
+    if (!mounted) return;
+    if (confirmed == true && nameController.text.isNotEmpty) {
       final provider = context.read<TableProvider>();
       final connectivity = context.read<ConnectivityProvider>();
 
@@ -397,7 +396,8 @@ class _FloorPlanEditorState extends State<FloorPlanEditor> {
         ) ??
         false;
 
-    if (confirmed && context.mounted) {
+    if (!mounted) return;
+    if (confirmed) {
       final provider = context.read<TableProvider>();
       final connectivity = context.read<ConnectivityProvider>();
       final success = await provider.deleteTable(
@@ -405,9 +405,10 @@ class _FloorPlanEditorState extends State<FloorPlanEditor> {
         connectivity: connectivity,
       );
 
+      if (!mounted) return;
       if (success) {
         setState(() => _selectedTableId = null);
-      } else if (context.mounted) {
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Xatolik: Stol band bo\'lishi mumkin')),
         );
@@ -441,7 +442,7 @@ class GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.grey.withOpacity(0.2)
+      ..color = Colors.grey.withValues(alpha: 0.2)
       ..strokeWidth = 1;
 
     for (double i = 0; i <= 1.0; i += step) {

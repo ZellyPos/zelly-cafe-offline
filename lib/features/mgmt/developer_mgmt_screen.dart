@@ -786,7 +786,7 @@ class _TableDetailScreenState extends State<TableDetailScreen> {
         onSave: () async {
           final ok = await dev.updateRow(
               widget.tableName, idCol, row[idCol], edited);
-          if (ok) {
+          if (ok && ctx.mounted) {
             Navigator.pop(ctx);
             _loadData();
           }
@@ -809,7 +809,7 @@ class _TableDetailScreenState extends State<TableDetailScreen> {
         data: newData,
         onSave: () async {
           final ok = await dev.addRow(widget.tableName, newData);
-          if (ok) {
+          if (ok && ctx.mounted) {
             Navigator.pop(ctx);
             _loadData();
           }

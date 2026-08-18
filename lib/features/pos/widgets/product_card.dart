@@ -130,7 +130,7 @@ class ProductCardWidget extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    "/ ${AppStrings.getUnitLabel(product.unit)}",
+                                    '/ ${AppStrings.getUnitLabel(product.unit)}',
                                     style: TextStyle(
                                       color: theme.colorScheme.onSurface
                                           .withValues(alpha: 0.4),
@@ -308,8 +308,8 @@ class ProductCardWidget extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             displayQty <= 0
-                ? "Tugadi"
-                : "Qoldi: ${displayQty.toStringAsFixed(0)}",
+                ? 'Tugadi'
+                : 'Qoldi: ${displayQty.toStringAsFixed(0)}',
             style: TextStyle(
               fontSize: 10,
               color: displayQty <= 5

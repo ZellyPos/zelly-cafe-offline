@@ -148,13 +148,13 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
                       ),
                       const SizedBox(width: 4),
                       _buildDropdown<int?>(
-                        label: "Turi",
+                        label: 'Turi',
                         value: filter.orderType,
                         items: const [
-                          DropdownMenuItem(value: null, child: Text("Barchasi")),
-                          DropdownMenuItem(value: 0, child: Text("Stol")),
-                          DropdownMenuItem(value: 1, child: Text("Saboy")),
-                          DropdownMenuItem(value: 2, child: Text("Yetkazish")),
+                          DropdownMenuItem(value: null, child: Text('Barchasi')),
+                          DropdownMenuItem(value: 0, child: Text('Stol')),
+                          DropdownMenuItem(value: 1, child: Text('Saboy')),
+                          DropdownMenuItem(value: 2, child: Text('Yetkazish')),
                         ],
                         onChanged: (val) => reportProvider.updateFilter(
                           orderType: val,
@@ -163,10 +163,10 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
                         context: context,
                       ),
                       _buildDropdown<int?>(
-                        label: "Joy",
+                        label: 'Joy',
                         value: filter.locationId,
                         items: [
-                          const DropdownMenuItem(value: null, child: Text("Barcha joylar")),
+                          const DropdownMenuItem(value: null, child: Text('Barcha joylar')),
                           ...locationProvider.locations.map(
                             (l) => DropdownMenuItem(value: l.id, child: Text(l.name)),
                           ),
@@ -178,10 +178,10 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
                         context: context,
                       ),
                       _buildDropdown<int?>(
-                        label: "Ofitsiant",
+                        label: 'Ofitsiant',
                         value: filter.waiterId,
                         items: [
-                          const DropdownMenuItem(value: null, child: Text("Barcha xodimlar")),
+                          const DropdownMenuItem(value: null, child: Text('Barcha xodimlar')),
                           ...waiterProvider.waiters.map(
                             (w) => DropdownMenuItem(value: w.id, child: Text(w.name)),
                           ),
@@ -260,7 +260,7 @@ class _ReportFilterBarState extends State<ReportFilterBar> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            "$label: ",
+            '$label: ',
             style: TextStyle(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               fontSize: 11,

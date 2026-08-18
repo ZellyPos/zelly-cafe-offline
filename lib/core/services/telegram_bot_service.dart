@@ -310,15 +310,15 @@ class TelegramBotService {
     String label;
     switch (period) {
       case 'week':
-        where = "o.created_at >= ?";
+        where = 'o.created_at >= ?';
         whereArgs = [dayStart.subtract(const Duration(days: 7)).toIso8601String()];
         label = 'So\'nggi 7 kun';
       case 'month':
-        where = "o.created_at >= ?";
+        where = 'o.created_at >= ?';
         whereArgs = [dayStart.subtract(const Duration(days: 30)).toIso8601String()];
         label = 'So\'nggi 30 kun';
       default:
-        where = "o.created_at >= ?";
+        where = 'o.created_at >= ?';
         whereArgs = [dayStartStr];
         label = 'Bugun';
     }

@@ -1,4 +1,4 @@
-#define MyAppVersion "1.0.20"
+#define MyAppVersion "1.0.21"
 #define MyAppName "ZELLY"
 #define MyAppExe "tezzro.exe"
 

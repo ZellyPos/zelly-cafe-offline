@@ -11,7 +11,6 @@ import '../../core/theme.dart';
 import '../../core/app_strings.dart';
 import '../../core/utils/price_formatter.dart';
 import '../../providers/connectivity_provider.dart';
-import '../../providers/cart_provider.dart';
 import '../../providers/app_settings_provider.dart';
 import '../../repositories/inventory_repository.dart';
 
@@ -312,12 +311,12 @@ class _ProductsMgmtScreenState extends State<ProductsMgmtScreen> {
                     ),
                     const SizedBox(width: 8),
                     if (product.quantity != null)
-                      Consumer<CartProvider>(
-                        builder: (context, cart, _) {
-                          final inCart = cart.getProductCartQuantity(
-                            product.id!,
-                          );
-                          final displayQty = product.quantity! - inCart;
+                      Builder(
+                        builder: (context) {
+                          // Ombordagi haqiqiy qoldiq. Savatdagi son
+                          // ayirilmaydi — qoldiq faqat buyurtma
+                          // tasdiqlanganda kamayadi (qarang: product_card.dart).
+                          final displayQty = product.quantity!;
 
                           return Container(
                             padding: const EdgeInsets.symmetric(

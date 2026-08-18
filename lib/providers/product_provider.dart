@@ -5,7 +5,6 @@ import '../data/repositories/product_repository.dart';
 import '../models/product.dart';
 import 'connectivity_provider.dart';
 import '../core/services/audit_service.dart';
-import '../models/order.dart';
 
 String _actor(ConnectivityProvider? connectivity) {
   final name = connectivity?.currentUser?['name'] as String? ?? 'Admin';
@@ -151,22 +150,4 @@ class ProductProvider extends ChangeNotifier {
     await loadProducts(connectivity: connectivity);
   }
 
-  void decrementQuantities(List<OrderItem> items) {
-    bool changed = false;
-    for (var item in items) {
-      final index = _products.indexWhere((p) => p.id == item.productId);
-      if (index != -1) {
-        final product = _products[index];
-        if (product.quantity != null) {
-          _products[index] = product.copyWith(
-            quantity: product.quantity! - item.qty,
-          );
-          changed = true;
-        }
-      }
-    }
-    if (changed) {
-      notifyListeners();
-    }
-  }
 }

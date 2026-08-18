@@ -49,11 +49,16 @@ class ProductCardWidget extends StatelessWidget {
             ? cart.getProductCartQuantity(product.id!)
             : 0.0;
         final inCart = qtyInCart > 0;
-        // Taom tugagan (§9): qoldig'i yuritiladi va savatdagisini hisobga
-        // olganda hech narsa qolmagan. Savatdagi belgidan ustun turadi —
-        // "tugagan" holat muhimroq.
-        final outOfStock =
-            product.quantity != null && (product.quantity! - qtyInCart) <= 0;
+        // Taom tugagan (§9): omborda haqiqatan hech narsa qolmagan.
+        // Savatdagi belgidan ustun turadi — "tugagan" holat muhimroq.
+        //
+        // DIQQAT: bu yerda savatdagi son AYIRILMAYDI. Qoldiq faqat
+        // "Tasdiqlash" bosilganda, `consumeOnConfirm` orqali bazada
+        // kamayadi. Ilgari bu yerda `quantity - qtyInCart` yozilgani uchun
+        // son ikki marta kamayardi: avval bosganda (ko'rinishda), keyin
+        // tasdiqlanganda (bazada) — taom savatda qolgani uchun ayirish
+        // ustma-ust tushardi.
+        final outOfStock = product.quantity != null && product.quantity! <= 0;
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -142,8 +147,7 @@ class ProductCardWidget extends StatelessWidget {
                               ),
                             ),
                             if (product.quantity != null)
-                              _buildStockBadge(
-                                  product.quantity! - qtyInCart, theme),
+                              _buildStockBadge(product.quantity!, theme),
                           ],
                         ),
                       ],

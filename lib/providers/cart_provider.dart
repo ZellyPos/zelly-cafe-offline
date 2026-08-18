@@ -498,6 +498,14 @@ class CartProvider extends ChangeNotifier {
     // Capture providers synchronously before any await
     final tableProvider = context.read<TableProvider>();
     final waiterProvider = context.read<WaiterProvider>();
+    // Ombor sozlamasi ham SHU YERDA o'qiladi. Ilgari u quyiroqda,
+    // bir nechta `await`dan keyin `if (context.mounted)` ichida o'qilardi —
+    // ekran o'sha paytgacha qayta qurilgan bo'lsa qiymat jimgina `false`
+    // bo'lib qolar va qoldiq umuman chegirilmasdi (xato ham chiqmasdi).
+    bool inventoryOn = false;
+    try {
+      inventoryOn = context.read<AppSettingsProvider>().enableInventory;
+    } catch (_) {}
     debugPrint(
       '[confirm] orderId=$_activeOrderId orderType=$_activeOrderType items=${_items.length} unconfirmed=$hasUnconfirmedChanges',
     );
@@ -612,12 +620,13 @@ class CartProvider extends ChangeNotifier {
     // Qoldiq yetmasa buyurtma tasdiqlanmaydi va chek chop etilmadi.
     final bool isClientMode =
         connectivity != null && connectivity.mode == ConnectivityMode.client;
-    bool inventoryOn = false;
-    if (context.mounted) {
-      try {
-        inventoryOn = context.read<AppSettingsProvider>().enableInventory;
-      } catch (_) {}
-    }
+    // Qoldiq chegirilmasa buni sezish qiyin — hech qanday xato chiqmaydi.
+    // Shuning uchun qaror har safar logga yoziladi.
+    AppLogger.i(
+      'ConfirmOrder',
+      'Ombor: inventoryOn=$inventoryOn clientMode=$isClientMode '
+          'qatorlar=${itemsToPrint.length}',
+    );
     if (inventoryOn && !isClientMode) {
       try {
         await InventoryService.instance.consumeOnConfirm(

@@ -34,9 +34,14 @@ class ProduceDialog extends StatefulWidget {
   State<ProduceDialog> createState() => _ProduceDialogState();
 }
 
-class _ProduceDialogState extends State<ProduceDialog> {
+class _ProduceDialogState extends State<ProduceDialog>
+    with TickerProviderStateMixin {
   final _searchController = TextEditingController();
   final _controllers = <int, TextEditingController>{};
+
+  /// Kategoriya TabBar'i (§22). Modal tor bo'lgani uchun ixcham: faqat
+  /// matn, rasm va rang yo'q — asosiy vazifa mahsulot tanlab son kiritish.
+  TabController? _categoryController;
 
   /// Har mahsulotning son maydoni uchun focus — tanlanganda darhol shu
   /// maydonga focus tushadi (§4).
@@ -48,6 +53,46 @@ class _ProduceDialogState extends State<ProduceDialog> {
   bool _saving = false;
   String _query = '';
 
+  /// Tanlangan kategoriya (§22).
+  String _category = _kAllCategories;
+
+  /// Modaldagi mahsulotlardan olingan kategoriyalar, birinchisi "Hammasi".
+  List<String> get _categories {
+    final set = <String>{};
+    for (final p in _all) {
+      final c = p.category.trim();
+      if (c.isNotEmpty) set.add(c);
+    }
+    final list = set.toList()..sort();
+    return [_kAllCategories, ...list];
+  }
+
+  /// Kategoriya kontrollerini ro'yxatga moslaydi (uzunlik o'zgarmas
+  /// bo'lgani uchun qayta yaratiladi).
+  void _syncCategoryController() {
+    final cats = _categories;
+    if (_categoryController?.length == cats.length) return;
+
+    var index = cats.indexOf(_category);
+    if (index < 0) {
+      index = 0;
+      _category = _kAllCategories;
+    }
+
+    _categoryController?.dispose();
+    _categoryController = TabController(
+      length: cats.length,
+      initialIndex: index,
+      vsync: this,
+    )..addListener(() {
+      final c = _categoryController!;
+      if (c.indexIsChanging) return;
+      final selected = cats[c.index];
+      if (selected == _category) return;
+      setState(() => _category = selected);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +102,7 @@ class _ProduceDialogState extends State<ProduceDialog> {
   @override
   void dispose() {
     _searchController.dispose();
+    _categoryController?.dispose();
     for (final c in _controllers.values) {
       c.dispose();
     }
@@ -89,15 +135,15 @@ class _ProduceDialogState extends State<ProduceDialog> {
   }
 
   List<Product> get _filtered {
-    if (_query.isEmpty) return _all;
     final q = _query.toLowerCase();
-    return _all
-        .where(
-          (p) =>
-              p.name.toLowerCase().contains(q) ||
-              p.category.toLowerCase().contains(q),
-        )
-        .toList();
+    return _all.where((p) {
+      if (_category != _kAllCategories && p.category.trim() != _category) {
+        return false;
+      }
+      if (q.isEmpty) return true;
+      return p.name.toLowerCase().contains(q) ||
+          p.category.toLowerCase().contains(q);
+    }).toList();
   }
 
   TextEditingController _controllerFor(int productId) {
@@ -281,6 +327,7 @@ class _ProduceDialogState extends State<ProduceDialog> {
           children: [
             _header(theme),
             _search(theme),
+            if (!_loading) _categoryTabs(theme),
             const Divider(height: 1),
             Flexible(
               child: _loading
@@ -343,6 +390,38 @@ class _ProduceDialogState extends State<ProduceDialog> {
             onPressed: _saving ? null : () => Navigator.of(context).pop(),
             icon: const Icon(Icons.close_rounded),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Kategoriya TabBar'i (§22) — ixcham, faqat matn.
+  Widget _categoryTabs(ThemeData theme) {
+    _syncCategoryController();
+    final cats = _categories;
+    if (cats.length < 2) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 36,
+      child: TabBar(
+        controller: _categoryController,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+        dividerColor: Colors.transparent,
+        indicatorSize: TabBarIndicatorSize.label,
+        indicatorWeight: 2,
+        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+        unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+          alpha: 0.5,
+        ),
+        tabs: [
+          for (final c in cats) Tab(height: 32, text: c),
         ],
       ),
     );
@@ -510,3 +589,6 @@ class _ProduceDialogState extends State<ProduceDialog> {
     );
   }
 }
+
+/// Kategoriya filtri o'chirilgan holat (§22) — barcha mahsulotlar.
+const String _kAllCategories = 'Hammasi';

@@ -1,4 +1,4 @@
-> **Holat:** 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20 — bajarildi (batafsil:
+> **Holat:** 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22 — bajarildi (batafsil:
 > [`ombor_progress.md`](ombor_progress.md)). **11 — tashlab ketildi**
 > (foydalanuvchi qarori): ombor turi tanlovi Mahsulotlar sahifasida qoladi,
 > chunki uni olib tashlansa turni o'zgartiradigan joy qolmaydi.
@@ -26,3 +26,7 @@
 19. ✅ Omborxona sahifasidagi harakatl tarixi ma'lumotlarning 6 oy oldingilari o'chib ketishi kerak yo'qsa ma'lumotlar ko'payib ketishi mumkin — *bajarildi, lekin **default 24 oy** (sozlanadi: 6/12/24/36/cheksiz). Sabab: harakatlar jurnali buxgalteriya manbai (tannarx, yetkazuvchi, sarf tahlili), 6 oyda o'tgan yil bilan taqqoslash ham yo'qoladi. Hajm muammosi hozircha yo'q: ~50 MB/yil, SQLite buni sezmaydi.*
 
 20. ✅ Omborxonadagi mahsulotlar yoki xomashyolar o'chirib tashlansa u haqidagi ma'lumotlar harakatlar tarixidan ham o'chib ketmoqda, unday bo'lmasligi kerak. Harakatlar tarixidagi ma'lumotlar mahsulot o'chib ketganda ham qolishi kerak, undagi ma'lumotlar 6 oy o'tsagina o'chib ketishi kerak
+
+21. ✅ Omborxonaning mahsulotlar sahifasida mahsulotlarning kategoriyalari huddi buyurtma detaildagi kategoriyalar kabi bo'lishi kerak
+
+22. ✅ Pishirish knopkasi bosilganda chiqaidgan modal oynadagi mahsulotlarda ham kategoriyalar bo'lsa yaxshi bo'ladi. Fqat minimalistik va qulay bo'lishi kerak

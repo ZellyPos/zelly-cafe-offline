@@ -28,8 +28,13 @@ class WarehouseScreen extends StatefulWidget {
 }
 
 class _WarehouseScreenState extends State<WarehouseScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final TabController _tabController;
+
+  /// Kategoriya TabBar'i (§21). Kategoriyalar ma'lumot yuklangandan keyin
+  /// ma'lum bo'lgani uchun kontroller `_load()` da qayta yaratiladi.
+  TabController? _categoryController;
+
   final _searchController = TextEditingController();
 
   /// Joriy tab (0 — mahsulotlar, 1 — xomashyolar). Swipe bilan ham
@@ -53,6 +58,22 @@ class _WarehouseScreenState extends State<WarehouseScreen>
   /// Mahsulot qoldiq filtri (§3).
   _StockFilter _stockFilter = _StockFilter.all;
 
+  /// Tanlangan kategoriya (§21). `_kAllCategories` — filtrsiz.
+  String _category = _kAllCategories;
+
+  /// Mahsulotlardan olingan kategoriyalar ro'yxati, birinchisi "Hammasi".
+  /// Alohida jadvaldan emas, aynan omborda bor mahsulotlardan quriladi —
+  /// shunda bo'sh kategoriya tab bo'lib osilib turmaydi.
+  List<String> get _categories {
+    final set = <String>{};
+    for (final p in _products) {
+      final c = p.category.trim();
+      if (c.isNotEmpty) set.add(c);
+    }
+    final list = set.toList()..sort();
+    return [_kAllCategories, ...list];
+  }
+
   bool get _gridView => _gridViewPref;
 
   @override
@@ -69,6 +90,8 @@ class _WarehouseScreenState extends State<WarehouseScreen>
           _tabIndex = _tabController.index;
           _query = '';
           _stockFilter = _StockFilter.all;
+          _category = _kAllCategories;
+          _categoryController?.index = 0;
         });
       });
     _load();
@@ -77,8 +100,38 @@ class _WarehouseScreenState extends State<WarehouseScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _categoryController?.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Kategoriya kontrollerini ro'yxatga moslaydi.
+  ///
+  /// Mahsulot qo'shilib/o'chirilganda kategoriyalar soni o'zgaradi —
+  /// `TabController.length` o'zgarmas bo'lgani uchun uni qayta yaratamiz.
+  /// Tanlangan kategoriya hali ham mavjud bo'lsa, o'sha joyda qolamiz.
+  void _syncCategoryController() {
+    final cats = _categories;
+    if (_categoryController?.length == cats.length) return;
+
+    var index = cats.indexOf(_category);
+    if (index < 0) {
+      index = 0;
+      _category = _kAllCategories;
+    }
+
+    _categoryController?.dispose();
+    _categoryController = TabController(
+      length: cats.length,
+      initialIndex: index,
+      vsync: this,
+    )..addListener(() {
+      final c = _categoryController!;
+      if (c.indexIsChanging) return;
+      final selected = cats[c.index];
+      if (selected == _category) return;
+      setState(() => _category = selected);
+    });
   }
 
   Future<void> _load() async {
@@ -122,6 +175,9 @@ class _WarehouseScreenState extends State<WarehouseScreen>
   List<Product> get _filteredProducts {
     final q = _query.toLowerCase();
     return _products.where((p) {
+      if (_category != _kAllCategories && p.category.trim() != _category) {
+        return false;
+      }
       final inStock = (p.quantity ?? 0) > 0;
       switch (_stockFilter) {
         case _StockFilter.all:
@@ -241,6 +297,7 @@ class _WarehouseScreenState extends State<WarehouseScreen>
         children: [
           _tabSwitcher(theme),
           _toolbar(theme),
+          if (_tabIndex == 0 && !_loading) _categoryTabs(theme),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -397,6 +454,52 @@ class _WarehouseScreenState extends State<WarehouseScreen>
             const SizedBox(width: 8),
             _stockChip('Mavjud emas', _StockFilter.outOfStock),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Kategoriya TabBar'i (§21).
+  ///
+  /// Faqat filtrlaydi — TabBarView bilan bog'lanmagan. Sabab: tashqarida
+  /// allaqachon Mahsulotlar/Xomashyolar TabBarView'i bor, ichma-ich
+  /// qo'yilsa gorizontal swipe qaysi biriga tegishli ekani chalkashadi.
+  Widget _categoryTabs(ThemeData theme) {
+    _syncCategoryController();
+    final cats = _categories;
+    // Bitta "Hammasi" qolsa — filtrlashga narsa yo'q, joyni egallamasin.
+    if (cats.length < 2) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: theme.dividerColor.withValues(alpha: 0.15),
+          ),
+        ),
+      ),
+      child: TabBar(
+        controller: _categoryController,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+        dividerColor: Colors.transparent,
+        indicatorSize: TabBarIndicatorSize.label,
+        indicatorWeight: 2.5,
+        labelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        unselectedLabelColor: theme.colorScheme.onSurface.withValues(
+          alpha: 0.5,
+        ),
+        tabs: [
+          for (final c in cats) Tab(height: 40, text: c),
         ],
       ),
     );
@@ -855,6 +958,9 @@ class _WarehouseScreenState extends State<WarehouseScreen>
       qty > 0 ? Colors.green.shade700 : Colors.red.shade700;
 
 }
+
+/// Kategoriya filtri o'chirilgan holat (§21) — barcha mahsulotlar.
+const String _kAllCategories = 'Hammasi';
 
 /// Mahsulotlar tabidagi qoldiq filtri (§3).
 enum _StockFilter { all, inStock, outOfStock }

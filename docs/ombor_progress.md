@@ -770,3 +770,49 @@ retention), `test/db_migration_test.dart` +2 test (v56→v57 CASCADE olinishi
 va yozuvlar saqlanishi, v57→v58 snapshot backfill + v59 indekslar). Jami
 **54 test o'tdi**; qolgan 5 ta uzilish (`analytics`, `shift`, `widget`) shu
 ishdan **oldin ham** mavjud edi.
+
+---
+
+## §21–22 — Kategoriya TabBar'i (2026-08-18)
+
+### 21. Ombor → Mahsulotlar sahifasida kategoriyalar
+
+**Muammo:** sahifada faqat qidiruv va qoldiq filtri (`Hammasi`/`Mavjud`/
+`Mavjud emas`) bor edi. Kategoriya filtr sifatida umuman yo'q — u faqat
+mahsulot kartochkasida kichik matn bo'lib ko'rinardi. 200 ta mahsulot
+orasidan "salatlar"ni ko'rish uchun qidiruvga yozish kerak edi.
+
+**Yechim** (`warehouse_screen.dart`): qidiruv qatoridan pastda gorizontal
+siljiydigan `TabBar`. Birinchi tab — "Hammasi".
+
+Qarorlar:
+- **Kategoriyalar alohida jadvaldan emas, omborda bor mahsulotlardan
+  quriladi** — shunda bo'sh kategoriya tab bo'lib osilib turmaydi.
+- **TabBar faqat filtrlaydi, TabBarView'ga ulanmagan.** Sabab: tashqarida
+  allaqachon Mahsulotlar/Xomashyolar `TabBarView`i bor; ichma-ich qo'yilsa
+  gorizontal swipe qaysi biriga tegishli ekani chalkashadi.
+- `TabController.length` o'zgarmas bo'lgani uchun mahsulot qo'shilganda/
+  o'chirilganda kontroller qayta yaratiladi (`_syncCategoryController`).
+  Tanlangan kategoriya hali mavjud bo'lsa — o'sha joyda qolinadi.
+- Bitta "Hammasi" qolsa TabBar ko'rsatilmaydi (filtrlashga narsa yo'q).
+- Mahsulotlar↔Xomashyolar tabi almashganda kategoriya "Hammasi"ga qaytadi.
+
+### 22. Pishirish modalida kategoriyalar
+
+**Yechim** (`produce_dialog.dart`): qidiruv maydonidan pastda xuddi shunday
+`TabBar`, lekin **ixcham** — balandligi 36px, shrift 12px, rasm va rang yo'q.
+
+Sabab: modal atigi 640px keng va uning asosiy vazifasi — mahsulot tanlab son
+kiritish. POS'dagi kabi rasmli-rangli katta kartochkalar joyni yeb,
+ro'yxatni siqib qo'yardi. Foydalanuvchi ham "minimalistik va qulay" deb
+so'ragan.
+
+### Tekshirildi
+
+Ilova ishga tushirilib, real UI'da tasdiqlandi:
+- Ombor sahifasida TabBar ko'rinadi, "1-TAOM" tanlanganda faqat 1-TAOM
+  mahsulotlari qoladi
+- Pishirish modalida "2-TAOM" bosilganda ro'yxat 2-TAOM go'shtli
+  taomlariga almashadi
+
+`flutter analyze` — 0 xato; `flutter test` — 67/67 o'tadi.

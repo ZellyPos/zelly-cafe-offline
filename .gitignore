@@ -49,3 +49,13 @@ app.*.map.json
 
 # Installer chiqishi
 ZellySetup_*.exe
+
+# === Xavfsizlik: maxfiy kalitlar va litsenziya (hech qachon git'ga tushmasin) ===
+*.pem
+private_key.pem
+public_key.pem
+license.json
+*.key
+*.p12
+*.jks
+secrets.json

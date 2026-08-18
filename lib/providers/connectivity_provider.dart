@@ -109,7 +109,7 @@ class ConnectivityProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("IP detection error: $e");
+      debugPrint('IP detection error: $e');
     }
 
     _serverIp = foundIp;
@@ -206,7 +206,7 @@ class ConnectivityProvider extends ChangeNotifier {
   }
 
   Future<String?> updateCurrentUserPin(String oldPin, String newPin) async {
-    if (_currentUser == null) return "Foydalanuvchi aniqlanmadi";
+    if (_currentUser == null) return 'Foydalanuvchi aniqlanmadi';
 
     // 1. Verify old PIN locally (assuming we have it in _currentUser or database)
     final db = DatabaseHelper.instance;
@@ -227,7 +227,7 @@ class ConnectivityProvider extends ChangeNotifier {
     if (duplicateCheck.isNotEmpty) {
       final otherUser = duplicateCheck.first;
       if (otherUser['id'] != userId) {
-        return "Ushbu PIN kod allaqachon boshqa foydalanuvchi tomonidan ishlatilmoqda";
+        return 'Ushbu PIN kod allaqachon boshqa foydalanuvchi tomonidan ishlatilmoqda';
       }
     }
 
@@ -278,6 +278,44 @@ class ConnectivityProvider extends ChangeNotifier {
     return false;
   }
 
+  /// Sessiya muddati tugaganda (401) chaqiriladi — UI qayta login so'raydi.
+  bool _sessionExpired = false;
+  bool get sessionExpired => _sessionExpired;
+
+  void _handleUnauthorized() {
+    if (_authToken == null) return;
+    _authToken = null;
+    _sessionExpired = true;
+    _lastError = 'Sessiya muddati tugadi. Qaytadan kiring.';
+    notifyListeners();
+  }
+
+  void clearSessionExpiredFlag() {
+    _sessionExpired = false;
+  }
+
+  /// Serverdagi sessiyani yopadi. Ilovadan chiqishda chaqirilishi kerak —
+  /// aks holda token muddati tugagunicha ishlab qolaveradi.
+  Future<void> logout() async {
+    final token = _authToken;
+    _authToken = null;
+    _currentUser = null;
+    _sessionExpired = false;
+    WsClientService.instance.disconnect();
+    notifyListeners();
+    if (token == null || _clientBaseUrl == null) return;
+    try {
+      await http
+          .post(
+            Uri.parse('$_clientBaseUrl/auth/logout'),
+            headers: {'Authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint('Logout error: $e');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getRemoteData(String path) async {
     try {
       final response = await http
@@ -289,6 +327,7 @@ class ConnectivityProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       }
+      if (response.statusCode == 401) _handleUnauthorized();
     } catch (e) {
       debugPrint('Remote Data Error: $e');
     }
@@ -307,6 +346,7 @@ class ConnectivityProvider extends ChangeNotifier {
             },
           )
           .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 401) _handleUnauthorized();
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('Post Remote Data Error: $e');
@@ -341,6 +381,7 @@ class ConnectivityProvider extends ChangeNotifier {
             headers: {'Authorization': 'Bearer $_authToken'},
           )
           .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 401) _handleUnauthorized();
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('Delete Remote Data Error: $e');

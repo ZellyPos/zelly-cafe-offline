@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart';
@@ -6,6 +6,7 @@ import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import '../app_logger.dart';
 import '../database_helper.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -13,26 +14,167 @@ import '../../models/customer.dart';
 import '../../models/order.dart';
 import '../services/inventory_service.dart';
 import '../printing_service.dart';
+import 'auth_token_service.dart';
 import 'websocket_manager.dart';
 
 class ApiServer {
   static HttpServer? _server;
   static final _router = Router();
 
+  static const Map<String, String> _jsonHeaders = {
+    'Content-Type': 'application/json; charset=utf-8',
+  };
+
+  /// Autentifikatsiyasiz ochiq yo'llar.
+  ///  * `/auth/login` — token shu yerdan olinadi;
+  ///  * `/reports/view` — brauzerda ochiladigan HTML qobiq (o'zi ichida
+  ///    login so'raydi va keyingi so'rovlarni token bilan yuboradi);
+  ///  * `/uploads/...` — rasm `<img src>` orqali yuklanadi, brauzer u yerga
+  ///    sarlavha qo'sha olmaydi;
+  ///  * `/ws` — WebSocket qo'l berish bosqichi (token query orqali).
+  static bool _isPublicPath(String path) {
+    final p = path.startsWith('/') ? path : '/$path';
+    return p == '/auth/login' ||
+        p == '/reports/view' ||
+        p == '/ws' ||
+        p.startsWith('/uploads/');
+  }
+
+  /// Faqat admin/kassir kira oladigan yo'llar. Ofitsiantning mobil ilovasi
+  /// bu ma'lumotlarga muhtoj emas: umumiy savdo hisobotlari, boshqa
+  /// xodimlar ro'yxati, xarajatlar va to'lovlar tarixi — bularning barchasi
+  /// biznes uchun maxfiy.
+  static bool _isStaffOnlyPath(String path) {
+    final p = path.startsWith('/') ? path : '/$path';
+    if (p == '/reports/view') return false; // ochiq HTML qobiq
+    return p.startsWith('/reports/') ||
+        p.startsWith('/users') ||
+        p.startsWith('/expenses') ||
+        p.startsWith('/expense_categories') ||
+        p.startsWith('/transactions') ||
+        p.startsWith('/customers');
+  }
+
+  /// So'rov konteksti kaliti — handler'lar sessiyani shu orqali oladi.
+  static const String _sessionKey = 'zelly.session';
+
+  static ApiSession? _sessionOf(Request request) =>
+      request.context[_sessionKey] as ApiSession?;
+
+  static Response _unauthorized(String message) => Response.unauthorized(
+    jsonEncode({'error': message}),
+    headers: _jsonHeaders,
+  );
+
+  static Response _forbidden(String message) => Response.forbidden(
+    jsonEncode({'error': message}),
+    headers: _jsonHeaders,
+  );
+
+  /// Faqat admin/kassir uchun: boshqaruv va hisobot endpoint'lari.
+  /// Qaytgan qiymat `null` bo'lsa — ruxsat bor.
+  static Response? _requireStaff(Request request) {
+    final session = _sessionOf(request);
+    if (session == null) return _unauthorized('Token topilmadi');
+    if (session.isWaiter) {
+      return _forbidden('Bu amal uchun administrator huquqi kerak');
+    }
+    return null;
+  }
+
+  /// Ofitsiantning granular huquqini tekshiradi (`print_receipt`,
+  /// `change_table`, `edit_price` ...). Admin/kassirga hamma narsa ochiq.
+  static Response? _requirePermission(Request request, String permission) {
+    final session = _sessionOf(request);
+    if (session == null) return _unauthorized('Token topilmadi');
+    if (!session.can(permission)) {
+      return _forbidden('Sizda "$permission" huquqi yo\'q');
+    }
+    return null;
+  }
+
+  /// Rate-limit va audit uchun mijoz kaliti (IP manzil).
+  static String _clientKey(Request request) {
+    final forwarded = request.headers['x-forwarded-for'];
+    if (forwarded != null && forwarded.isNotEmpty) {
+      return forwarded.split(',').first.trim();
+    }
+    final conn = request.context['shelf.io.connection_info'];
+    if (conn is HttpConnectionInfo) return conn.remoteAddress.address;
+    return 'unknown';
+  }
+
+  /// Har bir so'rovni tekshiradigan markazlashgan qatlam.
+  ///
+  /// Ilgari autentifikatsiya endpoint'lar ichida qo'lda va nomuvofiq
+  /// bajarilardi — ko'p endpoint umuman tekshirmasdi. Endi qoida bitta
+  /// joyda: ochiq yo'llardan tashqari hamma narsa yaroqli token talab qiladi.
+  static Middleware _authMiddleware() {
+    return (Handler innerHandler) {
+      return (Request request) async {
+        if (_isPublicPath(request.url.path) ||
+            request.method == 'OPTIONS') {
+          return innerHandler(request);
+        }
+
+        final session = await AuthTokenService.instance.resolve(
+          request.headers['Authorization'],
+        );
+        if (session == null) {
+          return _unauthorized(
+            'Token yaroqsiz yoki muddati tugagan. Qaytadan kiring.',
+          );
+        }
+
+        if (session.isWaiter && _isStaffOnlyPath(request.url.path)) {
+          return _forbidden('Bu bo\'lim uchun administrator huquqi kerak');
+        }
+
+        return innerHandler(
+          request.change(context: {_sessionKey: session}),
+        );
+      };
+    };
+  }
+
+  /// Brauzerdan (Telegram WebApp, monitoring paneli) so'rov kelishi uchun.
+  static Middleware _corsMiddleware() {
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Origin, Content-Type, Authorization',
+    };
+    return (Handler innerHandler) {
+      return (Request request) async {
+        if (request.method == 'OPTIONS') {
+          return Response.ok('', headers: corsHeaders);
+        }
+        final response = await innerHandler(request);
+        return response.change(headers: corsHeaders);
+      };
+    };
+  }
 
   static Future<String?> start(int port) async {
     _setupRoutes();
 
     try {
       _server = await io.serve(
-        Pipeline().addMiddleware(logRequests()).addHandler(_router.call),
+        Pipeline()
+            .addMiddleware(logRequests())
+            .addMiddleware(_corsMiddleware())
+            .addMiddleware(_authMiddleware())
+            .addHandler(_router.call),
         InternetAddress.anyIPv4,
         port,
       );
-      print('Server running on ${_server!.address.address}:${_server!.port}');
+      AppLogger.i(
+        'ApiServer',
+        'Server ishga tushdi: ${_server!.address.address}:${_server!.port}',
+      );
       return _server!.address.address;
     } catch (e) {
-      print('Error starting server: $e');
+      AppLogger.e('ApiServer', 'Serverni ishga tushirib bo\'lmadi', e);
       return null;
     }
   }
@@ -53,6 +195,10 @@ class ApiServer {
 
   static void _setupRoutes() {
     // 0. WebSocket real-time channel
+    // Eslatma: kanal orqali faqat "nimadir o'zgardi" signali (event nomi va
+    // ID) yuboriladi — maxfiy ma'lumot emas. Ma'lumotning o'zi baribir
+    // autentifikatsiyalangan REST so'rovi orqali olinadi. Token berilsa
+    // tekshiriladi; berilmasa ulanishga ruxsat beriladi (eski mijozlar uchun).
     _router.get(
       '/ws',
       webSocketHandler((WebSocketChannel channel, String? protocol) {
@@ -62,12 +208,31 @@ class ApiServer {
 
     // 1. Auth
     _router.post('/auth/login', (Request request) async {
+      final clientKey = _clientKey(request);
+
+      // Brute-force himoyasi: 4 xonali PIN cheklovsiz serverda soniyalarda
+      // topiladi, shuning uchun urinishlar soni cheklanadi.
+      if (!LoginThrottle.instance.allow(clientKey)) {
+        final left = LoginThrottle.instance.remainingLock(clientKey);
+        return Response(
+          429,
+          body: jsonEncode({
+            'error':
+                'Juda ko\'p noto\'g\'ri urinish. '
+                '${left.inMinutes + 1} daqiqadan keyin qayta urinib ko\'ring.',
+            'retry_after': left.inSeconds,
+          }),
+          headers: _jsonHeaders,
+        );
+      }
+
       final payload = jsonDecode(await request.readAsString());
       final pin = payload['pin'] as String?;
 
       if (pin == null || pin.isEmpty) {
         return Response.badRequest(
           body: jsonEncode({'error': 'PIN kodi kiritilmadi'}),
+          headers: _jsonHeaders,
         );
       }
 
@@ -83,11 +248,21 @@ class ApiServer {
       if (waiters.isNotEmpty) {
         final waiter = waiters.first;
         final permsStr = waiter['permissions']?.toString() ?? '';
-        final permsList = permsStr.isEmpty ? [] : permsStr.split(',');
+        final permsList = permsStr.isEmpty
+            ? <String>[]
+            : permsStr.split(',').map((e) => e.trim()).toList();
+
+        final session = await AuthTokenService.instance.issue(
+          userId: waiter['id'] as int,
+          role: 'waiter',
+          permissions: permsList,
+        );
+        LoginThrottle.instance.recordSuccess(clientKey);
 
         return Response.ok(
           jsonEncode({
-            'token': 'waiter-token-${waiter['id']}',
+            'token': session.token,
+            'expires_at': session.expiresAt.toIso8601String(),
             'user': {
               'id': waiter['id'],
               'name': waiter['name'],
@@ -95,6 +270,7 @@ class ApiServer {
               'permissions': permsList,
             },
           }),
+          headers: _jsonHeaders,
         );
       }
 
@@ -108,73 +284,96 @@ class ApiServer {
       if (users.isNotEmpty) {
         final user = users.first;
         final userPermsStr = user['permissions']?.toString() ?? '';
+        final userPerms = userPermsStr.isEmpty
+            ? <String>[]
+            : userPermsStr.split(',').map((e) => e.trim()).toList();
+
+        final session = await AuthTokenService.instance.issue(
+          userId: user['id'] as int,
+          role: (user['role'] ?? 'admin').toString(),
+          permissions: userPerms,
+        );
+        LoginThrottle.instance.recordSuccess(clientKey);
+
         return Response.ok(
           jsonEncode({
-            'token': 'admin-token-${user['id']}',
+            'token': session.token,
+            'expires_at': session.expiresAt.toIso8601String(),
             'user': {
               'id': user['id'],
               'name': user['name'],
               'role': user['role'], // admin or cashier
-              'permissions': userPermsStr,
+              'permissions': userPerms,
             },
           }),
+          headers: _jsonHeaders,
         );
       }
 
-      return Response.forbidden(
+      LoginThrottle.instance.recordFailure(clientKey);
+      // 401 — autentifikatsiya muvaffaqiyatsiz (403 emas: 403 "kirdingiz,
+      // lekin huquqingiz yo'q" degani).
+      return Response.unauthorized(
         jsonEncode({'error': 'PIN kod noto‘g‘ri yoki xodim faol emas'}),
+        headers: _jsonHeaders,
       );
     });
 
-    // /auth/me — token bo'yicha joriy foydalanuvchi ma'lumotlarini qaytaradi
+    // Chiqish — tokenni serverda bekor qiladi.
+    _router.post('/auth/logout', (Request request) async {
+      final token = AuthTokenService.extractToken(
+        request.headers['Authorization'],
+      );
+      if (token != null) await AuthTokenService.instance.revoke(token);
+      return Response.ok(
+        jsonEncode({'success': true}),
+        headers: _jsonHeaders,
+      );
+    });
+
+    // /auth/me — token bo'yicha joriy foydalanuvchi ma'lumotlarini qaytaradi.
+    // Sessiya middleware'da allaqachon tekshirilgan, shuning uchun bu yerda
+    // faqat bazadan yangi ma'lumot olamiz (nomi/huquqi o'zgargan bo'lishi
+    // mumkin).
     _router.get('/auth/me', (Request request) async {
       try {
-        final authHeader = request.headers['Authorization'] ?? '';
+        final session = _sessionOf(request);
+        if (session == null) {
+          return _unauthorized('Token topilmadi');
+        }
+
         final db = await DatabaseHelper.instance.database;
-
-        if (authHeader.startsWith('Bearer waiter-token-')) {
-          final id = int.tryParse(
-            authHeader.replaceFirst('Bearer waiter-token-', ''),
-          );
-          if (id == null) return Response.forbidden(jsonEncode({'error': 'Token noto\'g\'ri'}));
-
-          final rows = await db.query('waiters', where: 'id = ? AND is_active = 1', whereArgs: [id]);
-          if (rows.isEmpty) return Response.forbidden(jsonEncode({'error': 'Foydalanuvchi topilmadi'}));
-
-          final w = rows.first;
-          final permsStr = w['permissions']?.toString() ?? '';
-          return Response.ok(jsonEncode({
-            'id': w['id'],
-            'name': w['name'],
-            'role': 'waiter',
-            'permissions': permsStr.isEmpty ? [] : permsStr.split(','),
-          }), headers: {'Content-Type': 'application/json'});
+        final table = session.isWaiter ? 'waiters' : 'users';
+        final rows = await db.query(
+          table,
+          where: 'id = ? AND is_active = 1',
+          whereArgs: [session.userId],
+        );
+        if (rows.isEmpty) {
+          // Xodim o'chirilgan yoki faolsizlantirilgan — sessiyani yopamiz.
+          await AuthTokenService.instance.revoke(session.token);
+          return _unauthorized('Foydalanuvchi topilmadi yoki faol emas');
         }
 
-        if (authHeader.startsWith('Bearer admin-token-') ||
-            authHeader.startsWith('Bearer user-token-')) {
-          final idStr = authHeader
-              .replaceFirst('Bearer admin-token-', '')
-              .replaceFirst('Bearer user-token-', '');
-          final id = int.tryParse(idStr);
-          if (id == null) return Response.forbidden(jsonEncode({'error': 'Token noto\'g\'ri'}));
-
-          final rows = await db.query('users', where: 'id = ? AND is_active = 1', whereArgs: [id]);
-          if (rows.isEmpty) return Response.forbidden(jsonEncode({'error': 'Foydalanuvchi topilmadi'}));
-
-          final u = rows.first;
-          final permsStr = u['permissions']?.toString() ?? '';
-          return Response.ok(jsonEncode({
-            'id': u['id'],
-            'name': u['name'],
-            'role': u['role'],
-            'permissions': permsStr.isEmpty ? [] : permsStr.split(','),
-          }), headers: {'Content-Type': 'application/json'});
-        }
-
-        return Response.forbidden(jsonEncode({'error': 'Token topilmadi'}));
+        final row = rows.first;
+        final permsStr = row['permissions']?.toString() ?? '';
+        return Response.ok(
+          jsonEncode({
+            'id': row['id'],
+            'name': row['name'],
+            'role': session.isWaiter ? 'waiter' : row['role'],
+            'permissions': permsStr.isEmpty
+                ? <String>[]
+                : permsStr.split(',').map((e) => e.trim()).toList(),
+            'expires_at': session.expiresAt.toIso8601String(),
+          }),
+          headers: _jsonHeaders,
+        );
       } catch (e) {
-        return Response.internalServerError(body: jsonEncode({'error': '$e'}));
+        return Response.internalServerError(
+          body: jsonEncode({'error': '$e'}),
+          headers: _jsonHeaders,
+        );
       }
     });
 
@@ -266,9 +465,9 @@ class ApiServer {
         LEFT JOIN waiters w ON o.waiter_id = w.id
       ''');
       
-      print('API [GET] /tables/summary: Loaded ${summary.length} tables');
+      AppLogger.d('ApiServer', 'API [GET] /tables/summary: Loaded ${summary.length} tables');
       if (summary.isNotEmpty) {
-        print('First table summary example: ID=${summary.first['id']}, '
+        AppLogger.d('ApiServer', 'First table summary example: ID=${summary.first['id']}, '
               'Status=${summary.first['status']}, '
               'ActiveOrderID=${summary.first['active_order_id']}, '
               'JoinOrderID=${summary.first['order_id']}');
@@ -380,17 +579,23 @@ class ApiServer {
 
     // 4. Waiters
     _router.get('/waiters', (Request request) async {
+      final isStaff = _requireStaff(request) == null;
       final data = await DatabaseHelper.instance.queryAll('waiters');
       final mapped = data.map((waiter) {
         final newWaiter = Map<String, dynamic>.from(waiter);
         final permsStr = newWaiter['permissions']?.toString() ?? '';
         newWaiter['permissions'] = permsStr.isEmpty ? [] : permsStr.split(',');
+        // PIN kodni faqat administrator ko'ra oladi — ilgari u har qanday
+        // mijozga ochiq qaytarilardi va boshqa xodim nomidan kirish mumkin edi.
+        if (!isStaff) newWaiter.remove('pin_code');
         return newWaiter;
       }).toList();
-      return Response.ok(jsonEncode(mapped));
+      return Response.ok(jsonEncode(mapped), headers: _jsonHeaders);
     });
 
     _router.post('/waiters', (Request request) async {
+      final denied = _requireStaff(request);
+      if (denied != null) return denied;
       final payload = jsonDecode(await request.readAsString());
       final db = await DatabaseHelper.instance.database;
       if (payload['id'] != null) {
@@ -407,18 +612,41 @@ class ApiServer {
     });
 
     _router.delete('/waiters/<id>', (Request request, String id) async {
+      final denied = _requireStaff(request);
+      if (denied != null) return denied;
       final db = await DatabaseHelper.instance.database;
       await db.delete('waiters', where: 'id = ?', whereArgs: [id]);
-      return Response.ok(jsonEncode({'status': 'success'}));
+      // Xodim o'chirildi — uning ochiq sessiyalari ham bekor qilinsin.
+      final waiterId = int.tryParse(id);
+      if (waiterId != null) {
+        await AuthTokenService.instance.revokeUser(
+          userId: waiterId,
+          role: 'waiter',
+        );
+      }
+      return Response.ok(
+        jsonEncode({'status': 'success'}),
+        headers: _jsonHeaders,
+      );
     });
 
     // 5. Users
     _router.get('/users', (Request request) async {
+      final denied = _requireStaff(request);
+      if (denied != null) return denied;
       final data = await DatabaseHelper.instance.queryAll('users');
-      return Response.ok(jsonEncode(data));
+      // PIN hech qachon tarmoqqa chiqmasin.
+      final safe = data.map((u) {
+        final copy = Map<String, dynamic>.from(u);
+        copy.remove('pin');
+        return copy;
+      }).toList();
+      return Response.ok(jsonEncode(safe), headers: _jsonHeaders);
     });
 
     _router.post('/users', (Request request) async {
+      final denied = _requireStaff(request);
+      if (denied != null) return denied;
       final payload = jsonDecode(await request.readAsString());
       final db = await DatabaseHelper.instance.database;
       if (payload['id'] != null) {
@@ -435,9 +663,23 @@ class ApiServer {
     });
 
     _router.delete('/users/<id>', (Request request, String id) async {
+      final denied = _requireStaff(request);
+      if (denied != null) return denied;
       final db = await DatabaseHelper.instance.database;
       await db.delete('users', where: 'id = ?', whereArgs: [id]);
-      return Response.ok(jsonEncode({'status': 'success'}));
+      final userId = int.tryParse(id);
+      if (userId != null) {
+        for (final role in const ['admin', 'cashier', 'manager', 'owner']) {
+          await AuthTokenService.instance.revokeUser(
+            userId: userId,
+            role: role,
+          );
+        }
+      }
+      return Response.ok(
+        jsonEncode({'status': 'success'}),
+        headers: _jsonHeaders,
+      );
     });
 
     // 6. Expenses & Categories
@@ -580,14 +822,11 @@ class ApiServer {
         final payload = jsonDecode(await request.readAsString());
         final tableId = payload['table_id'] as int?;
 
-        // Enforce waiter_id from token
-        final authHeader = request.headers['Authorization'] ?? '';
-        int waiterId = 1;
-        if (authHeader.startsWith('Bearer waiter-token-')) {
-          waiterId =
-              int.tryParse(authHeader.replaceFirst('Bearer waiter-token-', '')) ??
-              1;
-        }
+        // waiter_id tokendan olinadi — mijoz uni o'zi tanlay olmaydi.
+        final session = _sessionOf(request);
+        final waiterId = session != null && session.isWaiter
+            ? session.userId
+            : (payload['waiter_id'] as int? ?? 1);
 
         final orderType = payload['order_type'] as int? ?? 0;
         final db = await DatabaseHelper.instance.database;
@@ -708,24 +947,18 @@ class ApiServer {
       final order = orders.first;
       final orderWaiterId = order['waiter_id'] as int?;
 
-      // Extract waiter ID from token
-      final authHeader = request.headers['Authorization'] ?? '';
-      int? currentWaiterId;
-      bool isAdmin = false;
-
-      if (authHeader.startsWith('Bearer waiter-token-')) {
-        currentWaiterId = int.tryParse(
-          authHeader.replaceFirst('Bearer waiter-token-', ''),
-        );
-      } else if (authHeader.startsWith('Bearer admin-token-')) {
-        isAdmin = true;
-      }
+      // Kim so'rayapti — sessiyadan aniqlanadi (mijoz alday olmaydi).
+      final session = _sessionOf(request);
+      final currentWaiterId = session != null && session.isWaiter
+          ? session.userId
+          : null;
+      final isAdmin = session != null && !session.isWaiter;
 
       // Check permission: only order owner or admin can modify
       if (!isAdmin && orderWaiterId != currentWaiterId) {
         return Response.forbidden(
           jsonEncode({
-            'error': "Bu stol sizga biriktirilmagan. Tahrirlash mumkin emas.",
+            'error': 'Bu stol sizga biriktirilmagan. Tahrirlash mumkin emas.',
           }),
         );
       }
@@ -817,7 +1050,7 @@ class ApiServer {
             } else if (pricingType == 2) {
               totalRoomCharge += fixedAmount;
             } else if (pricingType == 3) {
-              totalRoomCharge += (totalForServiceCharge * servicePercentage / 100);
+              totalRoomCharge += totalForServiceCharge * servicePercentage / 100;
             }
           }
           roomCharge = totalRoomCharge;
@@ -860,7 +1093,7 @@ class ApiServer {
           where: 'id = ?',
           whereArgs: [id.toString()],
         );
-        print('API [POST] /orders/$id/items: Order total updated to $grandTotal');
+        AppLogger.d('ApiServer', 'API [POST] /orders/$id/items: Order total updated to $grandTotal');
       });
 
       WebSocketManager.instance.broadcast('order_updated', {'order_id': id});
@@ -870,6 +1103,8 @@ class ApiServer {
 
     // Move order to another table
     _router.put('/orders/<id>/move', (Request request, String id) async {
+      final denied = _requirePermission(request, 'change_table');
+      if (denied != null) return denied;
       final payload = jsonDecode(await request.readAsString());
       final newTableId = payload['table_id'] as int?;
       final newLocationId = payload['location_id'] as int?;
@@ -1111,23 +1346,17 @@ class ApiServer {
       final orderWaiterId = order['waiter_id'] as int?;
       final tableId = order['table_id'] as int?;
 
-      // Extract waiter ID from token
-      final authHeader = request.headers['Authorization'] ?? '';
-      int? currentWaiterId;
-      bool isAdmin = false;
-
-      if (authHeader.startsWith('Bearer waiter-token-')) {
-        currentWaiterId = int.tryParse(
-          authHeader.replaceFirst('Bearer waiter-token-', ''),
-        );
-      } else if (authHeader.startsWith('Bearer admin-token-')) {
-        isAdmin = true;
-      }
+      // Kim so'rayapti — sessiyadan aniqlanadi (mijoz alday olmaydi).
+      final session = _sessionOf(request);
+      final currentWaiterId = session != null && session.isWaiter
+          ? session.userId
+          : null;
+      final isAdmin = session != null && !session.isWaiter;
 
       // Check permission: only order owner or admin can cancel
       if (!isAdmin && orderWaiterId != currentWaiterId) {
         return Response.forbidden(
-          jsonEncode({'error': "Bu buyurtma sizga tegishli emas"}),
+          jsonEncode({'error': 'Bu buyurtma sizga tegishli emas'}),
         );
       }
 
@@ -1174,7 +1403,7 @@ class ApiServer {
 
       // Simple file name with timestamp
       final fileName =
-          "${DateTime.now().millisecondsSinceEpoch}.jpg"; // Assuming jpg or handle mime
+          '${DateTime.now().millisecondsSinceEpoch}.jpg'; // Assuming jpg or handle mime
       final file = File(p.join(imagesDir.path, fileName));
       await file.writeAsBytes(bytes);
 
@@ -1716,6 +1945,8 @@ class ApiServer {
 
     // Remote receipt print — client devices POST here to print main receipt on server
     _router.post('/print_receipt', (Request request) async {
+      final denied = _requirePermission(request, 'print_receipt');
+      if (denied != null) return denied;
       try {
         final body = await request.readAsString();
         final Map<String, dynamic> payload =

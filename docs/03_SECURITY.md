@@ -8,7 +8,9 @@
 
 | Topilma | Holat |
 |---|---|
-| 🔴 Maxfiy kalit git'da | 🟡 **Qisman** — kuzatuvdan chiqarildi va `.gitignore`ga qo'shildi; **tarixda qoldi** (qarang §1) |
+| 🔴 Maxfiy kalit git'da | ✅ Kuzatuvdan chiqarildi + `.gitignore` + **tarixdan tozalandi** (`filter-branch` + force-push, 2026-08-18) |
+| 🔴 Eski commitlar GitHub'da | 🟡 **Ochiq** — force-push'dan keyin ham yetim commitlar SHA orqali o'qiladi. GitHub Support'ga murojaat kerak → [`04_ROADMAP.md`](04_ROADMAP.md) |
+| 🔴 **RSA kalitni yangilash** | ⏳ **MAJBURIY** — repo ochiq (public) bo'lgani uchun kalit kompromatsiya qilingan hisoblanadi |
 | 🔴 Kalit ilova build'iga kiradimi | ✅ **Yo'q** — `build/` da `.pem` topilmadi; `pubspec.yaml` assets'ida faqat `assets/images/` |
 | 🔴 API tokeni taxmin qilinardi (`admin-token-1`) | ✅ **Hal qilindi** — tasodifiy, 12 soatlik, bekor qilinadigan token |
 | 🔴 Ko'p endpoint autentifikatsiyani umuman tekshirmasdi | ✅ **Hal qilindi** — markazlashgan middleware |

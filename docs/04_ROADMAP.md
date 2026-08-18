@@ -129,49 +129,79 @@ Keyin `cart_provider` dan `BuildContext`ni olib tashlash (qolgan 10 warning).
 
 ---
 
-## ⚠️ Qo'lda bajariladigan ishlar
+## Kalit tarixdan tozalandi — 2026-08-18 ✅ (qisman)
 
-Bu ikki ish **avtomatik bajarilmadi**, chunki ular sizdan tashqaridagi
-odamlarga ta'sir qiladi — qarorni siz qabul qilishingiz kerak.
+### Bajarildi
 
-### 1. Kalitni git tarixidan tozalash
+`git filter-branch` bilan `private_key.pem`, `public_key.pem`,
+`license.json` **butun tarixdan** olib tashlandi va ikkala remote'ga
+force-push qilindi.
 
-`git rm --cached` faqat kelajakdagi commit'larni tozalaydi. `private_key.pem`
-hali ham **git tarixida** va ikkala GitHub remote'ida
-(`ZellyPos/zelly-cafe-offline`, `zellyuz/zellyoffline`) turibdi.
+- Zaxira: `C:\Users\Muhammadi\Zelly\_zaxira\tezzro-backup.git` (mirror,
+  eski tarix to'liq) + kalit fayllarning nusxasi
+- 19 ta teg (`v1.0.0` … `v1.0.18`) saqlandi va qayta yozildi
+- Lokal tekshiruv: `git rev-list --objects --all | grep private_key` — bo'sh
+- Kod buzilmadi: 67 test o'tadi, `flutter analyze` o'zgarmadi
 
-```bash
-# 1. Zaxira nusxa oling!
-git clone --mirror <repo-url> backup-repo.git
+### 🔴 Lekin: eski commitlar GitHub'da HALI OCHIQ
 
-# 2. Tarixdan tozalash (git-filter-repo o'rnatilgan bo'lishi kerak)
-git filter-repo --invert-paths --path private_key.pem --path license.json
+Force-push'dan keyin ham GitHub **yetim qolgan (orphaned) commitlarni**
+SHA bo'yicha to'g'ridan-to'g'ri berishda davom etadi:
 
-# 3. Force-push (DIQQAT: tarix o'zgaradi, boshqa nusxalar buziladi)
-git push origin --force --all
-git push origin --force --tags
+```
+https://raw.githubusercontent.com/ZellyPos/zelly-cafe-offline/82bcc4a/private_key.pem
+→ 200 OK, kalit to'liq o'qiladi
 ```
 
-> Loyihada boshqa dasturchi ishlayotgan bo'lsa, force-push'dan oldin
-> ogohlantiring — ular repozitoriyani qayta klon qilishi kerak bo'ladi.
+Bu GitHub'ning ma'lum xatti-harakati — u o'chirilgan obyektlarni avtomatik
+yig'ishtirmaydi. `git push --force` faqat *shoxobchalarni* (ref) o'zgartiradi,
+serverdagi obyektlarni emas.
 
-### 2. RSA kalit juftligini yangilash
+**Buni faqat GitHub Support to'liq o'chira oladi:**
 
-Kalit ochiq internetda bo'lgani uchun **texnik jihatdan har kim soxta
-litsenziya yasashi mumkin**. Lekin kalitni almashtirish **barcha mavjud
-mijoz litsenziyalarini bekor qiladi** — ularga yangi litsenziya fayli
-yuborish kerak bo'ladi.
+1. https://support.github.com/ ga murojaat qiling
+2. So'rov matni: *"Please run garbage collection / remove cached views for
+   repository `ZellyPos/zelly-cafe-offline` (and `zellyuz/zellyoffline`).
+   Sensitive data was force-pushed out of history but orphaned commits are
+   still accessible by SHA."*
+3. Eski commit SHA'larini ilova qiling: `82bcc4a`, `2e1490c`, `db545ce`,
+   `5070b95`
+
+### 🔴 2. RSA kalit juftligini yangilash — endi MAJBURIY
+
+Repozitoriya **ochiq (public)** bo'lgani va kalit uzoq vaqt shu holatda
+turgani uchun kalitni **kompromatsiya qilingan deb hisoblash kerak**.
+GitHub'ni skanerlaydigan botlar maxfiy kalitlarni avtomatik yig'adi.
+Tarixni tozalash bu faktni o'zgartirmaydi — u faqat kelajakdagi tasodifiy
+topilishni to'xtatadi.
+
+Ya'ni **hozir har kim soxta, "haqiqiy" ko'rinadigan litsenziya yasashi
+mumkin**. Yagona haqiqiy yechim — kalitni almashtirish.
 
 Qadamlar:
-1. Yangi RSA juftlik generatsiya qiling
-2. `lib/core/services/license_service.dart` dagi `_publicKey` ni yangilang
+1. Yangi RSA juftlik generatsiya qiling (2048 bit yoki undan yuqori)
+2. `lib/core/services/license_service.dart` dagi `_publicKey` konstantasini
+   yangilang
 3. Barcha faol mijozlar uchun yangi `license.json` generatsiya qiling
-4. Yangi versiyani tarqating va litsenziyalarni yuboring
+4. Yangi versiyani chiqaring va litsenziyalarni mijozlarga yuboring
 
-**Bu qanchalik shoshilinch?** Kalit private repozitoriyada bo'lsa va unga
-kirish cheklangan bo'lsa — shoshilinch emas, rejalashtirilgan versiya bilan
-birga qiling. Repozitoriya ochiq bo'lsa yoki kirish huquqi bo'lgan odam
-ketgan bo'lsa — darhol qiling.
+> ⚠️ Bu **barcha mavjud mijoz litsenziyalarini bekor qiladi**. Shuning uchun
+> yangi litsenziyalar tayyor bo'lgandan keyingina versiyani tarqating —
+> aks holda mijozlarning ilovasi ochilmay qoladi.
+
+**Yangi kalit qayerda turishi kerak:** faqat sizning kompyuteringizda,
+git'dan tashqarida. `.gitignore` da `*.pem` bor, lekin eng ishonchlisi —
+kalitni umuman loyiha papkasida saqlamaslik.
+
+### Boshqa dasturchilar uchun
+
+Tarix qayta yozilgani uchun eski nusxalar mos kelmaydi. Kimda repo klon
+qilingan bo'lsa, qayta klon qilishi kerak:
+
+```bash
+# eski papkani o'chirib
+git clone https://github.com/ZellyPos/zelly-cafe-offline.git
+```
 
 ---
 

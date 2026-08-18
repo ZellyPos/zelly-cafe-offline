@@ -59,3 +59,4 @@ license.json
 *.p12
 *.jks
 secrets.json
+.claude/worktrees/

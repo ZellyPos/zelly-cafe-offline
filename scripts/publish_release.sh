@@ -5,8 +5,11 @@
 # release'idan o'qiydi (lib/core/update_service.dart), shuning uchun
 # release aynan o'sha yerga chiqadi.
 #
-# Ishlatish:
+# Ishlatish (PowerShell'dan ham, Git Bash'dan ham bir xil):
 #   bash scripts/publish_release.sh 1.0.19
+#
+# Izohlar docs/release_notes_<versiya>.md dan olinadi (bo'lmasa oddiy
+# sarlavha yoziladi).
 #
 # Token git credential manager'dan olinadi (git push ishlayotgan bo'lsa,
 # u yerda bor). Xohlasangiz GITHUB_TOKEN bilan ham berish mumkin.
@@ -22,7 +25,10 @@ fi
 REPO="zellyuz/zellyoffline"
 TAG="v$VERSION"
 ASSET="$HOME/Desktop/ZellySetup_$VERSION.exe"
-NOTES_FILE="${NOTES_FILE:-}"
+
+# Release izohlari: sukut bo'yicha docs/release_notes_<versiya>.md,
+# NOTES_FILE bilan boshqa fayl ko'rsatish mumkin.
+NOTES_FILE="${NOTES_FILE:-docs/release_notes_$VERSION.md}"
 
 if [ ! -f "$ASSET" ]; then
   echo "Installer topilmadi: $ASSET" >&2

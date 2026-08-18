@@ -256,15 +256,48 @@ void main() {
           ),
         ],
       );
+      final burgerBefore = await productQty(w.burgerId);
+      final colaBefore = await productQty(w.colaId);
+
       await invService.processOrderPaid(order);
 
-      // ⭐ Asosiy tekshiruv: xomashyo o'zgarmagan (ikki marta chegirish yo'q)
+      // ⭐ To'lov qoldiqqa TEGMAYDI — chegirish faqat tasdiqlashda bo'ladi.
+      expect(await productQty(w.burgerId), burgerBefore);
+      expect(await productQty(w.colaId), colaBefore);
+
+      // Xomashyo ham o'zgarmagan (u faqat "Pishirish"da chegiriladi).
       expect(await ingredientStock(w.meatId), meatAfterProduce);
       expect(await ingredientStock(w.breadId), breadAfterProduce);
+    });
 
-      // Tayyor sonlar kamaygan
-      expect(await productQty(w.burgerId), 8); // 10 - 2
-      expect(await productQty(w.colaId), 49); // 50 - 1
+    test('chegirish tasdiqlashda, to\'lov uni takrorlamaydi', () async {
+      final w = await setupWorld();
+      await invService.produce([(productId: w.burgerId, count: 10)]);
+
+      final order = Order(
+        id: 'ORDER-1B',
+        total: 50000,
+        paymentType: 'Cash',
+        createdAt: DateTime.now(),
+        items: [
+          OrderItem(
+            orderId: 'ORDER-1B',
+            productId: w.burgerId,
+            qty: 2,
+            price: 25000,
+          ),
+        ],
+      );
+
+      // 1. Tasdiqlash — aynan shu yerda kamayadi.
+      await invService.consumeOnConfirm('ORDER-1B', [
+        (productId: w.burgerId, qty: 2),
+      ]);
+      expect(await productQty(w.burgerId), 8);
+
+      // 2. To'lov — hech narsa o'zgarmasligi kerak.
+      await invService.processOrderPaid(order);
+      expect(await productQty(w.burgerId), 8);
     });
 
     test('bir buyurtma ikki marta hisoblanmaydi (idempotent)', () async {
@@ -286,10 +319,17 @@ void main() {
         ],
       );
 
+      // Tasdiqlashda chegiriladi.
+      await invService.consumeOnConfirm('ORDER-2', [
+        (productId: w.burgerId, qty: 3),
+      ]);
+      expect(await productQty(w.burgerId), 7);
+
+      // To'lov necha marta chaqirilsa ham qoldiq o'zgarmaydi.
       await invService.processOrderPaid(order);
       await invService.processOrderPaid(order); // takror
 
-      expect(await productQty(w.burgerId), 7); // faqat bir marta
+      expect(await productQty(w.burgerId), 7);
     });
 
     test('qaytarish tayyor sonni tiklaydi (xomashyo qaytarilmaydi)', () async {
@@ -312,8 +352,14 @@ void main() {
         ],
       );
 
-      await invService.processOrderPaid(order);
+      // Haqiqiy oqim: avval tasdiqlash (qoldiq kamayadi), keyin to'lov.
+      await invService.consumeOnConfirm('ORDER-3', [
+        (productId: w.burgerId, qty: 2),
+      ]);
       expect(await productQty(w.burgerId), 8);
+
+      await invService.processOrderPaid(order);
+      expect(await productQty(w.burgerId), 8); // to'lov tegmaydi
 
       // Deadlock bo'lmasligi ham shu yerda tekshiriladi: reverseOrderPaid
       // tranzaksiya ichida flagni o'qiydi.
@@ -666,11 +712,11 @@ void main() {
       expect(await productQty(w.burgerId), 7);
     });
 
-    test('tasdiqlanmagan qism to\'lovda chegiriladi', () async {
+    test('tasdiqlanmagan qism to\'lovda CHEGIRILMAYDI', () async {
       final w = await setupWorld();
       await invService.produce([(productId: w.burgerId, count: 10)]);
 
-      // Faqat 1 ta tasdiqlangan, to'lovda 3 ta.
+      // Buyurtmada 3 ta, lekin faqat 1 tasi tasdiqlangan.
       await invService.consumeOnConfirm('ORDER-C6', [
         (productId: w.burgerId, qty: 1),
       ]);
@@ -691,8 +737,9 @@ void main() {
         ),
       );
 
-      // 1 (tasdiqlash) + 2 (qolgani) = 3
-      expect(await productQty(w.burgerId), 7);
+      // Faqat tasdiqlangan 1 ta chegirilgan. To'lov qolgan 2 tasini
+      // chegirmaydi — qoldiq faqat "Tasdiqlash"da kamayadi.
+      expect(await productQty(w.burgerId), 9);
     });
 
     test('son yuritilmaydigan mahsulot (quantity NULL) bloklamaydi', () async {

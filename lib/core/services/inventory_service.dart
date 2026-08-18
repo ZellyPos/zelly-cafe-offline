@@ -105,42 +105,20 @@ class InventoryService {
       return; // Allaqachon qayta ishlangan
     }
 
-    // Buyurtma bo'yicha kerakli umumiy son (to'plamlar ochilgan holda).
-    final needByProduct = <int, double>{};
-    for (final item in order.items) {
-      final productMap = await txn.query(
-        'products',
-        where: 'id = ?',
-        whereArgs: [item.productId],
-      );
-      if (productMap.isEmpty) continue;
-      final product = Product.fromMap(productMap.first);
-
-      if (product.isSet && item.bundleItemsJson != null) {
-        // To'plam (bundle) — snapshot bo'yicha
-        final List<dynamic> bundleList = jsonDecode(item.bundleItemsJson!);
-        for (final bMap in bundleList) {
-          final bItem = BundleItem.fromMap(bMap);
-          needByProduct[bItem.productId] =
-              (needByProduct[bItem.productId] ?? 0) + bItem.quantity * item.qty;
-        }
-      } else {
-        needByProduct[item.productId] =
-            (needByProduct[item.productId] ?? 0) + item.qty.toDouble();
-      }
-    }
-
-    // §8: buyurtma tasdiqlanganda son allaqachon chegirilgan bo'lishi mumkin.
-    // Shu sabab bu yerda faqat **qolgan qism** chegiriladi — aks holda ikki
-    // marta ayrilardi. Tasdiqlanmagan oqimlarda (masalan to'g'ridan-to'g'ri
-    // to'lov) chegirilgan qism 0 bo'ladi va hammasi shu yerda chegiriladi.
-    final alreadyDeducted = await _confirmDeductedByProduct(txn, order.id);
-
-    for (final entry in needByProduct.entries) {
-      final remaining = entry.value - (alreadyDeducted[entry.key] ?? 0);
-      if (remaining <= 1e-9) continue;
-      await _sellFinished(txn, entry.key, remaining, order.id);
-    }
+    // To'lovda mahsulot soni KAMAYMAYDI (foydalanuvchi qarori).
+    //
+    // Qoldiq faqat "Tasdiqlash" bosilganda chegiriladi — o'sha paytda
+    // oshxona taomni tayyorlaydi, ya'ni haqiqiy sarf o'shanda sodir
+    // bo'ladi. To'lov esa pul harakati, ombor bilan bog'liq emas.
+    //
+    // Ilgari bu yerda "qolgan qism" chegirilardi (tasdiqlanmagan
+    // qatorlar uchun). Endi bunday emas: savatda tasdiqlanmagan qator
+    // qolsa ham to'lov uni chegirmaydi. Amalda `checkout()` to'lovdan
+    // oldin tasdiqlanmagan qatorlarni o'zi tasdiqlaydi, shuning uchun
+    // odatiy oqimda qoldiq baribir to'g'ri chegiriladi.
+    //
+    // Bayroq esa SAQLANADI: qaytarish (refund) aynan shunga qarab
+    // qoldiqni tiklaydi — `reverseOrderPaid`.
 
     await _repo.setInventoryFlag(
       OrderInventoryFlag(
@@ -152,30 +130,6 @@ class InventoryService {
     );
   }
 
-  /// Buyurtma **tasdiqlanganda** har mahsulotdan allaqachon chegirilgan son.
-  ///
-  /// Faqat tasdiqlash yozuvlari hisoblanadi (`note` `confirm` bilan
-  /// boshlanadi) — to'lov va qaytarish yozuvlari bilan chalkashmasin.
-  Future<Map<int, double>> _confirmDeductedByProduct(
-    Transaction txn,
-    String orderId,
-  ) async {
-    final rows = await txn.rawQuery(
-      '''
-      SELECT product_id,
-             SUM(CASE WHEN type = 'SALE' THEN qty ELSE -qty END) AS net
-      FROM product_movements
-      WHERE ref_table = 'orders' AND ref_id = ? AND note LIKE 'confirm%'
-      GROUP BY product_id
-      ''',
-      [orderId],
-    );
-    return {
-      for (final row in rows)
-        (row['product_id'] as num).toInt(): (row['net'] as num?)?.toDouble() ??
-            0,
-    };
-  }
 
   /// Sotuvda tayyor mahsulot sonini kamaytiradi (xomashyoga tegmaydi).
   Future<void> _sellFinished(

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../models/product.dart';
 import '../../../models/category.dart';
 import '../../../providers/category_provider.dart';
+import '../../../providers/app_settings_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/connectivity_provider.dart';
 import '../../../core/utils/price_formatter.dart';
@@ -49,6 +50,16 @@ class ProductCardWidget extends StatelessWidget {
             ? cart.getProductCartQuantity(product.id!)
             : 0.0;
         final inCart = qtyInCart > 0;
+
+        // Ombor moduli o'chirilgan bo'lsa qoldiq umuman hisoblanmaydi:
+        // "Qoldi"/"Tugadi" yorliqlari chiqmaydi va taom "tugagan" deb
+        // belgilanmaydi. Aks holda ombordan foydalanmaydigan kafeda eski
+        // sonlar sabab taomlar bekordan-bekor qizarib turardi.
+        final inventoryOn = context
+            .watch<AppSettingsProvider>()
+            .enableInventory;
+        final bool showStock = inventoryOn && product.quantity != null;
+
         // Taom tugagan (§9): omborda haqiqatan hech narsa qolmagan.
         // Savatdagi belgidan ustun turadi — "tugagan" holat muhimroq.
         //
@@ -58,7 +69,7 @@ class ProductCardWidget extends StatelessWidget {
         // son ikki marta kamayardi: avval bosganda (ko'rinishda), keyin
         // tasdiqlanganda (bazada) — taom savatda qolgani uchun ayirish
         // ustma-ust tushardi.
-        final outOfStock = product.quantity != null && product.quantity! <= 0;
+        final outOfStock = showStock && product.quantity! <= 0;
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -146,7 +157,7 @@ class ProductCardWidget extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            if (product.quantity != null)
+                            if (showStock)
                               _buildStockBadge(product.quantity!, theme),
                           ],
                         ),
